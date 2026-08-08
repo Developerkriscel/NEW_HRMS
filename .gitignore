@@ -10,3 +10,8 @@ node_modules/
 .next-stale-*/
 .env
 .env.local
+
+.qa/
+
+# Locally-stored uploads (resumes, generated PDFs) — see lib/resumeStorage.js
+output/

@@ -183,21 +183,30 @@ export function Navbar({ onMobileMenuToggle }) {
   }
 
   return (
-    <header className="sticky top-0 z-30 pt-4 pb-2 px-4 lg:px-6 pointer-events-none">
+    <header className="sticky top-0 z-30 px-4 py-3 lg:px-6 pointer-events-none">
+      <div className="fixed left-4 top-4 z-40 hidden items-center gap-2.5 pointer-events-auto lg:flex">
+        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-700 to-blue-500 flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-500/20">
+          <span className="text-white font-bold text-sm">N</span>
+        </div>
+        <span className="font-bold text-slate-900 dark:text-white text-sm tracking-tight">
+          NexaHR
+        </span>
+      </div>
+
       <div className="max-w-[1400px] mx-auto pointer-events-auto">
-        {/* Single navbar spanning the full width — brand on the left, panel name + search/notifications/profile on the right */}
-        <div className="flex items-center justify-between gap-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/70 dark:border-slate-800 shadow-md px-4 py-2.5">
+        {/* Transparent toolbar with mobile brand/menu on the left and actions on the right. */}
+        <div className="flex min-h-10 items-center justify-between gap-3">
 
           {/* Left: mobile menu trigger + brand */}
           <div className="flex items-center gap-2">
             <button
               onClick={onMobileMenuToggle}
-              className="lg:hidden p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              className="lg:hidden p-2 rounded-xl bg-white/80 hover:bg-white dark:bg-slate-900/80 dark:hover:bg-slate-900 border border-slate-200/70 dark:border-slate-800 shadow-sm transition-colors"
             >
               <Menu className="w-5 h-5 text-slate-600 dark:text-slate-400" />
             </button>
 
-            <div className="flex items-center gap-2.5 px-1 py-1">
+            <div className="flex items-center gap-2.5 px-1 py-1 lg:hidden">
               <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-700 to-blue-500 flex items-center justify-center flex-shrink-0">
                 <span className="text-white font-bold text-xs">N</span>
               </div>
@@ -208,8 +217,8 @@ export function Navbar({ onMobileMenuToggle }) {
           </div>
 
           {/* Right: panel name + search + notifications + profile */}
-          <div className="flex items-center gap-3">
-            <span className="hidden sm:inline-block px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <div className="flex items-center gap-3 rounded-2xl bg-white px-4 py-2.5 shadow-sm dark:bg-slate-900">
+            <span className="hidden sm:inline-block px-3 py-1 rounded-lg bg-white/70 dark:bg-slate-900/70 border border-slate-200/70 dark:border-slate-800 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 shadow-sm">
               {panelLabel}
             </span>
 

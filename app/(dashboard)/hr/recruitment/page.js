@@ -1,5 +1,5 @@
-import { RecruitmentWorkspace } from '@/components/pages/RecruitmentWorkspace'
+import { RecruitmentDashboard } from '@/components/pages/recruitment/RecruitmentDashboard'
 
-export default function RecruitmentPage() {
-  return <RecruitmentWorkspace />
+export default function RecruitmentDashboardPage() {
+  return <RecruitmentDashboard />
 }

@@ -1,7 +1,5 @@
 'use client'
 
-import { useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -9,42 +7,8 @@ import { useAuthStore } from '@/store/authStore'
 import { X } from 'lucide-react'
 import * as Icons from 'lucide-react'
 
-// Kept in sync by hand with the literal Tailwind classes below (w-16 / w-[208px])
-// since arbitrary-value classes must appear as literal strings for Tailwind's JIT to pick them up.
+// Kept in sync by hand with the literal Tailwind classes below.
 export const SIDEBAR_COLLAPSED_WIDTH = 64
-
-// Renders a name-only tooltip via a portal to <body> — needed because the
-// nav list scrolls (overflow-y-auto), and per the CSS spec that silently
-// forces overflow-x to clip too, so an in-place absolutely-positioned
-// tooltip would get cut off at the rail's edge instead of floating over
-// the page content.
-function useEdgeTooltip() {
-  const ref = useRef(null)
-  const [pos, setPos] = useState(null)
-
-  function show() {
-    if (window.innerWidth < 1024) return // desktop rail only — mobile drawer already shows labels inline
-    const rect = ref.current?.getBoundingClientRect()
-    if (rect) setPos({ top: rect.top + rect.height / 2, left: rect.right + 10 })
-  }
-  function hide() {
-    setPos(null)
-  }
-
-  const tooltip = (label) => pos && typeof document !== 'undefined'
-    ? createPortal(
-        <span
-          className="fixed z-[100] -translate-y-1/2 whitespace-nowrap rounded-lg bg-slate-900 dark:bg-slate-700 px-2.5 py-1.5 text-xs font-medium text-white shadow-lg pointer-events-none"
-          style={{ top: pos.top, left: pos.left }}
-        >
-          {label}
-        </span>,
-        document.body
-      )
-    : null
-
-  return { ref, onMouseEnter: show, onMouseLeave: hide, tooltip }
-}
 
 const SUPER_ADMIN_NAV = [
   { label: 'Dashboard', icon: 'LayoutDashboard', path: '/super-admin/dashboard' },
@@ -114,6 +78,7 @@ const EMPLOYEE_NAV = [
   { label: 'Assets', icon: 'Monitor', path: '/employee/assets' },
   { label: 'Helpdesk', icon: 'Headphones', path: '/employee/helpdesk' },
   { label: 'Training', icon: 'GraduationCap', path: '/employee/training' },
+  { label: 'Referrals', icon: 'UserPlus', path: '/employee/referrals' },
   { label: 'Offboarding', icon: 'LogOut', path: '/employee/offboarding' },
   { label: 'Profile', icon: 'UserCircle', path: '/employee/profile' },
 ]
@@ -132,22 +97,20 @@ function NavItem({ item }) {
   const pathname = usePathname()
   const isActive = pathname === item.path || pathname.startsWith(item.path + '/')
   const IconComp = Icons[item.icon] || Icons.Circle
-  const { ref, onMouseEnter, onMouseLeave, tooltip } = useEdgeTooltip()
 
   return (
-    <>
-      <Link
-        ref={ref}
-        href={item.path}
-        onMouseEnter={onMouseEnter}
-        onMouseLeave={onMouseLeave}
-        className={cn('sidebar-item lg:justify-center', isActive ? 'sidebar-item-active' : 'sidebar-item-inactive')}
-      >
-        <IconComp className="w-5 h-5 flex-shrink-0" />
-        <span className="truncate text-sm lg:hidden">{item.label}</span>
-      </Link>
-      {tooltip(item.label)}
-    </>
+    <Link
+      href={item.path}
+      className={cn(
+        'sidebar-item overflow-hidden lg:justify-center lg:group-hover/sidebar:justify-start',
+        isActive ? 'sidebar-item-active' : 'sidebar-item-inactive'
+      )}
+    >
+      <IconComp className="w-5 h-5 flex-shrink-0" />
+      <span className="truncate text-sm transition-all duration-200 lg:max-w-0 lg:opacity-0 lg:group-hover/sidebar:max-w-[140px] lg:group-hover/sidebar:opacity-100">
+        {item.label}
+      </span>
+    </Link>
   )
 }
 
@@ -167,20 +130,15 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
         />
       )}
 
-      {/* Floating pill sidebar — a fixed icon rail on desktop (name shown as
-          a hover tooltip, the rail itself never resizes); a full labeled
-          drawer on mobile, toggled by the hamburger menu. Sized to its
-          content and centered vertically rather than stretched full-height. */}
       <aside
         className={cn(
-          'fixed left-4 top-1/2 -translate-y-1/2 z-50 flex flex-col overflow-hidden pointer-events-auto',
-          'w-[208px] lg:w-16 max-h-[calc(100vh-8rem)]',
+          'group/sidebar fixed left-4 top-[54%] -translate-y-1/2 z-50 flex flex-col overflow-hidden pointer-events-auto',
+          'w-[208px] lg:w-16 lg:hover:w-[208px] max-h-[calc(100vh-8rem)]',
           'bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-lg',
-          'lg:translate-x-0 transition-transform duration-300',
+          'lg:translate-x-0 transition-[width,transform] duration-300',
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
-        {/* Mobile-only close button — desktop has no header row, the logo now lives in the top navbar */}
         <div className="flex items-center justify-end px-3 pt-3 pb-1 flex-shrink-0 lg:hidden">
           <button
             onClick={onMobileClose}
@@ -190,7 +148,6 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
           </button>
         </div>
 
-        {/* Nav items */}
         <nav className="overflow-y-auto px-2 py-2 space-y-0.5">
           {navItems.map((item) => (
             <NavItem key={item.path} item={item} />

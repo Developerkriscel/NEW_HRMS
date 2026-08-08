@@ -1,0 +1,281 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { ArrowLeft, Upload, CheckCircle2, Loader2, FileText } from 'lucide-react'
+import { publicCareersApi } from '@/services/publicCareersApi'
+import { cn } from '@/lib/utils'
+
+const CONFIGURABLE_FIELDS = [
+  { fieldName: 'CURRENT_COMPANY', formKey: 'currentCompany', label: 'Current Company', type: 'text' },
+  { fieldName: 'CURRENT_DESIGNATION', formKey: 'currentDesignation', label: 'Current Designation', type: 'text' },
+  { fieldName: 'CURRENT_CTC', formKey: 'currentCtc', label: 'Current CTC', type: 'number' },
+  { fieldName: 'EXPECTED_CTC', formKey: 'expectedCtc', label: 'Expected CTC', type: 'number' },
+  { fieldName: 'NOTICE_PERIOD', formKey: 'noticePeriod', label: 'Notice Period', type: 'text' },
+  { fieldName: 'LINKEDIN', formKey: 'linkedinUrl', label: 'LinkedIn', type: 'url' },
+  { fieldName: 'GITHUB', formKey: 'githubUrl', label: 'GitHub', type: 'url' },
+  { fieldName: 'PORTFOLIO', formKey: 'portfolioUrl', label: 'Portfolio', type: 'url' },
+  { fieldName: 'COVER_LETTER', formKey: 'coverLetter', label: 'Cover Letter', type: 'textarea' },
+]
+
+const FORM_DEFAULTS = {
+  firstName: '', lastName: '', email: '', phone: '',
+  currentLocation: '', totalExperience: '', relevantExperience: '', lastWorkingDate: '',
+  currentCompany: '', currentDesignation: '', currentCtc: '', expectedCtc: '', noticePeriod: '',
+  linkedinUrl: '', githubUrl: '', portfolioUrl: '', coverLetter: '',
+  consentAccurate: false, consentProcessing: false,
+}
+
+function Field({ label, required, error, children }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">
+        {label} {required && <span className="text-red-500">*</span>}
+      </span>
+      {children}
+      {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+    </label>
+  )
+}
+function inputClass(error) {
+  return cn('input-field', error && 'border-red-400 focus:ring-red-500/30 focus:border-red-500')
+}
+
+export function ApplicationForm({ companySlug, jobSlug, source, ref: refCode }) {
+  const [job, setJob] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [notFound, setNotFound] = useState(false)
+  const [formData, setFormData] = useState(FORM_DEFAULTS)
+  const [screeningAnswers, setScreeningAnswers] = useState({})
+  const [resumeFile, setResumeFile] = useState(null)
+  const [errors, setErrors] = useState({})
+  const [submitting, setSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
+  const [success, setSuccess] = useState(null)
+
+  useEffect(() => {
+    publicCareersApi.getJob(companySlug, jobSlug)
+      .then((res) => setJob(res.data.data))
+      .catch(() => setNotFound(true))
+      .finally(() => setLoading(false))
+  }, [companySlug, jobSlug])
+
+  function update(key, value) {
+    setFormData((f) => ({ ...f, [key]: value }))
+    setErrors((e) => (e[key] ? { ...e, [key]: undefined } : e))
+  }
+  function updateAnswer(questionId, value) {
+    setScreeningAnswers((a) => ({ ...a, [questionId]: value }))
+    setErrors((e) => (e[`screening_${questionId}`] ? { ...e, [`screening_${questionId}`]: undefined } : e))
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setErrorMessage('')
+    setSubmitting(true)
+    try {
+      const fd = new FormData()
+      Object.entries(formData).forEach(([k, v]) => fd.append(k, typeof v === 'boolean' ? String(v) : v ?? ''))
+      fd.append('screeningAnswers', JSON.stringify(screeningAnswers))
+      if (resumeFile) fd.append('resume', resumeFile)
+
+      const res = await publicCareersApi.apply(companySlug, job.id, fd, { source, ref: refCode })
+      setSuccess(res.data.data)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    } catch (err) {
+      const apiErrors = err.response?.data?.data?.errors
+      if (apiErrors) setErrors(apiErrors)
+      setErrorMessage(err.response?.data?.message || 'Something went wrong. Please try again.')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-slate-400">Loading...</div>
+  if (notFound || !job) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <p className="text-slate-500 dark:text-slate-400">This job posting isn&apos;t available.</p>
+      </div>
+    )
+  }
+  if (!job.isOpen) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 px-4">
+        <div className="text-center">
+          <p className="text-slate-700 dark:text-slate-200 font-medium mb-1">Applications are closed for this position.</p>
+          <Link href={`/${companySlug}/careers`} className="text-sm text-blue-600 dark:text-blue-400 hover:underline">View other open positions</Link>
+        </div>
+      </div>
+    )
+  }
+
+  if (success) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center px-4 py-10">
+        <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm p-8 text-center">
+          <div className="w-14 h-14 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center mx-auto mb-4">
+            <CheckCircle2 className="w-7 h-7 text-emerald-500" />
+          </div>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Application Submitted Successfully</h1>
+          <p className="text-slate-500 dark:text-slate-400 text-sm">Thank you for applying for:</p>
+          <p className="text-slate-800 dark:text-slate-100 font-semibold mt-1">{success.jobTitle}</p>
+          <div className="mt-4 px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 inline-block">
+            <p className="text-xs text-slate-400">Application ID</p>
+            <p className="text-sm font-mono font-medium text-slate-700 dark:text-slate-200">{success.applicationCode}</p>
+          </div>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-5">Our recruitment team will review your application.</p>
+          <Link href={`/${companySlug}/careers`} className="inline-block mt-5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline">
+            View other open positions
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  const visibleFields = CONFIGURABLE_FIELDS.filter((f) => {
+    const config = job.applicationFields.find((af) => af.fieldName === f.fieldName)
+    return config?.requirement !== 'HIDDEN'
+  })
+  const isRequired = (fieldName) => job.applicationFields.find((af) => af.fieldName === fieldName)?.requirement === 'REQUIRED'
+  const resumeRequirement = job.applicationFields.find((af) => af.fieldName === 'RESUME')?.requirement
+  const resumeHidden = resumeRequirement === 'HIDDEN'
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 py-10 px-4">
+      <form onSubmit={handleSubmit} className="max-w-2xl mx-auto space-y-6">
+        <Link href={`/${companySlug}/careers/${jobSlug}`} className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to job details
+        </Link>
+
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Apply for {job.title}</h1>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">{job.companyName}{job.department ? ` · ${job.department}` : ''}</p>
+        </div>
+
+        {errorMessage && <div className="px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">{errorMessage}</div>}
+
+        <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5 space-y-4">
+          <h2 className="font-semibold text-slate-800 dark:text-slate-100">Your Details</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="Full Name" required error={errors.firstName}>
+              <input className={inputClass(errors.firstName)} value={formData.firstName} onChange={(e) => update('firstName', e.target.value)} />
+            </Field>
+            <Field label="Last Name">
+              <input className="input-field" value={formData.lastName} onChange={(e) => update('lastName', e.target.value)} />
+            </Field>
+            <Field label="Email" required error={errors.email}>
+              <input type="email" className={inputClass(errors.email)} value={formData.email} onChange={(e) => update('email', e.target.value)} />
+            </Field>
+            <Field label="Phone" required error={errors.phone}>
+              <input className={inputClass(errors.phone)} value={formData.phone} onChange={(e) => update('phone', e.target.value)} />
+            </Field>
+            <Field label="Current Location">
+              <input className="input-field" value={formData.currentLocation} onChange={(e) => update('currentLocation', e.target.value)} />
+            </Field>
+            <Field label="Total Experience (years)">
+              <input type="number" min={0} step="0.5" className="input-field" value={formData.totalExperience} onChange={(e) => update('totalExperience', e.target.value)} />
+            </Field>
+            <Field label="Relevant Experience (years)">
+              <input type="number" min={0} step="0.5" className="input-field" value={formData.relevantExperience} onChange={(e) => update('relevantExperience', e.target.value)} />
+            </Field>
+            <Field label="Last Working Date (current employer)">
+              <input type="date" className="input-field" value={formData.lastWorkingDate} onChange={(e) => update('lastWorkingDate', e.target.value)} />
+            </Field>
+
+            {visibleFields.map((f) => (
+              <Field key={f.fieldName} label={f.label} required={isRequired(f.fieldName)} error={errors[f.formKey]} >
+                {f.type === 'textarea' ? (
+                  <textarea className={inputClass(errors[f.formKey])} rows={3} value={formData[f.formKey]} onChange={(e) => update(f.formKey, e.target.value)} />
+                ) : (
+                  <input type={f.type} className={inputClass(errors[f.formKey])} value={formData[f.formKey]} onChange={(e) => update(f.formKey, e.target.value)} />
+                )}
+              </Field>
+            ))}
+          </div>
+
+          {!resumeHidden && (
+            <Field label="Resume" required error={errors.resume}>
+              <label className={cn('flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-dashed cursor-pointer', errors.resume ? 'border-red-300' : 'border-slate-200 dark:border-slate-700 hover:border-blue-300')}>
+                <Upload className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                <span className="text-sm text-slate-500 dark:text-slate-400 flex-1 truncate">
+                  {resumeFile ? resumeFile.name : 'Upload PDF, DOC or DOCX (max 5MB)'}
+                </span>
+                {resumeFile && <FileText className="w-4 h-4 text-emerald-500 flex-shrink-0" />}
+                <input type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={(e) => setResumeFile(e.target.files?.[0] || null)} />
+              </label>
+            </Field>
+          )}
+        </section>
+
+        {job.screeningQuestions.length > 0 && (
+          <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5 space-y-4">
+            <h2 className="font-semibold text-slate-800 dark:text-slate-100">A Few More Questions</h2>
+            {job.screeningQuestions.map((q) => (
+              <Field key={q.id} label={q.question} required={q.isRequired} error={errors[`screening_${q.id}`]}>
+                {q.type === 'YES_NO' ? (
+                  <div className="flex gap-2">
+                    {['Yes', 'No'].map((opt) => (
+                      <button
+                        key={opt} type="button"
+                        onClick={() => updateAnswer(q.id, opt)}
+                        className={cn('px-3 py-1.5 rounded-full text-xs font-medium border', screeningAnswers[q.id] === opt ? 'bg-blue-700 text-white border-blue-700' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700')}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                ) : q.type === 'NUMBER' ? (
+                  <input type="number" className={inputClass(errors[`screening_${q.id}`])} value={screeningAnswers[q.id] || ''} onChange={(e) => updateAnswer(q.id, e.target.value)} />
+                ) : q.type === 'SINGLE_SELECT' ? (
+                  <select className={inputClass(errors[`screening_${q.id}`])} value={screeningAnswers[q.id] || ''} onChange={(e) => updateAnswer(q.id, e.target.value)}>
+                    <option value="">Select an option</option>
+                    {q.options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                  </select>
+                ) : q.type === 'MULTI_SELECT' ? (
+                  <div className="flex flex-wrap gap-2">
+                    {q.options.map((opt) => {
+                      const selected = (screeningAnswers[q.id] || []).includes(opt)
+                      return (
+                        <button
+                          key={opt} type="button"
+                          onClick={() => {
+                            const current = screeningAnswers[q.id] || []
+                            updateAnswer(q.id, selected ? current.filter((o) => o !== opt) : [...current, opt])
+                          }}
+                          className={cn('px-3 py-1.5 rounded-full text-xs font-medium border', selected ? 'bg-blue-700 text-white border-blue-700' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700')}
+                        >
+                          {opt}
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <input className={inputClass(errors[`screening_${q.id}`])} value={screeningAnswers[q.id] || ''} onChange={(e) => updateAnswer(q.id, e.target.value)} />
+                )}
+              </Field>
+            ))}
+          </section>
+        )}
+
+        <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5 space-y-3">
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input type="checkbox" className="mt-0.5 w-4 h-4 rounded accent-blue-600" checked={formData.consentAccurate} onChange={(e) => update('consentAccurate', e.target.checked)} />
+            <span className="text-sm text-slate-600 dark:text-slate-300">I confirm that the information provided is accurate.</span>
+          </label>
+          {errors.consentAccurate && <p className="text-xs text-red-500 -mt-2 ml-6">{errors.consentAccurate}</p>}
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input type="checkbox" className="mt-0.5 w-4 h-4 rounded accent-blue-600" checked={formData.consentProcessing} onChange={(e) => update('consentProcessing', e.target.checked)} />
+            <span className="text-sm text-slate-600 dark:text-slate-300">I agree that the company may process my application data for recruitment purposes.</span>
+          </label>
+          {errors.consentProcessing && <p className="text-xs text-red-500 -mt-2 ml-6">{errors.consentProcessing}</p>}
+        </section>
+
+        <button type="submit" disabled={submitting} className="w-full px-6 py-3 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+          {submitting && <Loader2 className="w-4 h-4 animate-spin" />} Submit Application
+        </button>
+      </form>
+    </div>
+  )
+}

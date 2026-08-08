@@ -36,7 +36,7 @@ export function Breadcrumbs() {
   }))
 
   return (
-    <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500 mb-1 overflow-x-auto">
+    <nav aria-label="Breadcrumb" className="ml-2 -mt-2 flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500 mb-1 overflow-x-auto">
       <Link href="/" className="flex items-center hover:text-slate-600 dark:hover:text-slate-300 flex-shrink-0">
         <Home className="w-3.5 h-3.5" />
       </Link>
