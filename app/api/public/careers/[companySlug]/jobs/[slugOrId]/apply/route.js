@@ -5,7 +5,8 @@ import { ok, fail } from '@/lib/apiResponse'
 import { runForTenant } from '@/lib/tenantDb'
 import { resolveTenantBySlug } from '@/lib/publicJobHelpers'
 import { validateApplicationForm, isValid, CONFIGURABLE_FIELD_TO_FORM_KEY } from '@/lib/candidateValidation'
-import { validateResumeFile, saveResumeFile } from '@/lib/resumeStorage'
+import { validateResumeFile } from '@/lib/resumeStorage'
+import { createResumeRecord, triggerBackgroundParse } from '@/lib/candidateProfileHelpers'
 import { normalizeSource, APPLICATION_SOURCE } from '@/lib/candidateConstants'
 import { generateCandidateCode, generateApplicationCode, findExistingCandidate } from '@/lib/candidateHelpers'
 import Job from '@/models/Job'
@@ -116,7 +117,6 @@ export const POST = withApi(async (req, { params }) => {
     }
 
     const newCandidateCode = candidate ? null : await generateCandidateCode(Candidate, tenant._id)
-    const resumeUpload = await saveResumeFile(resumeFile, tenant._id, candidate?.candidateCode || newCandidateCode)
 
     if (candidate) {
       // A returning candidate's most recent submission is treated as their
@@ -135,7 +135,6 @@ export const POST = withApi(async (req, { params }) => {
         linkedinUrl: data.linkedinUrl ?? candidate.linkedinUrl,
         githubUrl: data.githubUrl ?? candidate.githubUrl,
         portfolioUrl: data.portfolioUrl ?? candidate.portfolioUrl,
-        resumeUrl: resumeUpload.url,
       })
       candidate.activityLog.push({ type: 'APPLICATION_ADDED', message: `Applied for ${job.jobTitle}`, actorName: candidate.getFullName() })
       await candidate.save()
@@ -149,7 +148,6 @@ export const POST = withApi(async (req, { params }) => {
         currentCtc: data.currentCtc, expectedCtc: data.expectedCtc,
         noticePeriod: data.noticePeriod, lastWorkingDate: data.lastWorkingDate || null,
         linkedinUrl: data.linkedinUrl, githubUrl: data.githubUrl, portfolioUrl: data.portfolioUrl,
-        resumeUrl: resumeUpload.url,
         source,
         tenantId: tenant._id,
         activityLog: [{ type: 'CREATED', message: `Candidate created from application for ${job.jobTitle}` }],
@@ -171,6 +169,23 @@ export const POST = withApi(async (req, { params }) => {
       tenantId: tenant._id,
       activityLog: [{ type: 'CREATED', message: `Application submitted via ${source}` }],
     })
+
+    // Step 6 — save the resume as a versioned candidate_resumes row (never
+    // overwriting an earlier upload) and kick off parsing in the
+    // background. The candidate never waits on this: the HTTP response
+    // below is returned before parsing finishes.
+    const resumeRecord = await createResumeRecord({
+      tenantId: tenant._id,
+      candidateId: candidate._id,
+      candidateCode: candidate.candidateCode,
+      applicationId: application._id,
+      file: resumeFile,
+      uploadSource: 'APPLICATION',
+    })
+    candidate.resumeUrl = resumeRecord.fileUrl
+    candidate.activityLog.push({ type: 'RESUME_UPLOADED', message: `Resume uploaded: ${resumeRecord.originalFileName || resumeRecord.fileName}` })
+    await candidate.save()
+    triggerBackgroundParse(resumeRecord._id, tenant._id)
 
     if (screeningQuestions.length) {
       await ApplicationAnswer.insertMany(screeningQuestions.map((q) => ({

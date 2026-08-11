@@ -1,10 +1,5 @@
-import { RecruitmentComingSoon } from '@/components/pages/recruitment/RecruitmentComingSoon'
+import { OffersListPage } from '@/components/pages/recruitment/offers/OffersListPage'
 
-export default function OffersPage() {
-  return (
-    <RecruitmentComingSoon
-      title="Offers"
-      description="Draft, approve, send and track offer letters."
-    />
-  )
+export default function OffersRoute() {
+  return <OffersListPage />
 }

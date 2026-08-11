@@ -16,6 +16,8 @@ export const RECRUITMENT_NAV = [
   { label: 'Pipeline', icon: 'GitBranch', path: '/hr/recruitment/pipeline' },
   { label: 'Interviews', icon: 'CalendarCheck', path: '/hr/recruitment/interviews' },
   { label: 'Assessments', icon: 'ClipboardCheck', path: '/hr/recruitment/assessments' },
+  { label: 'Selections', icon: 'BadgeCheck', path: '/hr/recruitment/selections' },
+  { label: 'Compensation', icon: 'IndianRupee', path: '/hr/recruitment/compensation' },
   { label: 'Offers', icon: 'FileSignature', path: '/hr/recruitment/offers' },
   { label: 'Onboarding', icon: 'UserCheck', path: '/hr/recruitment/onboarding' },
   { label: 'Career Page', icon: 'Globe', path: '/hr/recruitment/career-page' },

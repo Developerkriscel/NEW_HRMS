@@ -1,10 +1,5 @@
-import { RecruitmentComingSoon } from '@/components/pages/recruitment/RecruitmentComingSoon'
+import { RecruitmentSettingsPage } from '@/components/pages/recruitment/settings/RecruitmentSettingsPage'
 
-export default function RecruitmentSettingsPage() {
-  return (
-    <RecruitmentComingSoon
-      title="Settings"
-      description="Hiring stages, approval chains and offer letter templates."
-    />
-  )
+export default function RecruitmentSettingsRoute() {
+  return <RecruitmentSettingsPage />
 }

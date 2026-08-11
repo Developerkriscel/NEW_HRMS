@@ -1,10 +1,5 @@
-import { RecruitmentComingSoon } from '@/components/pages/recruitment/RecruitmentComingSoon'
+import { AssessmentsListPage } from '@/components/pages/recruitment/assessments/AssessmentsListPage'
 
-export default function AssessmentsPage() {
-  return (
-    <RecruitmentComingSoon
-      title="Assessments"
-      description="Send, track and score candidate skill assessments."
-    />
-  )
+export default function AssessmentsRoute() {
+  return <AssessmentsListPage />
 }

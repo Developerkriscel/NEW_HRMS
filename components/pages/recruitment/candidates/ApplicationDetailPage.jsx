@@ -8,7 +8,12 @@ import { PageLoader } from '@/components/common/LoadingSpinner'
 import { candidateApi } from '@/services/candidateApi'
 import { formatDate, formatRelativeTime } from '@/lib/utils'
 import { APPLICATION_SOURCE_LABELS } from '@/lib/candidateConstants'
+import { SELECTION_STATUS_LABELS } from '@/lib/selectionConstants'
 import { MoveStageDialog } from './MoveStageDialog'
+import { MatchScoreCard } from './MatchScoreCard'
+import { ScreeningActions } from './ScreeningActions'
+import { AssessmentsSection } from '../assessments/AssessmentsSection'
+import { InterviewsSection } from '../interviews/InterviewsSection'
 
 function SectionCard({ title, children }) {
   return (
@@ -82,17 +87,41 @@ export function ApplicationDetailPage({ applicationId }) {
           <p className="text-xs font-medium text-slate-400 mb-1">{application.applicationCode}</p>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{candidate?.firstName} {candidate?.lastName}</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Applied for {job?.publicTitle || job?.jobTitle}</p>
-          <div className="flex items-center gap-2 mt-2">
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
             <Badge>{application.currentStageName}</Badge>
-            <Badge>{application.status}</Badge>
+            <Badge variant={application.status}>{application.status.replace('_', ' ')}</Badge>
             {application.screeningResult === 'NEEDS_REVIEW' && <Badge variant="pending">Needs Review</Badge>}
+            {application.selectionStatus && <Badge variant={application.selectionStatus}>{SELECTION_STATUS_LABELS[application.selectionStatus] || application.selectionStatus}</Badge>}
+            {application.readyForOffer && <Badge variant="READY_FOR_OFFER">Ready for Offer</Badge>}
           </div>
+          {application.status === 'REJECTED' && application.rejectionReason && (
+            <p className="text-xs text-red-500 mt-1.5">Rejected — {application.rejectionReason}{application.rejectionComment ? `: ${application.rejectionComment}` : ''}</p>
+          )}
+          {application.status === 'WITHDRAWN' && application.withdrawalReason && (
+            <p className="text-xs text-slate-400 mt-1.5">Withdrawn — {application.withdrawalReason}{application.withdrawalComment ? `: ${application.withdrawalComment}` : ''}</p>
+          )}
+          {application.status === 'ON_HOLD' && application.holdReason && (
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1.5">On Hold — {application.holdReason}{application.holdUntil ? ` (until ${formatDate(application.holdUntil)})` : ''}</p>
+          )}
         </div>
         <div className="flex gap-2">
           <Link href={`/hr/recruitment/candidates/${candidate?._id}`} className="btn-secondary">View Candidate Profile</Link>
+          {application.selectionStatus && (
+            <Link href={`/hr/recruitment/applications/${applicationId}/selection`} className="btn-secondary">Review Selection</Link>
+          )}
           <button className="btn-primary" onClick={() => setShowMoveStage(true)}><ArrowRightLeft className="w-4 h-4" /> Move Stage</button>
         </div>
       </div>
+
+      <SectionCard title="Screening Decision">
+        <ScreeningActions application={application} onChanged={load} />
+      </SectionCard>
+
+      <MatchScoreCard applicationId={applicationId} />
+
+      <AssessmentsSection applicationId={applicationId} candidateName={`${candidate?.firstName} ${candidate?.lastName}`} />
+
+      <InterviewsSection applicationId={applicationId} candidateName={`${candidate?.firstName} ${candidate?.lastName}`} jobTitle={job?.publicTitle || job?.jobTitle} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <SectionCard title="Application Details">
