@@ -93,6 +93,20 @@ export function AddEmployeePage({ basePath }) {
           <input placeholder="Phone" className="input-field" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
         </div>
         <div className="grid grid-cols-2 gap-4">
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Authority / Role</span>
+            <select className="input-field" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value, moduleAccess: [] })}>
+              {['EMPLOYEE', 'MANAGER', 'HR_MANAGER', 'FINANCE', 'IT_ADMIN', 'SUPPORT_AGENT', 'COMPANY_ADMIN'].map((r) => <option key={r} value={r}>{r.replace('_', ' ')}</option>)}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Employment Type</span>
+            <select className="input-field" value={form.employmentType} onChange={(e) => setForm({ ...form, employmentType: e.target.value })}>
+              {['Full-time', 'Part-time', 'Contract', 'Intern'].map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </label>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
           <select className="input-field" value={form.departmentId} onChange={(e) => setForm({ ...form, departmentId: e.target.value })}>
             <option value="">Select Department</option>
             {departments.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
@@ -103,22 +117,14 @@ export function AddEmployeePage({ basePath }) {
           </select>
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <select className="input-field" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-            {['EMPLOYEE', 'MANAGER', 'HR_MANAGER', 'FINANCE', 'IT_ADMIN', 'SUPPORT_AGENT', 'COMPANY_ADMIN'].map((r) => <option key={r} value={r}>{r.replace('_', ' ')}</option>)}
-          </select>
-          <select className="input-field" value={form.employmentType} onChange={(e) => setForm({ ...form, employmentType: e.target.value })}>
-            {['Full-time', 'Part-time', 'Contract', 'Intern'].map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
           <input type="date" className="input-field" value={form.joiningDate} onChange={(e) => setForm({ ...form, joiningDate: e.target.value })} />
           <input type="number" placeholder="Annual CTC" className="input-field" value={form.ctc} onChange={(e) => setForm({ ...form, ctc: e.target.value })} />
         </div>
         {showModuleAccess && (
-          <div className="rounded-xl border border-slate-100 dark:border-slate-800 p-4 space-y-3">
+          <div className="rounded-xl border border-blue-100 bg-blue-50/40 dark:border-blue-900/50 dark:bg-blue-900/10 p-4 space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Module Access</p>
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Module Authority</p>
                 <p className="text-xs text-slate-400 mt-0.5">Select modules this user should see. Leave all unchecked to keep full {form.role.replace('_', ' ')} access.</p>
               </div>
               <button type="button" className="btn-secondary !text-xs !py-1" onClick={() => setForm({ ...form, moduleAccess: MODULE_ACCESS_OPTIONS.map((option) => option.key) })}>Select All</button>
