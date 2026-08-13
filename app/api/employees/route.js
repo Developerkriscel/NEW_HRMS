@@ -2,10 +2,11 @@ export const dynamic = 'force-dynamic'
 
 import { withApi } from '@/lib/handler'
 import { ok, fail, paged } from '@/lib/apiResponse'
-import { requireAuth, requireRole, requireTenantId, hashPassword } from '@/lib/auth'
+import { requireAuth, requireRole, requireTenantId, hashPassword, validatePasswordStrength } from '@/lib/auth'
 import { logAction } from '@/lib/audit'
 import { sanitizeForManager } from '@/lib/employeeVisibility'
 import { sanitizeModuleAccess } from '@/lib/moduleAccess'
+import { sendEmployeeInvitationEmail } from '@/lib/mail'
 import Employee from '@/models/Employee'
 import Tenant from '@/models/Tenant'
 
@@ -83,7 +84,12 @@ export const POST = withApi(async (req) => {
   const tenant = await Tenant.findById(tenantId).lean()
   const employeeIdPrefix = tenant?.hrSettings?.employeeIdPrefix || 'EMP'
   const employeeCode = `${employeeIdPrefix}${String(maxCodeNumber + 1).padStart(5, '0')}`
-  const tempPassword = `Nexahr@${1000 + Math.floor(Math.random() * 9000)}`
+  const requestedPassword = typeof body.password === 'string' ? body.password : ''
+  if (requestedPassword) {
+    const passwordCheck = validatePasswordStrength(requestedPassword)
+    if (!passwordCheck.valid) return fail(passwordCheck.message, 400, 'WEAK_PASSWORD')
+  }
+  const tempPassword = requestedPassword || `Nexahr@${1000 + Math.floor(Math.random() * 9000)}`
   const hashedPassword = await hashPassword(tempPassword)
 
   const employee = await Employee.create({
@@ -125,9 +131,14 @@ export const POST = withApi(async (req) => {
 
   const responseEmployee = employee.toObject()
   delete responseEmployee.password
+  const invitation = await sendEmployeeInvitationEmail({
+    employee,
+    password: tempPassword,
+    companyName: tenant?.companyName,
+  })
 
   // Temp password has no delivery channel yet (email sending was never
   // implemented in the original either) — returned once here so an admin
   // can hand it to the new hire out-of-band.
-  return ok({ employee: responseEmployee, tempPassword }, 'Employee created', 201)
+  return ok({ employee: responseEmployee, tempPassword, invitation }, 'Employee created', 201)
 })

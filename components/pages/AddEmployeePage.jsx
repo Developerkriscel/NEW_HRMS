@@ -11,7 +11,7 @@ import { HR_RESTRICTABLE_ROLES, MODULE_ACCESS_OPTIONS } from '@/lib/moduleAccess
 const emptyForm = {
   firstName: '', lastName: '', email: '', phone: '', role: 'EMPLOYEE',
   departmentId: '', designationId: '', joiningDate: '', employmentType: 'Full-time', ctc: '',
-  moduleAccess: [],
+  password: '', moduleAccess: [],
 }
 
 export function AddEmployeePage({ basePath }) {
@@ -23,6 +23,8 @@ export function AddEmployeePage({ basePath }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [tempPassword, setTempPassword] = useState(null)
+  const [createdEmployee, setCreatedEmployee] = useState(null)
+  const [invitation, setInvitation] = useState(null)
 
   useEffect(() => {
     departmentApi.getAll().then((res) => setDepartments(res.data.data))
@@ -35,6 +37,8 @@ export function AddEmployeePage({ basePath }) {
     setError('')
     try {
       const { data } = await employeeApi.create({ ...form, ctc: form.ctc ? Number(form.ctc) : undefined })
+      setCreatedEmployee(data.data.employee)
+      setInvitation(data.data.invitation)
       setTempPassword(data.data.tempPassword)
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to create employee')
@@ -64,8 +68,28 @@ export function AddEmployeePage({ basePath }) {
     return (
       <div className="animate-fade-in max-w-md mx-auto mt-12 text-center stat-card">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">Employee Created</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Share this temporary password with the new employee:</p>
-        <div className="bg-slate-100 dark:bg-slate-800 rounded-lg p-3 font-mono text-sm mb-4">{tempPassword}</div>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+          {invitation?.sent ? 'Invitation email sent with these login details.' : 'Share these login details with the employee.'}
+        </p>
+        {invitation && !invitation.sent && (
+          <div className="mb-4 rounded-lg border border-amber-100 bg-amber-50 p-3 text-left text-xs text-amber-700 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-300">
+            Invitation email not sent: {invitation.reason || 'email delivery failed'}.
+          </div>
+        )}
+        <div className="space-y-2 text-left mb-4">
+          <div className="bg-slate-100 dark:bg-slate-800 rounded-lg p-3">
+            <p className="text-xs text-slate-400 mb-1">Employee ID</p>
+            <p className="font-mono text-sm text-slate-800 dark:text-slate-100">{createdEmployee?.employeeCode || '-'}</p>
+          </div>
+          <div className="bg-slate-100 dark:bg-slate-800 rounded-lg p-3">
+            <p className="text-xs text-slate-400 mb-1">Login Email</p>
+            <p className="font-mono text-sm text-slate-800 dark:text-slate-100">{createdEmployee?.email || form.email}</p>
+          </div>
+          <div className="bg-slate-100 dark:bg-slate-800 rounded-lg p-3">
+            <p className="text-xs text-slate-400 mb-1">Password</p>
+            <p className="font-mono text-sm text-slate-800 dark:text-slate-100">{tempPassword}</p>
+          </div>
+        </div>
         <button onClick={() => router.push(basePath)} className="btn-primary w-full justify-center">Done</button>
       </div>
     )
@@ -91,6 +115,18 @@ export function AddEmployeePage({ basePath }) {
         <div className="grid grid-cols-2 gap-4">
           <input required type="email" placeholder="Email" className="input-field" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           <input placeholder="Phone" className="input-field" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+        </div>
+        <div className="rounded-xl border border-slate-100 dark:border-slate-800 p-4">
+          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Login Access</p>
+          <p className="text-xs text-slate-400 mt-0.5 mb-3">Employee ID is generated automatically. The employee logs in with email and password.</p>
+          <input
+            type="text"
+            placeholder="Initial password (optional)"
+            className="input-field"
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+          />
+          <p className="text-xs text-slate-400 mt-2">Leave blank to auto-generate a password after creation.</p>
         </div>
         <div className="grid grid-cols-2 gap-4">
           <label className="block">
