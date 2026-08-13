@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
+import { MODULE_ACCESS, filterByModuleAccess } from '@/lib/moduleAccess'
 import { X } from 'lucide-react'
 import * as Icons from 'lucide-react'
 
@@ -22,37 +23,37 @@ const SUPER_ADMIN_NAV = [
 
 const COMPANY_ADMIN_NAV = [
   { label: 'Dashboard', icon: 'LayoutDashboard', path: '/company/dashboard' },
-  { label: 'Company Profile', icon: 'Building', path: '/company/profile' },
-  { label: 'Employees', icon: 'Users', path: '/company/employees' },
-  { label: 'Departments', icon: 'Layers', path: '/company/departments' },
-  { label: 'Designations', icon: 'Tag', path: '/company/designations' },
-  { label: 'Branches', icon: 'MapPin', path: '/company/branches' },
-  { label: 'Shifts', icon: 'Clock3', path: '/company/shifts' },
-  { label: 'Holidays', icon: 'CalendarDays', path: '/company/holidays' },
-  { label: 'Roles & Permissions', icon: 'KeyRound', path: '/company/roles' },
-  { label: 'Attendance', icon: 'Clock', path: '/hr/attendance' },
-  { label: 'Leave', icon: 'CalendarOff', path: '/hr/leave' },
-  { label: 'Payroll', icon: 'Banknote', path: '/hr/payroll' },
-  { label: 'Reports', icon: 'BarChart2', path: '/company/reports' },
-  { label: 'Audit Logs', icon: 'ScrollText', path: '/company/audit-logs' },
-  { label: 'Settings', icon: 'Settings', path: '/company/settings' },
+  { label: 'Company Profile', icon: 'Building', path: '/company/profile', moduleKey: MODULE_ACCESS.COMPANY_PROFILE },
+  { label: 'Employees', icon: 'Users', path: '/company/employees', moduleKey: MODULE_ACCESS.EMPLOYEES },
+  { label: 'Departments', icon: 'Layers', path: '/company/departments', moduleKey: MODULE_ACCESS.DEPARTMENTS },
+  { label: 'Designations', icon: 'Tag', path: '/company/designations', moduleKey: MODULE_ACCESS.DESIGNATIONS },
+  { label: 'Branches', icon: 'MapPin', path: '/company/branches', moduleKey: MODULE_ACCESS.BRANCHES },
+  { label: 'Shifts', icon: 'Clock3', path: '/company/shifts', moduleKey: MODULE_ACCESS.SHIFTS },
+  { label: 'Holidays', icon: 'CalendarDays', path: '/company/holidays', moduleKey: MODULE_ACCESS.LEAVE },
+  { label: 'Roles & Permissions', icon: 'KeyRound', path: '/company/roles', moduleKey: MODULE_ACCESS.ROLES_PERMISSIONS },
+  { label: 'Attendance', icon: 'Clock', path: '/hr/attendance', moduleKey: MODULE_ACCESS.ATTENDANCE },
+  { label: 'Leave', icon: 'CalendarOff', path: '/hr/leave', moduleKey: MODULE_ACCESS.LEAVE },
+  { label: 'Payroll', icon: 'Banknote', path: '/hr/payroll', moduleKey: MODULE_ACCESS.PAYROLL },
+  { label: 'Reports', icon: 'BarChart2', path: '/company/reports', moduleKey: MODULE_ACCESS.REPORTS },
+  { label: 'Audit Logs', icon: 'ScrollText', path: '/company/audit-logs', moduleKey: MODULE_ACCESS.AUDIT_LOGS },
+  { label: 'Settings', icon: 'Settings', path: '/company/settings', moduleKey: MODULE_ACCESS.SETTINGS },
 ]
 
 const HR_NAV = [
   { label: 'Dashboard', icon: 'LayoutDashboard', path: '/hr/dashboard' },
-  { label: 'Employees', icon: 'Users', path: '/hr/employees' },
-  { label: 'Attendance', icon: 'Clock', path: '/hr/attendance' },
-  { label: 'Leave', icon: 'CalendarOff', path: '/hr/leave' },
-  { label: 'Payroll', icon: 'Banknote', path: '/hr/payroll' },
-  { label: 'Recruitment', icon: 'UserPlus', path: '/hr/recruitment' },
-  { label: 'Onboarding', icon: 'UserCheck', path: '/hr/onboarding' },
-  { label: 'Offboarding', icon: 'UserMinus', path: '/hr/offboarding' },
-  { label: 'Performance', icon: 'TrendingUp', path: '/hr/performance' },
-  { label: 'Assets', icon: 'Monitor', path: '/hr/assets' },
-  { label: 'Documents', icon: 'FileText', path: '/hr/documents' },
-  { label: 'Helpdesk', icon: 'Headphones', path: '/hr/helpdesk' },
-  { label: 'Training', icon: 'GraduationCap', path: '/hr/training' },
-  { label: 'Reports', icon: 'BarChart2', path: '/hr/reports' },
+  { label: 'Employees', icon: 'Users', path: '/hr/employees', moduleKey: MODULE_ACCESS.EMPLOYEES },
+  { label: 'Attendance', icon: 'Clock', path: '/hr/attendance', moduleKey: MODULE_ACCESS.ATTENDANCE },
+  { label: 'Leave', icon: 'CalendarOff', path: '/hr/leave', moduleKey: MODULE_ACCESS.LEAVE },
+  { label: 'Payroll', icon: 'Banknote', path: '/hr/payroll', moduleKey: MODULE_ACCESS.PAYROLL },
+  { label: 'Recruitment', icon: 'UserPlus', path: '/hr/recruitment', moduleKey: MODULE_ACCESS.RECRUITMENT },
+  { label: 'Onboarding', icon: 'UserCheck', path: '/hr/onboarding', moduleKey: MODULE_ACCESS.ONBOARDING },
+  { label: 'Offboarding', icon: 'UserMinus', path: '/hr/offboarding', moduleKey: MODULE_ACCESS.OFFBOARDING },
+  { label: 'Performance', icon: 'TrendingUp', path: '/hr/performance', moduleKey: MODULE_ACCESS.PERFORMANCE },
+  { label: 'Assets', icon: 'Monitor', path: '/hr/assets', moduleKey: MODULE_ACCESS.ASSETS },
+  { label: 'Documents', icon: 'FileText', path: '/hr/documents', moduleKey: MODULE_ACCESS.DOCUMENTS },
+  { label: 'Helpdesk', icon: 'Headphones', path: '/hr/helpdesk', moduleKey: MODULE_ACCESS.HELPDESK },
+  { label: 'Training', icon: 'GraduationCap', path: '/hr/training', moduleKey: MODULE_ACCESS.TRAINING },
+  { label: 'Reports', icon: 'BarChart2', path: '/hr/reports', moduleKey: MODULE_ACCESS.REPORTS },
 ]
 
 const MANAGER_NAV = [
@@ -102,22 +103,25 @@ function NavItem({ item }) {
     <Link
       href={item.path}
       className={cn(
-        'sidebar-item overflow-hidden lg:justify-center lg:group-hover/sidebar:justify-start',
+        'sidebar-item w-full overflow-hidden',
+        'lg:justify-center lg:gap-0 lg:group-hover/sidebar:justify-start lg:group-hover/sidebar:gap-2.5',
         isActive ? 'sidebar-item-active' : 'sidebar-item-inactive'
       )}
     >
       <IconComp className="w-5 h-5 flex-shrink-0" />
-      <span className="truncate text-sm transition-all duration-200 lg:max-w-0 lg:opacity-0 lg:group-hover/sidebar:max-w-[140px] lg:group-hover/sidebar:opacity-100">
+      <span
+        className="truncate text-sm transition-all duration-200 lg:max-w-0 lg:opacity-0 lg:group-hover/sidebar:max-w-[140px] lg:group-hover/sidebar:opacity-100"
+      >
         {item.label}
       </span>
     </Link>
   )
 }
 
-export function Sidebar({ mobileOpen, onMobileClose }) {
+export function Sidebar({ mobileOpen, onDesktopHoverChange, onMobileClose }) {
   const { user, hasPermission } = useAuthStore()
 
-  const navItems = (NAV_BY_ROLE[user?.role] || EMPLOYEE_NAV).filter(
+  const navItems = filterByModuleAccess(NAV_BY_ROLE[user?.role] || EMPLOYEE_NAV, user).filter(
     (item) => !item.permission || hasPermission(item.permission)
   )
 
@@ -131,6 +135,8 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
       )}
 
       <aside
+        onMouseEnter={() => onDesktopHoverChange?.(true)}
+        onMouseLeave={() => onDesktopHoverChange?.(false)}
         className={cn(
           'group/sidebar fixed left-4 top-[54%] -translate-y-1/2 z-50 flex flex-col overflow-hidden pointer-events-auto',
           'w-[208px] lg:w-16 lg:hover:w-[208px] max-h-[calc(100vh-8rem)]',

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
+import { hasModuleAccess, moduleForApiPath, moduleForHrPath } from './lib/moduleAccess'
 
 // Runs on the Edge runtime, so it can only verify the JWT signature/expiry
 // (via `jose`, not `jsonwebtoken`/Node crypto) and read claims already
@@ -18,8 +19,8 @@ const ROLE_DASHBOARDS = {
   HR_MANAGER: '/hr/dashboard',
   MANAGER: '/manager/dashboard',
   EMPLOYEE: '/employee/dashboard',
-  FINANCE: '/hr/payroll',
-  IT_ADMIN: '/hr/helpdesk',
+  FINANCE: '/hr/dashboard',
+  IT_ADMIN: '/hr/dashboard',
 }
 
 const ROLE_GUARDS = [
@@ -34,6 +35,19 @@ const ROLE_GUARDS = [
   { prefix: '/manager', roles: ['MANAGER'] },
   { prefix: '/employee', roles: ['EMPLOYEE'] },
 ]
+
+function apiAuthError(message, status, errorCode) {
+  return NextResponse.json(
+    {
+      success: false,
+      message,
+      data: null,
+      timestamp: new Date().toISOString(),
+      errorCode,
+    },
+    { status }
+  )
+}
 
 async function readSession(req) {
   const token = req.cookies.get('nexahr_token')?.value
@@ -50,6 +64,18 @@ async function readSession(req) {
 export async function middleware(req) {
   const { pathname } = req.nextUrl
   const session = await readSession(req)
+
+  if (pathname.startsWith('/api')) {
+    const moduleKey = moduleForApiPath(pathname)
+    if (moduleKey) {
+      if (!session) {
+        return apiAuthError('Authentication required', 401, 'UNAUTHENTICATED')
+      }
+      if (!hasModuleAccess(session, moduleKey)) {
+        return apiAuthError('You do not have access to this module', 403, 'MODULE_FORBIDDEN')
+      }
+    }
+  }
 
   const isAuthPage = pathname === '/login' || pathname === '/forgot-password'
 
@@ -73,6 +99,12 @@ export async function middleware(req) {
     if (!guard.roles.includes(session.role)) {
       return NextResponse.redirect(new URL(ROLE_DASHBOARDS[session.role] || '/login', req.url))
     }
+    if (pathname.startsWith('/hr')) {
+      const moduleKey = moduleForHrPath(pathname)
+      if (moduleKey && !hasModuleAccess(session, moduleKey)) {
+        return NextResponse.redirect(new URL(ROLE_DASHBOARDS[session.role] || '/login', req.url))
+      }
+    }
   }
 
   return NextResponse.next()
@@ -88,5 +120,6 @@ export const config = {
     '/hr/:path*',
     '/manager/:path*',
     '/employee/:path*',
+    '/api/:path*',
   ],
 }

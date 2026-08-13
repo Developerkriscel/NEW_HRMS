@@ -12,6 +12,7 @@ export function DashboardShell({ children }) {
   const { theme } = useUIStore()
   const { hydrated, isLoading, fetchMe } = useAuthStore()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [sidebarHovered, setSidebarHovered] = useState(false)
 
   useEffect(() => {
     if (theme === 'dark') {
@@ -35,11 +36,18 @@ export function DashboardShell({ children }) {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-      <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
+      <Sidebar
+        mobileOpen={mobileOpen}
+        onDesktopHoverChange={setSidebarHovered}
+        onMobileClose={() => setMobileOpen(false)}
+      />
 
-      {/* lg:pl-[96px] = SIDEBAR_COLLAPSED_WIDTH (64) + 32 — Tailwind can't
-          read the JS constant here, so this must stay in sync by hand. */}
-      <div className="min-h-screen flex flex-col lg:pl-[96px]">
+      {/* Desktop padding tracks hover-expanded sidebar width so it never overlays content. */}
+      <div
+        className={`min-h-screen flex flex-col transition-[padding-left] duration-300 ${
+          sidebarHovered ? 'lg:pl-[240px]' : 'lg:pl-[96px]'
+        }`}
+      >
         <div className="lg:hidden" />
         <Navbar onMobileMenuToggle={() => setMobileOpen(true)} />
 

@@ -18,17 +18,17 @@ export function StatsCard({
 
   return (
     <div className={cn('stat-card group cursor-default', className)}>
-      <div className="flex items-start justify-between mb-4">
+      <div className="flex items-start justify-between mb-3">
         <div
           className={cn(
-            'w-12 h-12 rounded-xl flex items-center justify-center shadow-sm',
+            'w-10 h-10 rounded-xl flex items-center justify-center',
             iconBg || gradient || 'bg-blue-100 dark:bg-blue-900/30'
           )}
         >
           {Icon && (
             <Icon
               className={cn(
-                'w-6 h-6',
+                'w-5 h-5',
                 gradient ? 'text-white' : 'text-blue-600 dark:text-blue-400'
               )}
             />
@@ -55,12 +55,12 @@ export function StatsCard({
       </div>
 
       <div>
-        <div className="text-2xl font-bold text-slate-900 dark:text-white mb-1 tracking-tight">
+        <div className="text-xl font-bold text-slate-900 dark:text-white mb-0.5 tracking-tight">
           {valuePrefix}
           {value}
           {valueSuffix}
         </div>
-        <div className="text-sm text-slate-500 dark:text-slate-400 font-medium">
+        <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
           {title}
         </div>
         {changeLabel && (

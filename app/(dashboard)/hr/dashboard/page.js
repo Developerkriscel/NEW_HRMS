@@ -36,10 +36,10 @@ export default function HRDashboardPage() {
   if (loading) return <PageLoader />
 
   return (
-    <div className="animate-fade-in space-y-6">
-      <div className="page-header">
+    <div className="animate-fade-in space-y-4">
+      <div className="page-header !mb-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">HR Dashboard</h1>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">HR Dashboard</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Today's workforce snapshot</p>
         </div>
       </div>
@@ -52,7 +52,7 @@ export default function HRDashboardPage() {
       </div>
 
       <div className="stat-card">
-        <h3 className="font-semibold text-slate-800 dark:text-slate-100 mb-4">Pending Leave Approvals</h3>
+        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-3">Pending Leave Approvals</h3>
         {pendingLeaves.length === 0 ? (
           <p className="text-sm text-slate-400">No pending leave requests</p>
         ) : (

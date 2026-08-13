@@ -54,7 +54,7 @@ export function EmployeesList({ basePath }) {
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Employees</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Manage your organization's workforce</p>
         </div>
-        <button className="btn-primary" onClick={() => router.push('/company/employees/add')}>
+        <button className="btn-primary" onClick={() => router.push(`${basePath}/add`)}>
           <Plus className="w-4 h-4" /> Add Employee
         </button>
       </div>

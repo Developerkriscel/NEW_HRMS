@@ -5,6 +5,7 @@ import { ok, fail } from '@/lib/apiResponse'
 import { requireAuth, requireRole, requireTenantId } from '@/lib/auth'
 import { logAction } from '@/lib/audit'
 import { sanitizeForManager } from '@/lib/employeeVisibility'
+import { sanitizeModuleAccess } from '@/lib/moduleAccess'
 import Employee, { EMPLOYEE_ROLES } from '@/models/Employee'
 import Permission from '@/models/Permission'
 
@@ -15,6 +16,7 @@ const UPDATABLE_FIELDS = [
   'ctc', 'basicSalary', 'bankName', 'bankAccountNumber', 'bankIfscCode',
   'accountHolderName', 'bankBranch', 'aadhaarNumber', 'panNumber', 'pfNumber',
   'uanNumber', 'esiNumber', 'confirmationDate', 'resignationDate', 'lastWorkingDate',
+  'moduleAccess',
 ]
 
 export const GET = withApi(async (_req, { params }) => {
@@ -54,9 +56,14 @@ export const PUT = withApi(async (req, { params }) => {
 
   const employee = await Employee.findOne({ _id: params.id, tenantId, deleted: false })
   if (!employee) return fail('Employee not found', 404)
+  if (body.moduleAccess !== undefined && !['COMPANY_ADMIN', 'SUPER_ADMIN'].includes(session.role)) {
+    return fail('Only a Company Admin can update HR module access', 403, 'FORBIDDEN')
+  }
 
   for (const field of UPDATABLE_FIELDS) {
-    if (body[field] !== undefined && body[field] !== null) employee[field] = body[field]
+    if (body[field] !== undefined && body[field] !== null) {
+      employee[field] = field === 'moduleAccess' ? sanitizeModuleAccess(body[field]) : body[field]
+    }
   }
   if (body.departmentId !== undefined) employee.department = body.departmentId || null
   if (body.designationId !== undefined) employee.designation = body.designationId || null

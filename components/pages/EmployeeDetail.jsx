@@ -11,6 +11,7 @@ import { employeeApi, permissionApi } from '@/services/employeeApi'
 import { departmentApi, designationApi, branchApi, shiftApi } from '@/services/departmentApi'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
+import { HR_RESTRICTABLE_ROLES, MODULE_ACCESS_OPTIONS } from '@/lib/moduleAccess'
 
 const STATUSES = ['ACTIVE', 'INACTIVE', 'PROBATION', 'NOTICE_PERIOD', 'RESIGNED', 'TERMINATED', 'ABSCONDED', 'RETIRED']
 const ROLES = ['COMPANY_ADMIN', 'HR_MANAGER', 'MANAGER', 'EMPLOYEE', 'FINANCE', 'IT_ADMIN', 'SUPPORT_AGENT']
@@ -82,6 +83,7 @@ export function EmployeeDetail({ basePath }) {
       branchId: employee.branch?._id || '',
       shiftId: employee.shift?._id || '',
       reportingManagerId: employee.reportingManager?._id || '',
+      moduleAccess: employee.moduleAccess || [],
     })
     setSelectedPermissionIds((employee.permissions || []).map((p) => p._id))
     setSaveError('')
@@ -92,8 +94,11 @@ export function EmployeeDetail({ basePath }) {
     setSaving(true)
     setSaveError('')
     try {
-      await employeeApi.update(id, form)
-      await employeeApi.updatePermissions(id, selectedPermissionIds)
+      const payload = canChangeRole ? form : Object.fromEntries(
+        Object.entries(form).filter(([key]) => key !== 'moduleAccess')
+      )
+      await employeeApi.update(id, payload)
+      if (canChangeRole) await employeeApi.updatePermissions(id, selectedPermissionIds)
       setEditing(false)
       load()
     } catch (err) {
@@ -105,6 +110,15 @@ export function EmployeeDetail({ basePath }) {
 
   function togglePermission(permId) {
     setSelectedPermissionIds((ids) => (ids.includes(permId) ? ids.filter((i) => i !== permId) : [...ids, permId]))
+  }
+
+  function toggleModuleAccess(moduleKey) {
+    setForm((current) => ({
+      ...current,
+      moduleAccess: current.moduleAccess.includes(moduleKey)
+        ? current.moduleAccess.filter((key) => key !== moduleKey)
+        : [...current.moduleAccess, moduleKey],
+    }))
   }
 
   async function handleResetPassword(reason) {
@@ -135,6 +149,12 @@ export function EmployeeDetail({ basePath }) {
     acc[p.module].push(p)
     return acc
   }, {})
+  const modulesByGroup = MODULE_ACCESS_OPTIONS.reduce((acc, option) => {
+    acc[option.group] = acc[option.group] || []
+    acc[option.group].push(option)
+    return acc
+  }, {})
+  const showModuleAccess = form && canChangeRole && HR_RESTRICTABLE_ROLES.includes(form.role)
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -233,7 +253,7 @@ export function EmployeeDetail({ basePath }) {
 
           {Object.keys(permissionsByModule).length > 0 && (
             <div>
-              <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">Custom module permissions (in addition to whatever the role already grants)</p>
+              <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">Custom permissions{!canChangeRole && ' (Company Admin only)'}</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {Object.entries(permissionsByModule).map(([module, perms]) => (
                   <div key={module} className="rounded-xl border border-slate-100 dark:border-slate-800 p-3">
@@ -241,7 +261,7 @@ export function EmployeeDetail({ basePath }) {
                     <div className="space-y-1.5">
                       {perms.map((p) => (
                         <label key={p._id} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-                          <input type="checkbox" className="h-4 w-4 rounded border-slate-300" checked={selectedPermissionIds.includes(p._id)} onChange={() => togglePermission(p._id)} />
+                          <input type="checkbox" className="h-4 w-4 rounded border-slate-300" disabled={!canChangeRole} checked={selectedPermissionIds.includes(p._id)} onChange={() => togglePermission(p._id)} />
                           {p.name}
                         </label>
                       ))}
@@ -249,6 +269,31 @@ export function EmployeeDetail({ basePath }) {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {showModuleAccess && (
+            <div>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Visible modules for this HR user</p>
+                <button type="button" className="btn-secondary !text-xs !py-1" onClick={() => setForm({ ...form, moduleAccess: MODULE_ACCESS_OPTIONS.map((option) => option.key) })}>Select All</button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {Object.entries(modulesByGroup).map(([group, moduleOptions]) => (
+                  <div key={group} className="rounded-xl border border-slate-100 dark:border-slate-800 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">{group}</p>
+                    <div className="space-y-1.5">
+                      {moduleOptions.map((option) => (
+                        <label key={option.key} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                          <input type="checkbox" className="h-4 w-4 rounded border-slate-300" checked={form.moduleAccess.includes(option.key)} onChange={() => toggleModuleAccess(option.key)} />
+                          {option.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-slate-400">Leave all unchecked to use the full default menu for this role.</p>
             </div>
           )}
 
@@ -281,6 +326,21 @@ export function EmployeeDetail({ basePath }) {
                 <div className="flex flex-wrap gap-2">
                   {employee.permissions.map((p) => <Badge key={p._id}>{p.name}</Badge>)}
                 </div>
+              </div>
+            )}
+
+            {HR_RESTRICTABLE_ROLES.includes(employee.role) && (
+              <div className="stat-card">
+                <h3 className="font-semibold text-slate-800 dark:text-slate-100 mb-4">Module Access</h3>
+                {(employee.moduleAccess || []).length === 0 ? (
+                  <p className="text-sm text-slate-400">Full default access for {employee.role.replace('_', ' ')}.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {MODULE_ACCESS_OPTIONS.filter((option) => employee.moduleAccess.includes(option.key)).map((option) => (
+                      <Badge key={option.key}>{option.label}</Badge>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

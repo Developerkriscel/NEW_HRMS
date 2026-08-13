@@ -100,6 +100,7 @@ const EmployeeSchema = new mongoose.Schema(
     profilePhotoUrl: { type: String },
     twoFactorEnabled: { type: Boolean, default: false },
     permissions: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Permission' }],
+    moduleAccess: [{ type: String }],
     sourceCandidateId: { type: mongoose.Schema.Types.ObjectId, ref: 'Candidate', default: null },
     sourceApplicationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Application', default: null },
     sourceJobId: { type: mongoose.Schema.Types.ObjectId, ref: 'Job', default: null },

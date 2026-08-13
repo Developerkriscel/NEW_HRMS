@@ -5,6 +5,7 @@ import { ok, fail, paged } from '@/lib/apiResponse'
 import { requireAuth, requireRole, requireTenantId, hashPassword } from '@/lib/auth'
 import { logAction } from '@/lib/audit'
 import { sanitizeForManager } from '@/lib/employeeVisibility'
+import { sanitizeModuleAccess } from '@/lib/moduleAccess'
 import Employee from '@/models/Employee'
 import Tenant from '@/models/Tenant'
 
@@ -63,6 +64,9 @@ export const POST = withApi(async (req) => {
   if (!body.email || !body.firstName || !body.lastName) {
     return fail('firstName, lastName and email are required', 400)
   }
+  if (body.moduleAccess?.length && !['COMPANY_ADMIN', 'SUPER_ADMIN'].includes(session.role)) {
+    return fail('Only a Company Admin can assign HR module access', 403, 'FORBIDDEN')
+  }
 
   const existing = await Employee.findOne({ email: body.email, tenantId, deleted: false })
   if (existing) return fail('An employee with this email already exists', 400, 'DUPLICATE')
@@ -90,6 +94,7 @@ export const POST = withApi(async (req) => {
     password: hashedPassword,
     phone: body.phone,
     role: body.role || 'EMPLOYEE',
+    moduleAccess: ['COMPANY_ADMIN', 'SUPER_ADMIN'].includes(session.role) ? sanitizeModuleAccess(body.moduleAccess) : [],
     status: 'PROBATION', // new employees always start on probation, regardless of request body
     dateOfBirth: body.dateOfBirth || null,
     gender: body.gender,

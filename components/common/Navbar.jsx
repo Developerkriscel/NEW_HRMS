@@ -8,6 +8,7 @@ import { useUIStore } from '@/store/uiStore'
 import { Avatar } from '@/components/common/Avatar'
 import { searchApi } from '@/services/searchApi'
 import { formatRelativeTime, ROLE_PANEL_LABELS } from '@/lib/utils'
+import { MODULE_ACCESS, filterByModuleAccess } from '@/lib/moduleAccess'
 
 const MOCK_NOTIFICATIONS = [
   { id: 1, title: 'Leave approved', message: 'Your leave for Dec 25 has been approved', time: new Date(Date.now() - 3600000), read: false, type: 'success' },
@@ -33,24 +34,26 @@ const SEARCH_NAV_BY_ROLE = {
   ],
   COMPANY_ADMIN: [
     { title: 'Dashboard', description: 'Company overview', path: '/company/dashboard', type: 'Page' },
-    { title: 'Employees', description: 'Employee directory', path: '/company/employees', type: 'Page' },
-    { title: 'Departments', description: 'Company departments', path: '/company/departments', type: 'Page' },
-    { title: 'Settings', description: 'Company settings', path: '/company/settings', type: 'Page' },
+    { title: 'Employees', description: 'Employee directory', path: '/company/employees', type: 'Page', moduleKey: MODULE_ACCESS.EMPLOYEES },
+    { title: 'Departments', description: 'Company departments', path: '/company/departments', type: 'Page', moduleKey: MODULE_ACCESS.DEPARTMENTS },
+    { title: 'Settings', description: 'Company settings', path: '/company/settings', type: 'Page', moduleKey: MODULE_ACCESS.SETTINGS },
   ],
   HR_MANAGER: [
     { title: 'Dashboard', description: 'HR overview', path: '/hr/dashboard', type: 'Page' },
-    { title: 'Employees', description: 'Employee directory', path: '/hr/employees', type: 'Page' },
-    { title: 'Attendance', description: 'Attendance records', path: '/hr/attendance', type: 'Page' },
-    { title: 'Leave', description: 'Leave requests', path: '/hr/leave', type: 'Page' },
-    { title: 'Payroll', description: 'Payroll runs', path: '/hr/payroll', type: 'Page' },
+    { title: 'Employees', description: 'Employee directory', path: '/hr/employees', type: 'Page', moduleKey: MODULE_ACCESS.EMPLOYEES },
+    { title: 'Attendance', description: 'Attendance records', path: '/hr/attendance', type: 'Page', moduleKey: MODULE_ACCESS.ATTENDANCE },
+    { title: 'Leave', description: 'Leave requests', path: '/hr/leave', type: 'Page', moduleKey: MODULE_ACCESS.LEAVE },
+    { title: 'Payroll', description: 'Payroll runs', path: '/hr/payroll', type: 'Page', moduleKey: MODULE_ACCESS.PAYROLL },
+    { title: 'Recruitment', description: 'Hiring pipeline and candidates', path: '/hr/recruitment', type: 'Page', moduleKey: MODULE_ACCESS.RECRUITMENT },
+    { title: 'Onboarding', description: 'Employee onboarding', path: '/hr/onboarding', type: 'Page', moduleKey: MODULE_ACCESS.ONBOARDING },
   ],
   FINANCE: [
-    { title: 'Payroll', description: 'Payroll runs', path: '/hr/payroll', type: 'Page' },
-    { title: 'Reports', description: 'Payroll reports', path: '/hr/reports', type: 'Page' },
+    { title: 'Payroll', description: 'Payroll runs', path: '/hr/payroll', type: 'Page', moduleKey: MODULE_ACCESS.PAYROLL },
+    { title: 'Reports', description: 'Payroll reports', path: '/hr/reports', type: 'Page', moduleKey: MODULE_ACCESS.REPORTS },
   ],
   IT_ADMIN: [
-    { title: 'Helpdesk', description: 'Employee tickets', path: '/hr/helpdesk', type: 'Page' },
-    { title: 'Assets', description: 'Asset tracking', path: '/hr/assets', type: 'Page' },
+    { title: 'Helpdesk', description: 'Employee tickets', path: '/hr/helpdesk', type: 'Page', moduleKey: MODULE_ACCESS.HELPDESK },
+    { title: 'Assets', description: 'Asset tracking', path: '/hr/assets', type: 'Page', moduleKey: MODULE_ACCESS.ASSETS },
   ],
   MANAGER: [
     { title: 'Dashboard', description: 'Manager overview', path: '/manager/dashboard', type: 'Page' },
@@ -98,7 +101,7 @@ export function Navbar({ onMobileMenuToggle }) {
   const unreadCount = allNotifications.filter((n) => !n.read).length
   const profilePath = PROFILE_PATH_BY_ROLE[user?.role] || (user ? `/${user.role?.toLowerCase().replace('_', '-')}/dashboard` : '/login')
   const panelLabel = ROLE_PANEL_LABELS[user?.role] || 'Dashboard'
-  const navResults = SEARCH_NAV_BY_ROLE[user?.role] || SEARCH_NAV_BY_ROLE.EMPLOYEE
+  const navResults = filterByModuleAccess(SEARCH_NAV_BY_ROLE[user?.role] || SEARCH_NAV_BY_ROLE.EMPLOYEE, user)
   const query = search.trim().toLowerCase()
   const searchResults = useMemo(() => {
     const local = query
