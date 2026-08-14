@@ -90,7 +90,16 @@ export function AddEmployeePage({ basePath }) {
             <p className="font-mono text-sm text-slate-800 dark:text-slate-100">{tempPassword}</p>
           </div>
         </div>
-        <button onClick={() => router.push(basePath)} className="btn-primary w-full justify-center">Done</button>
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={() => router.push(basePath)} className="btn-secondary justify-center">Done</button>
+          <button
+            onClick={() => router.push(`${basePath}/${createdEmployee?._id}`)}
+            disabled={!createdEmployee?._id}
+            className="btn-primary justify-center disabled:opacity-50"
+          >
+            Edit Authority
+          </button>
+        </div>
       </div>
     )
   }
@@ -142,29 +151,22 @@ export function AddEmployeePage({ basePath }) {
             </select>
           </label>
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <select className="input-field" value={form.departmentId} onChange={(e) => setForm({ ...form, departmentId: e.target.value })}>
-            <option value="">Select Department</option>
-            {departments.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
-          </select>
-          <select className="input-field" value={form.designationId} onChange={(e) => setForm({ ...form, designationId: e.target.value })}>
-            <option value="">Select Designation</option>
-            {designations.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
-          </select>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <input type="date" className="input-field" value={form.joiningDate} onChange={(e) => setForm({ ...form, joiningDate: e.target.value })} />
-          <input type="number" placeholder="Annual CTC" className="input-field" value={form.ctc} onChange={(e) => setForm({ ...form, ctc: e.target.value })} />
-        </div>
-        {showModuleAccess && (
-          <div className="rounded-xl border border-blue-100 bg-blue-50/40 dark:border-blue-900/50 dark:bg-blue-900/10 p-4 space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Module Authority</p>
-                <p className="text-xs text-slate-400 mt-0.5">Select modules this user should see. Leave all unchecked to keep full {form.role.replace('_', ' ')} access.</p>
-              </div>
-              <button type="button" className="btn-secondary !text-xs !py-1" onClick={() => setForm({ ...form, moduleAccess: MODULE_ACCESS_OPTIONS.map((option) => option.key) })}>Select All</button>
+        <div className="rounded-xl border border-blue-100 bg-blue-50/40 dark:border-blue-900/50 dark:bg-blue-900/10 p-4 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Module Authority</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {showModuleAccess
+                  ? `Select modules this HR Manager should see. Leave all unchecked to keep full HR Manager access.`
+                  : 'Module-level access appears here when Authority / Role is set to HR Manager.'}
+              </p>
             </div>
+            {showModuleAccess && (
+              <button type="button" className="btn-secondary !text-xs !py-1" onClick={() => setForm({ ...form, moduleAccess: MODULE_ACCESS_OPTIONS.map((option) => option.key) })}>Select All</button>
+            )}
+          </div>
+
+          {showModuleAccess ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {Object.entries(modulesByGroup).map(([group, options]) => (
                 <div key={group} className="rounded-lg bg-slate-50 dark:bg-slate-800/60 p-3">
@@ -180,8 +182,26 @@ export function AddEmployeePage({ basePath }) {
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="rounded-lg border border-dashed border-blue-200 bg-white/60 p-3 text-xs text-slate-500 dark:border-blue-900/60 dark:bg-slate-900/40 dark:text-slate-400">
+              Choose <span className="font-semibold text-slate-700 dark:text-slate-200">HR Manager</span> in Authority / Role to assign Recruitment, Interviews, Assessments, Onboarding, Offers, and other HR modules.
+            </div>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <select className="input-field" value={form.departmentId} onChange={(e) => setForm({ ...form, departmentId: e.target.value })}>
+            <option value="">Select Department</option>
+            {departments.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
+          </select>
+          <select className="input-field" value={form.designationId} onChange={(e) => setForm({ ...form, designationId: e.target.value })}>
+            <option value="">Select Designation</option>
+            {designations.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
+          </select>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <input type="date" className="input-field" value={form.joiningDate} onChange={(e) => setForm({ ...form, joiningDate: e.target.value })} />
+          <input type="number" placeholder="Annual CTC" className="input-field" value={form.ctc} onChange={(e) => setForm({ ...form, ctc: e.target.value })} />
+        </div>
         <button type="submit" disabled={saving} className="btn-primary">
           {saving ? 'Creating...' : 'Create Employee'}
         </button>

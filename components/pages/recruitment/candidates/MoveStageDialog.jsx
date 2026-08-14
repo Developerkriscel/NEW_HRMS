@@ -7,18 +7,23 @@ import { candidateApi } from '@/services/candidateApi'
 
 // "Move Stage" — jumps an application directly to any active stage of its
 // own job's pipeline (job_pipeline_stages, Step 3).
-export function MoveStageDialog({ row, onClose, onMoved }) {
-  const [stages, setStages] = useState([])
-  const [loading, setLoading] = useState(true)
+export function MoveStageDialog({ row, stages: providedStages, onClose, onMoved }) {
+  const [stages, setStages] = useState(providedStages || [])
+  const [loading, setLoading] = useState(!providedStages)
   const [selectedStageId, setSelectedStageId] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
+    if (providedStages) {
+      setStages(providedStages)
+      setLoading(false)
+      return
+    }
     jobApi.get(row.jobId)
       .then((res) => setStages(res.data.data.pipelineStages || []))
       .finally(() => setLoading(false))
-  }, [row.jobId])
+  }, [providedStages, row.jobId])
 
   async function handleMove() {
     if (!selectedStageId) return

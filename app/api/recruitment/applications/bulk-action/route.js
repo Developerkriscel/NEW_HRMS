@@ -16,6 +16,7 @@ import CandidateTag from '@/models/CandidateTag'
 import CandidateTagAssignment from '@/models/CandidateTagAssignment'
 
 const TERMINAL = [APPLICATION_STATUS.REJECTED, APPLICATION_STATUS.WITHDRAWN, APPLICATION_STATUS.HIRED]
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 // POST { applicationIds, action: 'ASSIGN_RECRUITER'|'ADD_TAG'|'REJECT'|'TALENT_POOL', payload }
 // The other four bulk actions from item 13 (bulk Move Stage has its own
@@ -50,7 +51,7 @@ export const POST = withApi(async (req) => {
     const tagName = body.payload?.tagName?.trim()
     if (!tagName) return fail('tagName is required', 400, 'VALIDATION_ERROR')
     const tag = await CandidateTag.findOneAndUpdate(
-      { tenantId, name: { $regex: `^${tagName}$`, $options: 'i' } },
+      { tenantId, name: { $regex: `^${escapeRegex(tagName)}$`, $options: 'i' } },
       { $setOnInsert: { tenantId, name: tagName } },
       { upsert: true, new: true }
     )

@@ -30,7 +30,7 @@ export const GET = withApi(async (req) => {
 
   const stages = await JobPipelineStage.find({ tenantId, jobId, isActive: true }).sort({ order: 1 }).lean()
 
-  const query = { tenantId, jobId, deleted: false, status: { $in: [APPLICATION_STATUS.ACTIVE, APPLICATION_STATUS.ON_HOLD, APPLICATION_STATUS.HIRED] } }
+  const query = { tenantId, jobId, deleted: false, status: { $in: [APPLICATION_STATUS.ACTIVE, APPLICATION_STATUS.ON_HOLD] } }
 
   const recruiterFilter = searchParams.get('recruiter')
   if (recruiterFilter) query.assignedRecruiterId = recruiterFilter

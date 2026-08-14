@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Loader2, Scale, Tag as TagIcon, UserCog, XCircle, Archive, X } from 'lucide-react'
 import { PageLoader } from '@/components/common/LoadingSpinner'
 import { pipelineApi } from '@/services/pipelineApi'
 import { candidateApi } from '@/services/candidateApi'
-import { jobApi } from '@/services/jobApi'
 import { PIPELINE_STAGE_CATEGORY_LABELS } from '@/lib/jobConstants'
 import { REJECTION_REASON_LIST } from '@/lib/matchingConstants'
+import { APPLICATION_SOURCE_LABELS, APPLICATION_SOURCE_LIST } from '@/lib/candidateConstants'
 import { ReasonDialog } from '../candidates/ScreeningActions'
 import { MoveStageDialog } from '../candidates/MoveStageDialog'
 import { AddNoteDialog } from '../candidates/AddNoteDialog'
@@ -31,6 +31,27 @@ function StageColumn({ stage, cards, metrics, onDropCard, selected, onToggleSele
       </p>
       <div className="space-y-2 overflow-y-auto max-h-[65vh] pr-0.5">
         {cards.length === 0 && <p className="text-xs text-slate-300 dark:text-slate-600 text-center py-6">No candidates</p>}
+        {cards.map((card) => (
+          <PipelineCard
+            key={card.applicationId} card={card} selected={selected.has(card.applicationId)}
+            onToggleSelect={onToggleSelect} onDragStart={(e, c) => e.dataTransfer.setData('applicationId', c.applicationId)}
+            onDragEnd={() => {}} onMoveStage={onMoveStage} onAddNote={onAddNote} onReject={onReject}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function UnassignedColumn({ cards, selected, onToggleSelect, onMoveStage, onAddNote, onReject }) {
+  return (
+    <div className="flex-shrink-0 w-72 rounded-2xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/70 dark:bg-amber-950/20 p-3 flex flex-col">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300 uppercase tracking-wide">Needs stage</h3>
+        <span className="text-xs font-medium text-amber-600 dark:text-amber-300 bg-white dark:bg-slate-900 rounded-full px-2 py-0.5">{cards.length}</span>
+      </div>
+      <p className="text-[10px] text-amber-600/80 dark:text-amber-300/80 mb-2">Current stage is inactive or missing</p>
+      <div className="space-y-2 overflow-y-auto max-h-[65vh] pr-0.5">
         {cards.map((card) => (
           <PipelineCard
             key={card.applicationId} card={card} selected={selected.has(card.applicationId)}
@@ -120,22 +141,41 @@ export function PipelinePage() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    jobApi.list({ size: 100 }).then((res) => {
-      const list = res.data.data.content || []
-      setJobs(list)
-      if (list.length && !jobId) setJobId(list[0]._id)
-    })
+    let mounted = true
+    pipelineApi.listJobs()
+      .then((res) => {
+        if (!mounted) return
+        const list = res.data.data.content || []
+        setJobs(list)
+        if (list.length && !jobId) setJobId(list[0]._id)
+        if (!list.length) setLoading(false)
+      })
+      .catch((err) => {
+        if (!mounted) return
+        setError(err.response?.data?.message || 'Could not load jobs for the pipeline')
+        setLoading(false)
+      })
+    return () => { mounted = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  function load() {
+  const load = useCallback(() => {
     if (!jobId) return
     setLoading(true)
+    setError('')
     const params = { jobId }
     Object.entries(filters).forEach(([k, v]) => { if (v) params[k] = v })
-    pipelineApi.getBoard(params).then((res) => setBoard(res.data.data)).finally(() => setLoading(false))
-  }
-  useEffect(load, [jobId, filters])
+    pipelineApi.getBoard(params)
+      .then((res) => setBoard(res.data.data))
+      .catch((err) => {
+        setBoard(null)
+        setError(err.response?.data?.message || 'Could not load pipeline board')
+      })
+      .finally(() => setLoading(false))
+  }, [filters, jobId])
+
+  useEffect(load, [load])
+  useEffect(() => { setSelected(new Set()) }, [jobId])
 
   function updateFilter(key, val) { setFilters((f) => ({ ...f, [key]: val })) }
   function toggleSelect(id) { setSelected((s) => { const next = new Set(s); next.has(id) ? next.delete(id) : next.add(id); return next }) }
@@ -168,6 +208,7 @@ export function PipelinePage() {
       <div className="stat-card !p-4 space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <select className="input-field" value={jobId} onChange={(e) => setJobId(e.target.value)}>
+            <option value="">Select a job</option>
             {jobs.map((j) => <option key={j._id} value={j._id}>{j.jobTitle}</option>)}
           </select>
           <select className="input-field" value={filters.recruiter} onChange={(e) => updateFilter('recruiter', e.target.value)}>
@@ -181,6 +222,10 @@ export function PipelinePage() {
           <input type="number" min={0} className="input-field" placeholder="Min Experience" value={filters.experienceMin} onChange={(e) => updateFilter('experienceMin', e.target.value)} />
           <input className="input-field" placeholder="Location" value={filters.location || ''} onChange={(e) => updateFilter('location', e.target.value)} />
           <input className="input-field" placeholder="Tag" value={filters.tag} onChange={(e) => updateFilter('tag', e.target.value)} />
+          <select className="input-field" value={filters.source} onChange={(e) => updateFilter('source', e.target.value)}>
+            <option value="">All sources</option>
+            {APPLICATION_SOURCE_LIST.map((source) => <option key={source} value={source}>{APPLICATION_SOURCE_LABELS[source] || source}</option>)}
+          </select>
         </div>
       </div>
 
@@ -210,8 +255,23 @@ export function PipelinePage() {
       )}
       {error && <div className="px-4 py-2.5 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm flex items-center justify-between">{error}<button onClick={() => setError('')}><X className="w-4 h-4" /></button></div>}
 
-      {loading || !board ? (
+      {loading ? (
         <PageLoader />
+      ) : !jobs.length ? (
+        <div className="stat-card !p-6 text-center">
+          <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">No jobs available</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Create or open a job first, then candidates can appear in the pipeline.</p>
+        </div>
+      ) : !board ? (
+        <div className="stat-card !p-6 text-center">
+          <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Pipeline could not load</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Check the selected job or try again.</p>
+        </div>
+      ) : board.stages.length === 0 ? (
+        <div className="stat-card !p-6 text-center">
+          <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">No active stages</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Add active pipeline stages to this job before moving candidates.</p>
+        </div>
       ) : (
         <div className="flex gap-4 overflow-x-auto pb-4">
           {board.stages.map((stage) => (
@@ -222,12 +282,19 @@ export function PipelinePage() {
               onMoveStage={setMoveStageFor} onAddNote={setAddNoteFor} onReject={setRejectFor}
             />
           ))}
+          {board.unassigned?.length > 0 && (
+            <UnassignedColumn
+              cards={board.unassigned} selected={selected} onToggleSelect={toggleSelect}
+              onMoveStage={setMoveStageFor} onAddNote={setAddNoteFor} onReject={setRejectFor}
+            />
+          )}
         </div>
       )}
 
       {moveStageFor && (
         <MoveStageDialog
           row={{ applicationId: moveStageFor.applicationId, jobId, candidateName: moveStageFor.candidateName, jobTitle: board.job.jobTitle }}
+          stages={board.stages}
           onClose={() => setMoveStageFor(null)} onMoved={() => { setMoveStageFor(null); load() }}
         />
       )}
@@ -240,9 +307,13 @@ export function PipelinePage() {
           reasons={REJECTION_REASON_LIST} confirmLabel="Reject" variant="danger"
           onClose={() => setRejectFor(null)}
           onDone={async (data) => {
-            if (rejectFor === 'bulk') await pipelineApi.bulkAction(Array.from(selected), 'REJECT', data)
-            else await candidateApi.reject(rejectFor.applicationId, data)
-            setRejectFor(null); setSelected(new Set()); load()
+            try {
+              if (rejectFor === 'bulk') await pipelineApi.bulkAction(Array.from(selected), 'REJECT', data)
+              else await candidateApi.reject(rejectFor.applicationId, data)
+              setRejectFor(null); setSelected(new Set()); load()
+            } catch (err) {
+              setError(err.response?.data?.message || 'Reject failed')
+            }
           }}
         />
       )}
