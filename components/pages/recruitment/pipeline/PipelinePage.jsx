@@ -1,13 +1,15 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, Scale, Tag as TagIcon, UserCog, XCircle, Archive, X } from 'lucide-react'
+import Link from 'next/link'
+import { Loader2, Scale, Tag as TagIcon, UserCog, XCircle, Archive, X, Pencil } from 'lucide-react'
 import { PageLoader } from '@/components/common/LoadingSpinner'
 import { pipelineApi } from '@/services/pipelineApi'
 import { candidateApi } from '@/services/candidateApi'
-import { PIPELINE_STAGE_CATEGORY_LABELS } from '@/lib/jobConstants'
+import { PIPELINE_STAGE_CATEGORY_LABELS, canManageJobs } from '@/lib/jobConstants'
 import { REJECTION_REASON_LIST } from '@/lib/matchingConstants'
 import { APPLICATION_SOURCE_LABELS, APPLICATION_SOURCE_LIST } from '@/lib/candidateConstants'
+import { useAuthStore } from '@/store/authStore'
 import { ReasonDialog } from '../candidates/ScreeningActions'
 import { MoveStageDialog } from '../candidates/MoveStageDialog'
 import { AddNoteDialog } from '../candidates/AddNoteDialog'
@@ -128,6 +130,8 @@ function BulkTagDialog({ onClose, onDone }) {
 }
 
 export function PipelinePage() {
+  const user = useAuthStore((s) => s.user)
+  const canEditStages = user ? canManageJobs({ role: user.role }) : false
   const [jobs, setJobs] = useState([])
   const [jobId, setJobId] = useState('')
   const [board, setBoard] = useState(null)
@@ -203,6 +207,14 @@ export function PipelinePage() {
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Recruitment Pipeline</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Drag candidates between stages, or use Move Stage.</p>
         </div>
+        {/* Stage customization (add/rename/reorder/remove, per job) lives on
+            the job's own edit form — this just jumps straight to that
+            section instead of duplicating the editor here. */}
+        {canEditStages && jobId && (
+          <Link href={`/hr/recruitment/jobs/${jobId}/edit`} className="btn-secondary">
+            <Pencil className="w-4 h-4" /> Edit Stages
+          </Link>
+        )}
       </div>
 
       <div className="stat-card !p-4 space-y-3">

@@ -18,7 +18,7 @@ import {
   BUDGET_TYPE_LIST, BUDGET_TYPE_LABELS,
   PRIORITY_LIST, PRIORITY_LABELS, PRIORITY_SLA_DAYS,
   REQUISITION_EDITABLE_STATUSES,
-  computeSlaTargetDate,
+  computeSlaTargetDate, matchesDepartment,
 } from '@/lib/recruitmentConstants'
 import { validateAlways, validateForSubmit, isValid } from '@/lib/recruitmentValidation'
 
@@ -170,8 +170,9 @@ export function RequisitionForm({ requisitionId }) {
       .finally(() => setLoading(false))
   }, [requisitionId])
 
+  // Designations with no department apply to every department, so keep them in the list.
   const filteredDesignations = useMemo(
-    () => (formData.department ? designations.filter((d) => (d.department?._id || d.department) === formData.department) : designations),
+    () => (formData.department ? designations.filter((d) => matchesDepartment(d, formData.department)) : designations),
     [designations, formData.department]
   )
 
@@ -184,7 +185,7 @@ export function RequisitionForm({ requisitionId }) {
     setFormData((fd) => ({
       ...fd,
       department: value,
-      designation: designations.find((d) => d._id === fd.designation && (d.department?._id || d.department) === value) ? fd.designation : '',
+      designation: designations.find((d) => d._id === fd.designation && matchesDepartment(d, value)) ? fd.designation : '',
     }))
   }
 

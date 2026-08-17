@@ -31,10 +31,18 @@ function isItemActive(pathname, item) {
   return item.exact ? pathname === item.path : pathname === item.path || pathname.startsWith(item.path + '/')
 }
 
+// Dev-only — never rendered in a production build. Jumps HR straight to
+// their own tenant's real public careers site (careersPagePath's URL shape,
+// same helper `lib/publicJobHelpers.js` uses) so one person can play both
+// HR and candidate while manually testing the recruitment flow, without
+// hunting for the company slug or leaving the HR panel to look it up.
+const DEV_TOOLS_ENABLED = process.env.NODE_ENV !== 'production'
+
 export function RecruitmentSidebar() {
   const pathname = usePathname()
   const user = useAuthStore((state) => state.user)
   const navItems = filterByModuleAccess(RECRUITMENT_NAV, user)
+  const showCandidateDevLink = DEV_TOOLS_ENABLED && !!user?.companySlug
 
   return (
     <aside className="w-full lg:w-56 flex-shrink-0">
@@ -59,6 +67,23 @@ export function RecruitmentSidebar() {
             </Link>
           )
         })}
+
+        {showCandidateDevLink && (
+          <>
+            <div className="hidden lg:block my-1 border-t border-dashed border-amber-300 dark:border-amber-800" />
+            <a
+              href={`/${user.companySlug}/careers`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Dev only — opens your company's real public careers site in a new tab, so you can apply as a candidate to test the flow"
+              className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors duration-150 flex-shrink-0 lg:flex-shrink text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 border border-amber-200 dark:border-amber-800"
+            >
+              <Icons.FlaskConical className="w-4 h-4 flex-shrink-0" />
+              Test as Candidate
+              <Icons.ExternalLink className="w-3 h-3 flex-shrink-0 ml-auto opacity-60" />
+            </a>
+          </>
+        )}
       </nav>
     </aside>
   )

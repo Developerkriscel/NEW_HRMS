@@ -123,6 +123,7 @@ export const POST = withApi(async (req, { params }) => {
       // freshest profile info — updates the master record rather than
       // silently keeping stale data from their first-ever application.
       Object.assign(candidate, {
+        firstName: data.firstName ?? candidate.firstName, lastName: data.lastName ?? candidate.lastName,
         phone: data.phone, currentLocation: data.currentLocation ?? candidate.currentLocation,
         currentCompany: data.currentCompany ?? candidate.currentCompany,
         currentDesignation: data.currentDesignation ?? candidate.currentDesignation,

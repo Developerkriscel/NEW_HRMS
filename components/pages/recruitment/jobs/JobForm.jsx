@@ -24,6 +24,7 @@ import {
   JOB_EDITABLE_STATUSES, DEFAULT_APPLICATION_FIELDS, PIPELINE_TEMPLATES,
   canCreateWithoutRequisition,
 } from '@/lib/jobConstants'
+import { matchesDepartment } from '@/lib/recruitmentConstants'
 import { validateAlways, validateForOpen, isValid } from '@/lib/jobValidation'
 
 const FORM_DEFAULTS = {
@@ -196,8 +197,9 @@ function JobFormInner({ jobId }) {
     setLoading(false)
   }, [jobId, requisitionId, user])
 
+  // Designations with no department apply to every department, so keep them in the list.
   const filteredDesignations = useMemo(
-    () => (formData.department ? designations.filter((d) => (d.department?._id || d.department) === formData.department) : designations),
+    () => (formData.department ? designations.filter((d) => matchesDepartment(d, formData.department)) : designations),
     [designations, formData.department]
   )
 
@@ -208,7 +210,7 @@ function JobFormInner({ jobId }) {
   function updateDepartment(value) {
     setFormData((fd) => ({
       ...fd, department: value,
-      designation: designations.find((d) => d._id === fd.designation && (d.department?._id || d.department) === value) ? fd.designation : '',
+      designation: designations.find((d) => d._id === fd.designation && matchesDepartment(d, value)) ? fd.designation : '',
     }))
   }
 
