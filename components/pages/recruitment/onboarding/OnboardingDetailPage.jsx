@@ -72,7 +72,7 @@ export function OnboardingDetailPage({ id }) {
     return (
       <div className="stat-card text-center py-16">
         <h3 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">Preboarding profile not found</h3>
-        <Link href="/hr/recruitment/onboarding" className="btn-secondary mx-auto w-fit">Back to Preboarding</Link>
+        <Link href="/hr/onboarding" className="btn-secondary mx-auto w-fit">Back to Preboarding</Link>
       </div>
     )
   }
@@ -89,7 +89,7 @@ export function OnboardingDetailPage({ id }) {
 
   return (
     <div className="animate-fade-in space-y-6 max-w-5xl">
-      <Link href="/hr/recruitment/onboarding" className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+      <Link href="/hr/onboarding" className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
         <ArrowLeft className="w-3.5 h-3.5" /> Back to Preboarding
       </Link>
 
@@ -103,7 +103,7 @@ export function OnboardingDetailPage({ id }) {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href={`/hr/recruitment/onboarding/${id}/joining`} className="btn-primary !text-xs">
+          <Link href={`/hr/onboarding/${id}/joining`} className="btn-primary !text-xs">
             <UserPlus className="w-3.5 h-3.5" /> Joining & Employee Setup
           </Link>
           <button onClick={() => setDialog('joiningDate')} className="btn-secondary !text-xs">Change Joining Date</button>

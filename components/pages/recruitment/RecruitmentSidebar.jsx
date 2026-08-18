@@ -21,7 +21,8 @@ export const RECRUITMENT_NAV = [
   { label: 'Selections', icon: 'BadgeCheck', path: '/hr/recruitment/selections', moduleKey: MODULE_ACCESS.SELECTIONS },
   { label: 'Compensation', icon: 'IndianRupee', path: '/hr/recruitment/compensation', moduleKey: MODULE_ACCESS.COMPENSATION },
   { label: 'Offers', icon: 'FileSignature', path: '/hr/recruitment/offers', moduleKey: MODULE_ACCESS.OFFERS },
-  { label: 'Onboarding', icon: 'UserCheck', path: '/hr/recruitment/onboarding', moduleKey: MODULE_ACCESS.ONBOARDING },
+  // Onboarding lives as its own top-level module (see components/common/Sidebar.jsx)
+  // now that it's the real candidate-conversion flow, not nested under Recruitment.
   { label: 'Career Page', icon: 'Globe', path: '/hr/recruitment/career-page', moduleKey: MODULE_ACCESS.CAREER_PAGE },
   { label: 'Reports', icon: 'BarChart2', path: '/hr/recruitment/reports', moduleKey: MODULE_ACCESS.RECRUITMENT_REPORTS },
   { label: 'Settings', icon: 'Settings', path: '/hr/recruitment/settings', moduleKey: MODULE_ACCESS.RECRUITMENT_SETTINGS },

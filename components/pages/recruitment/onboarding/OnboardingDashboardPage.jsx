@@ -18,7 +18,7 @@ const CARD_DEFS = [
   { key: 'joiningThisWeek', label: 'Joining This Week' },
 ]
 
-// item 1 — /hr/recruitment/onboarding, the Preboarding Dashboard: 8 tabs,
+// item 1 — /hr/onboarding, the Preboarding Dashboard: 8 tabs,
 // 6 summary cards, candidate table with progress columns.
 export function OnboardingDashboardPage() {
   const [tab, setTab] = useState('ACCEPTED')
@@ -116,7 +116,7 @@ export function OnboardingDashboardPage() {
               {rows.map((r) => (
                 <tr key={r.preboardingId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30">
                   <td className="py-3 px-4">
-                    <Link href={`/hr/recruitment/onboarding/${r.preboardingId}`} className="font-medium text-blue-600 dark:text-blue-400 hover:underline">{r.candidateName}</Link>
+                    <Link href={`/hr/onboarding/${r.preboardingId}`} className="font-medium text-blue-600 dark:text-blue-400 hover:underline">{r.candidateName}</Link>
                   </td>
                   <td className="py-3 px-4 text-slate-600 dark:text-slate-300">{r.jobTitle}</td>
                   <td className="py-3 px-4 text-slate-600 dark:text-slate-300">{r.joiningDate ? formatDate(r.joiningDate, 'dd MMM yyyy') : '—'}</td>
@@ -126,9 +126,9 @@ export function OnboardingDashboardPage() {
                   <td className="py-3 px-4"><Badge variant={r.status}>{r.status.replace(/_/g, ' ')}</Badge></td>
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-1.5">
-                      <Link href={`/hr/recruitment/onboarding/${r.preboardingId}`} className="btn-secondary !text-xs !py-1">View</Link>
+                      <Link href={`/hr/onboarding/${r.preboardingId}`} className="btn-secondary !text-xs !py-1">View</Link>
                       {['READY_TO_JOIN', 'JOINED'].includes(r.status) && (
-                        <Link href={`/hr/recruitment/onboarding/${r.preboardingId}/joining`} className="btn-secondary !text-xs !py-1">Employee Setup</Link>
+                        <Link href={`/hr/onboarding/${r.preboardingId}/joining`} className="btn-secondary !text-xs !py-1">Employee Setup</Link>
                       )}
                       {r.formStatus === 'NOT_SENT' && (
                         <button disabled={busyId === r.preboardingId} onClick={() => sendForm(r.preboardingId)} className="btn-secondary !text-xs !py-1"><Send className="w-3 h-3" /> Send Form</button>

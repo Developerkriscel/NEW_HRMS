@@ -70,7 +70,7 @@ export function EmployeeConversionPage({ id }) {
   if (result?.employee) {
     return (
       <div className="animate-fade-in space-y-6 max-w-4xl">
-        <Link href={`/hr/recruitment/onboarding/${id}/joining`} className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+        <Link href={`/hr/onboarding/${id}/joining`} className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Joining Readiness
         </Link>
         <div className="stat-card text-center py-12">
@@ -91,7 +91,7 @@ export function EmployeeConversionPage({ id }) {
           )}
           <div className="mt-6 flex justify-center gap-2 flex-wrap">
             <Link href={`/company/employees/${result.employee._id}`} className="btn-primary">View Employee</Link>
-            <Link href="/hr/recruitment/onboarding" className="btn-secondary">Back to Onboarding</Link>
+            <Link href="/hr/onboarding" className="btn-secondary">Back to Onboarding</Link>
           </div>
         </div>
       </div>
@@ -100,7 +100,7 @@ export function EmployeeConversionPage({ id }) {
 
   return (
     <div className="animate-fade-in space-y-6 max-w-5xl">
-      <Link href={`/hr/recruitment/onboarding/${id}/joining`} className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+      <Link href={`/hr/onboarding/${id}/joining`} className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
         <ArrowLeft className="w-3.5 h-3.5" /> Back to Joining Readiness
       </Link>
 

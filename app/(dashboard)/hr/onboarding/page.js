@@ -1,5 +1,5 @@
-import { OnboardingWorkspace } from '@/components/pages/OnboardingWorkspace'
+import { OnboardingDashboardPage } from '@/components/pages/recruitment/onboarding/OnboardingDashboardPage'
 
 export default function OnboardingPage() {
-  return <OnboardingWorkspace />
+  return <OnboardingDashboardPage />
 }

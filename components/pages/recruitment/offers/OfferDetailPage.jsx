@@ -177,7 +177,7 @@ export function OfferDetailPage({ offerId }) {
           <Row label="Accepted On" value={data.acceptedAt ? formatDate(data.acceptedAt, 'dd MMM yyyy · hh:mm a') : '—'} />
           <Row label="Signature Reference" value={data.signatureReference} />
           {data.preboardingId ? (
-            <Link href={`/hr/recruitment/onboarding/${data.preboardingId}`} className="btn-primary mt-3 w-fit"><UserCheck className="w-4 h-4" /> View Preboarding</Link>
+            <Link href={`/hr/onboarding/${data.preboardingId}`} className="btn-primary mt-3 w-fit"><UserCheck className="w-4 h-4" /> View Preboarding</Link>
           ) : (
             <p className="text-xs text-slate-400 pt-2">A Preboarding record has been created for this candidate.</p>
           )}

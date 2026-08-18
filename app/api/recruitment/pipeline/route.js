@@ -5,6 +5,10 @@ import { ok, fail } from '@/lib/apiResponse'
 import { requireAuth, requireRole, requireTenantId } from '@/lib/auth'
 import { CANDIDATE_VIEW_ROLES, APPLICATION_STATUS } from '@/lib/candidateConstants'
 import { computeStageAging } from '@/lib/pipelineHelpers'
+import { PIPELINE_STAGE_CATEGORY } from '@/lib/jobConstants'
+import { INTERVIEW_STATUS } from '@/lib/interviewConstants'
+import { CANDIDATE_ASSESSMENT_STATUS } from '@/lib/assessmentConstants'
+import { COMPENSATION_VIEW_ROLES, COMPENSATION_STATUS_LABELS, computeBudgetFit } from '@/lib/compensationConstants'
 import Job from '@/models/Job'
 import JobPipelineStage from '@/models/JobPipelineStage'
 import Application from '@/models/Application'
@@ -12,6 +16,9 @@ import Candidate from '@/models/Candidate'
 import CandidateJobMatch from '@/models/CandidateJobMatch'
 import CandidateTagAssignment from '@/models/CandidateTagAssignment'
 import Employee from '@/models/Employee'
+import Interview from '@/models/Interview'
+import CandidateAssessment from '@/models/CandidateAssessment'
+import CompensationProposal from '@/models/CompensationProposal'
 
 // GET ?jobId=... — the Kanban board for one job. A specific job is
 // required (matches the spec's own "Job: [Backend Developer v]" mock —
@@ -88,6 +95,56 @@ export const GET = withApi(async (req) => {
   })
 
   const stageMap = new Map(stages.map((s) => [String(s._id), s]))
+
+  // Which applications already have a live (non-cancelled) interview booked —
+  // used to flag Interview-stage cards that were moved here but never
+  // actually got a slot scheduled (see lib/jobConstants.js STAGE_CATEGORY_UNLOCKS).
+  const bookedApplicationIds = new Set(
+    (await Interview.find({
+      tenantId, applicationId: { $in: applications.map((a) => a._id) }, deleted: false, status: { $ne: INTERVIEW_STATUS.CANCELLED },
+    }).select('applicationId').lean()).map((i) => String(i.applicationId))
+  )
+
+  // Same idea for Assessment-category cards, but richer than a boolean —
+  // the panel below the board needs to distinguish "never assigned" from
+  // "submitted, waiting on evaluation" from "done, here's the score."
+  const assessmentStageAppIds = applications
+    .filter((a) => stageMap.get(String(a.currentStage))?.category === PIPELINE_STAGE_CATEGORY.ASSESSMENT)
+    .map((a) => a._id)
+  const latestAssessmentByApplication = new Map()
+  if (assessmentStageAppIds.length) {
+    const assessmentDocs = await CandidateAssessment.find({ tenantId, applicationId: { $in: assessmentStageAppIds } })
+      .populate('assessmentId', 'name')
+      .sort({ createdAt: -1 })
+      .lean()
+    for (const doc of assessmentDocs) {
+      const key = String(doc.applicationId)
+      if (!latestAssessmentByApplication.has(key)) latestAssessmentByApplication.set(key, doc) // first = latest, already sorted desc
+    }
+  }
+
+  // Same idea for Selected-category cards — compensation is confidentiality-
+  // gated (see lib/compensationConstants.js), so unlike interviews/
+  // assessments this is only ever computed (and sent over the wire) for
+  // roles allowed to see it. A Manager viewing this same board just never
+  // receives a `compensation` field at all, rather than the UI hiding it.
+  const canSeeCompensation = COMPENSATION_VIEW_ROLES.includes(session.role)
+  const latestCompensationByApplication = new Map()
+  if (canSeeCompensation) {
+    const selectedStageAppIds = applications
+      .filter((a) => stageMap.get(String(a.currentStage))?.category === PIPELINE_STAGE_CATEGORY.SELECTED)
+      .map((a) => a._id)
+    if (selectedStageAppIds.length) {
+      const proposals = await CompensationProposal.find({ tenantId, applicationId: { $in: selectedStageAppIds }, deleted: false })
+        .sort({ version: -1 })
+        .lean()
+      for (const p of proposals) {
+        const key = String(p.applicationId)
+        if (!latestCompensationByApplication.has(key)) latestCompensationByApplication.set(key, p) // first = highest version
+      }
+    }
+  }
+
   const byStage = new Map(stages.map((s) => [String(s._id), []]))
   const unassignedCards = [] // status HIRED or a stray currentStage not in the active list
 
@@ -96,6 +153,8 @@ export const GET = withApi(async (req) => {
     const match = matchByApplication.get(String(a._id))
     const stage = stageMap.get(String(a.currentStage))
     const aging = computeStageAging(a, stage?.category)
+    const latestAssessment = stage?.category === PIPELINE_STAGE_CATEGORY.ASSESSMENT ? latestAssessmentByApplication.get(String(a._id)) : null
+    const latestCompensation = stage?.category === PIPELINE_STAGE_CATEGORY.SELECTED ? latestCompensationByApplication.get(String(a._id)) : null
 
     const card = {
       applicationId: a._id,
@@ -119,6 +178,24 @@ export const GET = withApi(async (req) => {
       assignedRecruiterName: a.assignedRecruiterId ? `${a.assignedRecruiterId.firstName} ${a.assignedRecruiterId.lastName}` : null,
       tags: tagsByCandidate.get(String(candidate._id)) || [],
       holdUntil: a.holdUntil || null,
+      needsScheduling: stage?.category === PIPELINE_STAGE_CATEGORY.INTERVIEW && !bookedApplicationIds.has(String(a._id)),
+      // Only populated for Assessment-category cards — see assessmentStageAppIds above.
+      assessment: latestAssessment ? {
+        candidateAssessmentId: latestAssessment._id,
+        assessmentName: latestAssessment.assessmentId?.name || null,
+        status: latestAssessment.status,
+        percentage: latestAssessment.percentage,
+        result: latestAssessment.result,
+        needsEvaluation: [CANDIDATE_ASSESSMENT_STATUS.SUBMITTED, CANDIDATE_ASSESSMENT_STATUS.EVALUATING].includes(latestAssessment.status),
+      } : null,
+      // Only populated for Selected-category cards, and only when canSeeCompensation.
+      compensation: latestCompensation ? {
+        proposalId: latestCompensation._id,
+        status: latestCompensation.status,
+        statusLabel: COMPENSATION_STATUS_LABELS[latestCompensation.status] || latestCompensation.status,
+        totalCtc: latestCompensation.totalCtc,
+        budgetFit: computeBudgetFit(latestCompensation.totalCtc, latestCompensation.budgetMin, latestCompensation.budgetMax),
+      } : null,
     }
 
     if (byStage.has(String(a.currentStage))) byStage.get(String(a.currentStage)).push(card)

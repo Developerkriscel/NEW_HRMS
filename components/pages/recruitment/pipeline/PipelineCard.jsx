@@ -1,11 +1,11 @@
 'use client'
 
 import Link from 'next/link'
-import { Sparkles, Clock, AlertTriangle, Eye, ArrowRightLeft, MessageSquarePlus, XCircle } from 'lucide-react'
+import { Sparkles, Clock, AlertTriangle, Eye, ArrowRightLeft, MessageSquarePlus, XCircle, CalendarClock } from 'lucide-react'
 import { formatRelativeTime, cn } from '@/lib/utils'
 import { APPLICATION_SOURCE_LABELS } from '@/lib/candidateConstants'
 
-export function PipelineCard({ card, selected, onToggleSelect, onDragStart, onDragEnd, onMoveStage, onAddNote, onReject }) {
+export function PipelineCard({ card, selected, onToggleSelect, onDragStart, onDragEnd, onMoveStage, onAddNote, onReject, onSchedule }) {
   return (
     <div
       draggable
@@ -55,6 +55,17 @@ export function PipelineCard({ card, selected, onToggleSelect, onDragStart, onDr
 
       {card.status === 'ON_HOLD' && (
         <div className="text-[10px] px-1.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400">On Hold{card.holdUntil ? ` until ${new Date(card.holdUntil).toLocaleDateString()}` : ''}</div>
+      )}
+
+      {card.needsScheduling && (
+        <button
+          onClick={() => onSchedule(card)}
+          className="w-full flex items-center gap-1.5 text-[10px] font-medium px-1.5 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+        >
+          <CalendarClock className="w-3.5 h-3.5 flex-shrink-0" />
+          <span className="flex-1 text-left">No interview booked yet</span>
+          <span className="underline">Schedule</span>
+        </button>
       )}
 
       <div className="flex items-center gap-1 pt-1 border-t border-slate-50 dark:border-slate-800/60">

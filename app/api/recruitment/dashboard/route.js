@@ -45,7 +45,7 @@ export const GET = withApi(async () => {
       { id: 'pa2', label: '3 interview feedbacks pending', count: 3, link: '/hr/recruitment/interviews?filter=feedback-pending' },
       { id: 'pa3', label: '2 offers need approval', count: 2, link: '/hr/recruitment/offers?filter=pending-approval' },
       { id: 'pa4', label: '4 offers expire soon', count: 4, link: '/hr/recruitment/offers?filter=expiring' },
-      { id: 'pa5', label: '8 onboarding documents pending', count: 8, link: '/hr/recruitment/onboarding?filter=documents-pending' },
+      { id: 'pa5', label: '8 onboarding documents pending', count: 8, link: '/hr/onboarding?filter=documents-pending' },
       { id: 'pa6', label: '3 candidates joining tomorrow', count: 3, link: '/hr/recruitment/candidates?filter=joining-tomorrow' },
     ],
 

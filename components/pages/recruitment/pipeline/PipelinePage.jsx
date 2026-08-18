@@ -9,14 +9,21 @@ import { candidateApi } from '@/services/candidateApi'
 import { PIPELINE_STAGE_CATEGORY_LABELS, canManageJobs } from '@/lib/jobConstants'
 import { REJECTION_REASON_LIST } from '@/lib/matchingConstants'
 import { APPLICATION_SOURCE_LABELS, APPLICATION_SOURCE_LIST } from '@/lib/candidateConstants'
+import { canManageCompensation } from '@/lib/compensationConstants'
 import { useAuthStore } from '@/store/authStore'
 import { ReasonDialog } from '../candidates/ScreeningActions'
 import { MoveStageDialog } from '../candidates/MoveStageDialog'
 import { AddNoteDialog } from '../candidates/AddNoteDialog'
+import { ScheduleInterviewDialog } from '../interviews/ScheduleInterviewDialog'
+import { AssignAssessmentDialog } from '../assessments/AssignAssessmentDialog'
+import { EvaluateAssessmentModal } from '../assessments/EvaluateAssessmentModal'
 import { PipelineCard } from './PipelineCard'
+import { AssessmentPanel } from './AssessmentPanel'
+import { CompensationPanel } from './CompensationPanel'
 
-function StageColumn({ stage, cards, metrics, onDropCard, selected, onToggleSelect, onMoveStage, onAddNote, onReject }) {
+function StageColumn({ stage, cards, metrics, onDropCard, selected, onToggleSelect, onMoveStage, onAddNote, onReject, onSchedule }) {
   const [dragOver, setDragOver] = useState(false)
+  const needsSchedulingCount = cards.filter((c) => c.needsScheduling).length
   return (
     <div
       className={`flex-shrink-0 w-72 rounded-2xl border ${dragOver ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-900/10' : 'border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40'} p-3 flex flex-col`}
@@ -30,6 +37,7 @@ function StageColumn({ stage, cards, metrics, onDropCard, selected, onToggleSele
       </div>
       <p className="text-[10px] text-slate-400 mb-2">
         {PIPELINE_STAGE_CATEGORY_LABELS[stage.category]} {metrics?.avgDaysInStage?.[stage._id] ? `· avg ${metrics.avgDaysInStage[stage._id]}d` : ''}
+        {needsSchedulingCount > 0 && <span className="ml-1.5 text-blue-600 dark:text-blue-400 font-medium">· {needsSchedulingCount} need{needsSchedulingCount > 1 ? '' : 's'} scheduling</span>}
       </p>
       <div className="space-y-2 overflow-y-auto max-h-[65vh] pr-0.5">
         {cards.length === 0 && <p className="text-xs text-slate-300 dark:text-slate-600 text-center py-6">No candidates</p>}
@@ -37,7 +45,7 @@ function StageColumn({ stage, cards, metrics, onDropCard, selected, onToggleSele
           <PipelineCard
             key={card.applicationId} card={card} selected={selected.has(card.applicationId)}
             onToggleSelect={onToggleSelect} onDragStart={(e, c) => e.dataTransfer.setData('applicationId', c.applicationId)}
-            onDragEnd={() => {}} onMoveStage={onMoveStage} onAddNote={onAddNote} onReject={onReject}
+            onDragEnd={() => {}} onMoveStage={onMoveStage} onAddNote={onAddNote} onReject={onReject} onSchedule={onSchedule}
           />
         ))}
       </div>
@@ -45,7 +53,7 @@ function StageColumn({ stage, cards, metrics, onDropCard, selected, onToggleSele
   )
 }
 
-function UnassignedColumn({ cards, selected, onToggleSelect, onMoveStage, onAddNote, onReject }) {
+function UnassignedColumn({ cards, selected, onToggleSelect, onMoveStage, onAddNote, onReject, onSchedule }) {
   return (
     <div className="flex-shrink-0 w-72 rounded-2xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/70 dark:bg-amber-950/20 p-3 flex flex-col">
       <div className="flex items-center justify-between mb-1">
@@ -56,7 +64,7 @@ function UnassignedColumn({ cards, selected, onToggleSelect, onMoveStage, onAddN
       <div className="space-y-2 overflow-y-auto max-h-[65vh] pr-0.5">
         {cards.map((card) => (
           <PipelineCard
-            key={card.applicationId} card={card} selected={selected.has(card.applicationId)}
+            key={card.applicationId} card={card} selected={selected.has(card.applicationId)} onSchedule={onSchedule}
             onToggleSelect={onToggleSelect} onDragStart={(e, c) => e.dataTransfer.setData('applicationId', c.applicationId)}
             onDragEnd={() => {}} onMoveStage={onMoveStage} onAddNote={onAddNote} onReject={onReject}
           />
@@ -132,6 +140,7 @@ function BulkTagDialog({ onClose, onDone }) {
 export function PipelinePage() {
   const user = useAuthStore((s) => s.user)
   const canEditStages = user ? canManageJobs({ role: user.role }) : false
+  const canSeeCompensation = user ? canManageCompensation({ role: user.role }) : false
   const [jobs, setJobs] = useState([])
   const [jobId, setJobId] = useState('')
   const [board, setBoard] = useState(null)
@@ -140,6 +149,9 @@ export function PipelinePage() {
   const [selected, setSelected] = useState(new Set())
   const [moveStageFor, setMoveStageFor] = useState(null)
   const [addNoteFor, setAddNoteFor] = useState(null)
+  const [scheduleFor, setScheduleFor] = useState(null)
+  const [assignAssessmentFor, setAssignAssessmentFor] = useState(null)
+  const [evaluateAssessmentFor, setEvaluateAssessmentFor] = useState(null)
   const [rejectFor, setRejectFor] = useState(null) // card or 'bulk'
   const [bulkDialog, setBulkDialog] = useState(null) // 'move'|'recruiter'|'tag'|'talent-pool'
   const [error, setError] = useState('')
@@ -291,17 +303,20 @@ export function PipelinePage() {
               key={stage._id} stage={stage} cards={stage.cards} metrics={board.metrics}
               selected={selected} onToggleSelect={toggleSelect}
               onDropCard={handleDrop}
-              onMoveStage={setMoveStageFor} onAddNote={setAddNoteFor} onReject={setRejectFor}
+              onMoveStage={setMoveStageFor} onAddNote={setAddNoteFor} onReject={setRejectFor} onSchedule={setScheduleFor}
             />
           ))}
           {board.unassigned?.length > 0 && (
             <UnassignedColumn
               cards={board.unassigned} selected={selected} onToggleSelect={toggleSelect}
-              onMoveStage={setMoveStageFor} onAddNote={setAddNoteFor} onReject={setRejectFor}
+              onMoveStage={setMoveStageFor} onAddNote={setAddNoteFor} onReject={setRejectFor} onSchedule={setScheduleFor}
             />
           )}
         </div>
       )}
+
+      {board && <AssessmentPanel stages={board.stages} onAssign={setAssignAssessmentFor} onEvaluate={setEvaluateAssessmentFor} />}
+      {board && canSeeCompensation && <CompensationPanel stages={board.stages} />}
 
       {moveStageFor && (
         <MoveStageDialog
@@ -312,6 +327,24 @@ export function PipelinePage() {
       )}
       {addNoteFor && (
         <AddNoteDialog row={{ applicationId: addNoteFor.applicationId, candidateName: addNoteFor.candidateName, jobTitle: board.job.jobTitle }} onClose={() => setAddNoteFor(null)} onAdded={() => { setAddNoteFor(null); load() }} />
+      )}
+      {scheduleFor && (
+        <ScheduleInterviewDialog
+          applicationId={scheduleFor.applicationId} candidateName={scheduleFor.candidateName} jobTitle={board.job.jobTitle}
+          onClose={() => setScheduleFor(null)} onScheduled={() => { setScheduleFor(null); load() }}
+        />
+      )}
+      {assignAssessmentFor && (
+        <AssignAssessmentDialog
+          applicationId={assignAssessmentFor.applicationId} candidateName={assignAssessmentFor.candidateName}
+          onClose={() => { setAssignAssessmentFor(null); load() }} onAssigned={load}
+        />
+      )}
+      {evaluateAssessmentFor && (
+        <EvaluateAssessmentModal
+          candidateAssessmentId={evaluateAssessmentFor.assessment.candidateAssessmentId}
+          onClose={() => setEvaluateAssessmentFor(null)} onEvaluated={() => { setEvaluateAssessmentFor(null); load() }}
+        />
       )}
       {rejectFor && (
         <ReasonDialog

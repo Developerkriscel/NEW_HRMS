@@ -172,7 +172,7 @@ export function JoiningReadinessPage({ id }) {
 
   return (
     <div className="animate-fade-in space-y-6 max-w-6xl">
-      <Link href={`/hr/recruitment/onboarding/${id}`} className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+      <Link href={`/hr/onboarding/${id}`} className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
         <ArrowLeft className="w-3.5 h-3.5" /> Back to Preboarding
       </Link>
 
@@ -210,7 +210,7 @@ export function JoiningReadinessPage({ id }) {
               {busy && <Loader2 className="w-4 h-4 animate-spin" />} Mark as Joined
             </button>
           )}
-          <Link href={`/hr/recruitment/onboarding/${id}/convert`} className={cn('btn-primary', !checklist.readyToCreateEmployee && 'pointer-events-none opacity-50')}>
+          <Link href={`/hr/onboarding/${id}/convert`} className={cn('btn-primary', !checklist.readyToCreateEmployee && 'pointer-events-none opacity-50')}>
             <UserPlus className="w-4 h-4" /> Create Employee
           </Link>
         </div>
