@@ -11,7 +11,7 @@ export function EmployeeTrainingWorkspace() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    trainingApi.list()
+    trainingApi.list({ myTraining: true })
       .then((res) => setSessions(res.data.data || []))
       .finally(() => setLoading(false))
   }, [])

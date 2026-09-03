@@ -17,14 +17,34 @@ import Kra from '@/models/Kra'
 // resource's own route — this endpoint is read-only.
 export const GET = withApi(async (req) => {
   const session = await requireAuth()
-  await requireRole(session, ['MANAGER'])
+  await requireRole(session, ['MANAGER', 'HR_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN'])
   const tenantId = requireTenantId(session)
   const { searchParams } = new URL(req.url)
   const typeFilter = searchParams.get('type')
   const managerId = session.userId
 
-  const reports = await Employee.find({ reportingManager: managerId, tenantId, deleted: false }).select('_id firstName lastName employeeCode')
-  const reportIds = reports.map((r) => r._id)
+  const scope = searchParams.get('scope') || 'team'
+  const isCompanyScope = scope === 'company' && ['HR_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN'].includes(session.role)
+
+  let reports;
+  let reportIds;
+
+  if (isCompanyScope) {
+    reports = await Employee.find({ tenantId, deleted: false }).select('_id firstName lastName employeeCode')
+    reportIds = reports.map((r) => r._id)
+  } else {
+    reports = await Employee.find({ reportingManager: managerId, tenantId, deleted: false }).select('_id firstName lastName employeeCode')
+    reportIds = reports.map((r) => r._id)
+
+    if (['COMPANY_ADMIN', 'SUPER_ADMIN'].includes(session.role)) {
+      const self = await Employee.findById(managerId).select('_id firstName lastName employeeCode')
+      if (self && !self.reportingManager) {
+        reportIds.push(self._id)
+        reports.push(self)
+      }
+    }
+  }
+
   const byId = new Map(reports.map((r) => [String(r._id), r]))
   const employeeSummary = (id) => {
     const e = byId.get(String(id))
@@ -33,7 +53,13 @@ export const GET = withApi(async (req) => {
 
   const items = []
 
-  const leaves = await LeaveRequest.find({ approvedBy: managerId, status: 'PENDING', tenantId }).populate('leaveType', 'name')
+  const leavesQuery = { status: 'PENDING', tenantId }
+  if (isCompanyScope) {
+    leavesQuery.employee = { $in: reportIds }
+  } else {
+    leavesQuery.approvedBy = managerId
+  }
+  const leaves = await LeaveRequest.find(leavesQuery).populate('leaveType', 'name')
   for (const l of leaves) {
     items.push({
       id: l._id, type: 'LEAVE', employee: employeeSummary(l.employee), status: l.status, createdAt: l.createdAt,

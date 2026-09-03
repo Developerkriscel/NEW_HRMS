@@ -21,6 +21,10 @@ const LeaveRequestSchema = new mongoose.Schema(
 )
 
 LeaveRequestSchema.index({ employee: 1 })
+LeaveRequestSchema.index({ employee: 1, createdAt: -1 })
+LeaveRequestSchema.index({ employee: 1, status: 1, createdAt: -1 })
 LeaveRequestSchema.index({ tenantId: 1, status: 1 })
+LeaveRequestSchema.index({ tenantId: 1, status: 1, createdAt: -1 })
+LeaveRequestSchema.index({ tenantId: 1, startDate: 1, endDate: 1 })
 
 export default model('LeaveRequest', LeaveRequestSchema)

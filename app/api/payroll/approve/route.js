@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { withApi } from '@/lib/handler'
-import { ok } from '@/lib/apiResponse'
+import { ok, fail } from '@/lib/apiResponse'
 import { requireAuth, requireRole, requireTenantId } from '@/lib/auth'
 import { logAction } from '@/lib/audit'
 import Payslip from '@/models/Payslip'
@@ -15,9 +15,13 @@ export const POST = withApi(async (req) => {
   const month = Number(searchParams.get('month') || body.month)
   const year = Number(searchParams.get('year') || body.year)
 
+  if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year) || year < 2000) {
+    return fail('Valid month and year are required', 400)
+  }
+
   const result = await Payslip.updateMany(
-    { tenantId, month, year, status: 'DRAFT' },
-    { status: 'APPROVED', updatedBy: session.sub }
+    { tenantId, month, year, status: 'REVIEW' },
+    { $set: { status: 'APPROVED', updatedBy: session.sub } }
   )
 
   await logAction(session, {

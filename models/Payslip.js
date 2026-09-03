@@ -31,7 +31,7 @@ const PayslipSchema = new mongoose.Schema(
     advanceDeduction: { type: Number, default: 0 },
     totalDeductions: { type: Number, default: 0 },
     netSalary: { type: Number, default: 0 },
-    status: { type: String, enum: ['DRAFT', 'PROCESSED', 'APPROVED', 'PAID'], default: 'DRAFT' },
+    status: { type: String, enum: ['DRAFT', 'PROCESSING', 'REVIEW', 'APPROVED', 'FINALIZED', 'PAID', 'CANCELLED'], default: 'DRAFT' },
     payslipPdfUrl: { type: String },
     paymentDate: { type: Date },
     bankTransactionRef: { type: String },
@@ -40,7 +40,7 @@ const PayslipSchema = new mongoose.Schema(
   { timestamps: true }
 )
 
-PayslipSchema.index({ employee: 1, month: 1, year: 1 }, { unique: true })
+PayslipSchema.index({ tenantId: 1, employee: 1, month: 1, year: 1 }, { unique: true })
 PayslipSchema.index({ tenantId: 1, month: 1, year: 1 })
 
 export default model('Payslip', PayslipSchema)

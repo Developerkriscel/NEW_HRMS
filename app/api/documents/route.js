@@ -14,7 +14,7 @@ export const GET = withApi(async (req) => {
   const status = searchParams.get('status')
 
   const query = { tenantId, deleted: false }
-  if (session.role === 'EMPLOYEE') query.employee = session.userId
+  if (session.role === 'EMPLOYEE' || session.role === 'MANAGER') query.employee = session.userId
   else await requireRole(session, ['HR_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN'])
   if (status) query.status = status
 
@@ -34,7 +34,7 @@ export const POST = withApi(async (req) => {
   if (!body.title) return fail('title is required', 400)
 
   let employeeId = session.userId
-  if (session.role !== 'EMPLOYEE') {
+  if (session.role !== 'EMPLOYEE' && session.role !== 'MANAGER') {
     await requireRole(session, ['HR_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN'])
     if (!body.employeeId) return fail('employeeId is required', 400)
     const employee = await Employee.findOne({ _id: body.employeeId, tenantId, deleted: false })

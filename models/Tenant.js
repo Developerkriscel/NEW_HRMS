@@ -83,6 +83,9 @@ const TenantSchema = new mongoose.Schema(
 )
 
 TenantSchema.index({ status: 1 })
+TenantSchema.index({ deleted: 1, status: 1 })
+TenantSchema.index({ deleted: 1, createdAt: -1 })
+TenantSchema.index({ adminEmail: 1, deleted: 1 })
 TenantSchema.index({ provisioningStatus: 1 })
 
 export default model('Tenant', TenantSchema)

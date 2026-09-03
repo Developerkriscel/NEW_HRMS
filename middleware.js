@@ -49,12 +49,22 @@ function apiAuthError(message, status, errorCode) {
   )
 }
 
+const verifiedSessionCache = new Map()
+
 async function readSession(req) {
   const token = req.cookies.get('nexahr_token')?.value
   if (!token) return null
+  const cached = verifiedSessionCache.get(token)
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.payload
+  }
   try {
     const { payload } = await jwtVerify(token, JWT_SECRET)
     if (payload.type !== 'access') return null
+    verifiedSessionCache.set(token, {
+      payload,
+      expiresAt: Date.now() + 60000,
+    })
     return payload
   } catch {
     return null
@@ -63,11 +73,21 @@ async function readSession(req) {
 
 export async function middleware(req) {
   const { pathname } = req.nextUrl
-  const session = await readSession(req)
+  let session
+  let sessionRead = false
+
+  async function getSession() {
+    if (!sessionRead) {
+      session = await readSession(req)
+      sessionRead = true
+    }
+    return session
+  }
 
   if (pathname.startsWith('/api')) {
     const moduleKey = moduleForApiPath(pathname)
     if (moduleKey) {
+      const session = await getSession()
       if (!session) {
         return apiAuthError('Authentication required', 401, 'UNAUTHENTICATED')
       }
@@ -80,11 +100,13 @@ export async function middleware(req) {
   const isAuthPage = pathname === '/login' || pathname === '/forgot-password'
 
   if (pathname === '/') {
+    const session = await getSession()
     const dest = session ? ROLE_DASHBOARDS[session.role] || '/login' : '/login'
     return NextResponse.redirect(new URL(dest, req.url))
   }
 
   if (isAuthPage) {
+    const session = await getSession()
     if (session) {
       return NextResponse.redirect(new URL(ROLE_DASHBOARDS[session.role] || '/login', req.url))
     }
@@ -93,6 +115,7 @@ export async function middleware(req) {
 
   const guard = ROLE_GUARDS.find((g) => pathname.startsWith(g.prefix))
   if (guard) {
+    const session = await getSession()
     if (!session) {
       return NextResponse.redirect(new URL('/login', req.url))
     }

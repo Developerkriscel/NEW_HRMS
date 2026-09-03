@@ -7,8 +7,10 @@ import { logAction } from '@/lib/audit'
 import { CANDIDATE_VIEW_ROLES, canManageCandidates, APPLICATION_STATUS } from '@/lib/candidateConstants'
 import { STAGE_HISTORY_ACTION } from '@/lib/pipelineConstants'
 import { getActorName } from '@/lib/candidateHelpers'
+import { syncPipelineStages } from '@/lib/jobHelpers'
 import { applyStageMove, recordStageHistory } from '@/lib/pipelineHelpers'
 import Application from '@/models/Application'
+import Job from '@/models/Job'
 import JobPipelineStage from '@/models/JobPipelineStage'
 
 // POST { stageId, comment? } — the Kanban drag/drop *and* the Move Stage
@@ -30,7 +32,15 @@ export const POST = withApi(async (req, { params }) => {
     return fail(`Cannot move a ${application.status.toLowerCase()} application`, 400, 'INVALID_STATE')
   }
 
-  const stage = await JobPipelineStage.findOne({ _id: body.stageId, tenantId, jobId: application.jobId, isActive: true })
+  let stage = await JobPipelineStage.findOne({ _id: body.stageId, tenantId, jobId: application.jobId, isActive: true })
+  if (!stage) {
+    const existingStageCount = await JobPipelineStage.countDocuments({ tenantId, jobId: application.jobId, isActive: true })
+    if (existingStageCount === 0) {
+      const job = await Job.findOne({ _id: application.jobId, tenantId }).select('pipelineTemplate').lean()
+      await syncPipelineStages(tenantId, application.jobId, null, job?.pipelineTemplate || 'DEFAULT_HIRING')
+      stage = await JobPipelineStage.findOne({ _id: body.stageId, tenantId, jobId: application.jobId, isActive: true })
+    }
+  }
   if (!stage) return fail('That stage does not belong to this job', 400, 'VALIDATION_ERROR')
 
   const actorName = await getActorName(session)

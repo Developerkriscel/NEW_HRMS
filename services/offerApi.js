@@ -14,6 +14,8 @@ export const offerApi = {
   generatePdf: (offerId) => api.post(`/recruitment/offers/${offerId}/generate-pdf`),
 
   send: (offerId) => api.post(`/recruitment/offers/${offerId}/send`),
+  accept: (offerId, data) => api.post(`/recruitment/offers/${offerId}/accept`, data),
+  decline: (offerId, data) => api.post(`/recruitment/offers/${offerId}/decline`, data),
   extendExpiry: (offerId, expiresAt) => api.post(`/recruitment/offers/${offerId}/extend-expiry`, { expiresAt }),
   withdraw: (offerId, reason) => api.post(`/recruitment/offers/${offerId}/withdraw`, { reason }),
 

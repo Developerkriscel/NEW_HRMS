@@ -104,9 +104,7 @@ export const POST = withApi(async (req) => {
   for (const field of required) {
     if (!body[field]) return fail(`${field} is required`, 400, 'VALIDATION_ERROR')
   }
-  if (!Array.isArray(body.interviewers) || body.interviewers.length === 0) {
-    return fail('At least one interviewer is required', 400, 'VALIDATION_ERROR')
-  }
+  const requestedInterviewers = Array.isArray(body.interviewers) ? body.interviewers : []
 
   const application = await Application.findOne({ _id: body.applicationId, tenantId, deleted: false })
   if (!application) return fail('Application not found', 404, 'NOT_FOUND')
@@ -114,8 +112,8 @@ export const POST = withApi(async (req) => {
     return fail(`Cannot schedule an interview for a ${application.status.toLowerCase()} application`, 400, 'INVALID_STATE')
   }
 
-  const employeeIds = body.interviewers.map((i) => i.employeeId)
-  const availability = await checkAvailability(tenantId, employeeIds, body.date, body.startTime, body.endTime)
+  const employeeIds = requestedInterviewers.map((i) => i.employeeId).filter(Boolean)
+  const availability = employeeIds.length ? await checkAvailability(tenantId, employeeIds, body.date, body.startTime, body.endTime) : {}
   const conflictCount = Object.values(availability).filter((a) => !a.available).length
 
   const actorName = await getActorName(session)
@@ -132,13 +130,15 @@ export const POST = withApi(async (req) => {
     scheduledBy: session.userId, scheduledByName: actorName, scheduledAt: new Date(),
   })
 
-  const employees = await Employee.find({ _id: { $in: employeeIds }, tenantId }).select('firstName lastName')
-  const employeeById = new Map(employees.map((e) => [String(e._id), e]))
-  await InterviewPanelMember.insertMany(body.interviewers.map((p) => ({
-    tenantId, interviewId: interview._id, employeeId: p.employeeId,
-    employeeName: employeeById.get(String(p.employeeId)) ? `${employeeById.get(String(p.employeeId)).firstName} ${employeeById.get(String(p.employeeId)).lastName}` : null,
-    role: p.role === PANEL_ROLE.PRIMARY ? PANEL_ROLE.PRIMARY : PANEL_ROLE.PANELIST,
-  })))
+  if (employeeIds.length) {
+    const employees = await Employee.find({ _id: { $in: employeeIds }, tenantId }).select('firstName lastName')
+    const employeeById = new Map(employees.map((e) => [String(e._id), e]))
+    await InterviewPanelMember.insertMany(requestedInterviewers.map((p) => ({
+      tenantId, interviewId: interview._id, employeeId: p.employeeId,
+      employeeName: employeeById.get(String(p.employeeId)) ? `${employeeById.get(String(p.employeeId)).firstName} ${employeeById.get(String(p.employeeId)).lastName}` : null,
+      role: p.role === PANEL_ROLE.PRIMARY ? PANEL_ROLE.PRIMARY : PANEL_ROLE.PANELIST,
+    })))
+  }
 
   await InterviewScheduleHistory.create({
     tenantId, interviewId: interview._id, action: SCHEDULE_HISTORY_ACTION.SCHEDULED,

@@ -17,6 +17,7 @@ import Designation from '@/models/Designation'
 import Department from '@/models/Department'
 import Branch from '@/models/Branch'
 import Employee from '@/models/Employee'
+import Shift from '@/models/Shift'
 
 // GET — everything the Candidate Preboarding Profile's 6 tabs need in one
 // call. Bank/statutory details are only included when the requesting
@@ -49,11 +50,12 @@ export const GET = withApi(async (req, { params }) => {
     ])
   }
 
-  const [designation, department, branch, manager] = await Promise.all([
+  const [designation, department, branch, manager, shift] = await Promise.all([
     version?.designationId ? Designation.findById(version.designationId).select('name').lean() : null,
     version?.departmentId ? Department.findById(version.departmentId).select('name').lean() : null,
-    version?.locationId ? Branch.findById(version.locationId).select('name').lean() : null,
+    version?.locationId ? Branch.findById(version.locationId).select('name address city state country phone').lean() : null,
     version?.managerId ? Employee.findById(version.managerId).select('firstName lastName').lean() : null,
+    version?.shiftId ? Shift.findById(version.shiftId).select('name startTime endTime gracePeriodMinutes workingDays weeklyOff active').lean() : null,
   ])
 
   return ok({
@@ -64,6 +66,7 @@ export const GET = withApi(async (req, { params }) => {
       version: version.version, ctc: version.ctc, employmentType: version.employmentType, workMode: version.workMode,
       designation: designation?.name, department: department?.name, location: branch?.name,
       reportingManager: manager ? `${manager.firstName} ${manager.lastName}` : null,
+      shift,
     } : null,
   })
 })

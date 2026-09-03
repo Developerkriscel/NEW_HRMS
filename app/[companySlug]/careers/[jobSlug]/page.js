@@ -12,7 +12,7 @@ const EMPLOYMENT_TYPE_LABELS = { FULL_TIME: 'Full Time', PART_TIME: 'Part Time',
 
 export async function generateMetadata({ params }) {
   await connectDB()
-  ensureTenantModelSchemasLoaded()
+  await ensureTenantModelSchemasLoaded()
   const job = await getPublicJobBySlug(params.companySlug, params.jobSlug)
   if (!job) return { title: 'Job not found — Careers' }
   return { title: `${job.title} at ${job.companyName} — Careers`, description: job.description?.slice(0, 160) }
@@ -30,7 +30,7 @@ function TextSection({ title, text }) {
 
 export default async function PublicJobPage({ params, searchParams }) {
   await connectDB()
-  ensureTenantModelSchemasLoaded()
+  await ensureTenantModelSchemasLoaded()
   const job = await getPublicJobBySlug(params.companySlug, params.jobSlug)
   if (!job) notFound()
 

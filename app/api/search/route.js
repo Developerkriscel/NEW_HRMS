@@ -16,7 +16,6 @@ import Asset from '@/models/Asset'
 import AssetRequest from '@/models/AssetRequest'
 import Expense from '@/models/Expense'
 import TeamRequest from '@/models/TeamRequest'
-import Task from '@/models/Task'
 import Kra from '@/models/Kra'
 import Resignation from '@/models/Resignation'
 import TrainingSession from '@/models/TrainingSession'
@@ -245,11 +244,6 @@ async function employeeSelfServiceResults(session, tenantId, query) {
       tenantId,
       $or: [{ type: rx }, { reason: rx }, { status: rx }],
     }).select('type reason status').limit(3).lean(),
-    Task.find({
-      assignedTo: session.userId,
-      tenantId,
-      $or: [{ title: rx }, { description: rx }, { priority: rx }, { status: rx }],
-    }).select('title priority status').limit(3).lean(),
     Kra.find({
       employee: session.userId,
       tenantId,
@@ -298,12 +292,6 @@ async function employeeSelfServiceResults(session, tenantId, query) {
       description: `${request.reason || 'Request'} - ${request.status}`,
       path: '/employee/requests',
       type: 'Request',
-    })),
-    ...tasks.map((task) => ({
-      title: task.title,
-      description: `${task.priority} - ${task.status}`,
-      path: '/employee/tasks',
-      type: 'Task',
     })),
     ...kras.map((kra) => ({
       title: kra.title,

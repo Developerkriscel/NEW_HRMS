@@ -13,7 +13,6 @@ import Tenant from '@/models/Tenant'
 export const GET = withApi(async (req) => {
   const session = await requireAuth()
   await requireRole(session, ['COMPANY_ADMIN', 'HR_MANAGER', 'MANAGER', 'SUPER_ADMIN'])
-  const tenantId = requireTenantId(session)
 
   const { searchParams } = new URL(req.url)
   const page = Number(searchParams.get('page') || 0)
@@ -25,6 +24,11 @@ export const GET = withApi(async (req) => {
   const status = searchParams.get('status')
   const joinedAfter = searchParams.get('joinedAfter')
 
+  if (session.role === 'SUPER_ADMIN' && !session.tenantId) {
+    return ok(paged([], page, size, 0))
+  }
+
+  const tenantId = requireTenantId(session)
   const query = { tenantId, deleted: false }
   // A Manager only ever sees their own direct reports — never the whole company.
   if (session.role === 'MANAGER') query.reportingManager = session.userId

@@ -8,7 +8,18 @@ import LeaveType from '@/models/LeaveType'
 export const GET = withApi(async () => {
   const session = await requireAuth()
   const tenantId = requireTenantId(session)
-  const types = await LeaveType.find({ tenantId, active: true, deleted: false }).sort({ name: 1 })
+  let types = await LeaveType.find({ tenantId, active: true, deleted: false }).sort({ name: 1 })
+
+  if (types.length === 0) {
+    const defaultTypes = [
+      { name: 'Sick Leave', code: 'SL', defaultDays: 12, paidLeave: true, tenantId, createdBy: session.sub },
+      { name: 'Casual Leave', code: 'CL', defaultDays: 12, paidLeave: true, tenantId, createdBy: session.sub },
+      { name: 'Earned Leave', code: 'EL', defaultDays: 15, paidLeave: true, tenantId, createdBy: session.sub }
+    ]
+    await LeaveType.insertMany(defaultTypes)
+    types = await LeaveType.find({ tenantId, active: true, deleted: false }).sort({ name: 1 })
+  }
+
   return ok(types)
 })
 

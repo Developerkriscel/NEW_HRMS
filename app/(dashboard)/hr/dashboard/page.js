@@ -1,74 +1,47 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Users, Clock, CalendarOff, Banknote } from 'lucide-react'
-import { StatsCard } from '@/components/cards/StatsCard'
-import { PageLoader } from '@/components/common/LoadingSpinner'
-import { Badge } from '@/components/common/Badge'
-import { employeeApi } from '@/services/employeeApi'
-import { attendanceApi } from '@/services/attendanceApi'
-import { leaveApi } from '@/services/leaveApi'
+import { useState } from 'react'
+import { LayoutDashboard, Building2 } from 'lucide-react'
+import { HRDashboardWorkspace } from '@/components/pages/HRDashboardWorkspace'
+import { EmployeeDashboardWorkspace } from '@/components/pages/EmployeeDashboardWorkspace'
 
 export default function HRDashboardPage() {
-  const [stats, setStats] = useState(null)
-  const [pendingLeaves, setPendingLeaves] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('mine')
 
-  useEffect(() => {
-    const now = new Date()
-    Promise.all([
-      employeeApi.getAll({ size: 1 }),
-      attendanceApi.getAll(),
-      leaveApi.getPendingApprovals({ size: 5 }),
-    ])
-      .then(([empRes, attRes, leaveRes]) => {
-        setStats({
-          totalEmployees: empRes.data.data.totalElements,
-          present: attRes.data.data.summary.present,
-          absent: attRes.data.data.summary.absent,
-          late: attRes.data.data.summary.late,
-        })
-        setPendingLeaves(leaveRes.data.data.content)
-      })
-      .finally(() => setLoading(false))
-  }, [])
-
-  if (loading) return <PageLoader />
+  const Tabs = (
+    <div className="flex bg-slate-100/50 dark:bg-slate-800/50 p-1 rounded-xl w-fit border border-slate-200/50 dark:border-slate-700/50 backdrop-blur-xl">
+      <button
+        onClick={() => setActiveTab('mine')}
+        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-bold text-xs transition-all duration-300 ${
+          activeTab === 'mine'
+            ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-slate-200 dark:ring-slate-700'
+            : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800'
+        }`}
+      >
+        <LayoutDashboard className="w-3.5 h-3.5" />
+        My Dashboard
+      </button>
+      <button
+        onClick={() => setActiveTab('company')}
+        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-bold text-xs transition-all duration-300 ${
+          activeTab === 'company'
+            ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-slate-200 dark:ring-slate-700'
+            : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800'
+        }`}
+      >
+        <Building2 className="w-3.5 h-3.5" />
+        Company Dashboard
+      </button>
+    </div>
+  )
 
   return (
-    <div className="animate-fade-in space-y-4">
-      <div className="page-header !mb-4">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white">HR Dashboard</h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Today's workforce snapshot</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard title="Total Employees" value={stats?.totalEmployees ?? 0} icon={Users} />
-        <StatsCard title="Present Today" value={stats?.present ?? 0} icon={Clock} />
-        <StatsCard title="Absent Today" value={stats?.absent ?? 0} icon={CalendarOff} />
-        <StatsCard title="Late Today" value={stats?.late ?? 0} icon={Clock} />
-      </div>
-
-      <div className="stat-card">
-        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-3">Pending Leave Approvals</h3>
-        {pendingLeaves.length === 0 ? (
-          <p className="text-sm text-slate-400">No pending leave requests</p>
-        ) : (
-          <div className="space-y-3">
-            {pendingLeaves.map((l) => (
-              <div key={l._id} className="flex items-center justify-between text-sm">
-                <div>
-                  <p className="font-medium text-slate-800 dark:text-slate-100">{l.employee?.firstName} {l.employee?.lastName}</p>
-                  <p className="text-xs text-slate-400">{l.leaveType?.name} · {l.numberOfDays} day(s)</p>
-                </div>
-                <Badge>{l.status}</Badge>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+    <div className="animate-fade-in">
+      {activeTab === 'mine' ? (
+        <EmployeeDashboardWorkspace headerAction={Tabs} />
+      ) : (
+        <HRDashboardWorkspace headerAction={Tabs} />
+      )}
     </div>
   )
 }

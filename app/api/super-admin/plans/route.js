@@ -8,11 +8,22 @@ import { logSuperAdmin } from '@/lib/audit'
 import Plan from '@/models/Plan'
 import { devSuperAdminStore } from '@/lib/devSuperAdminStore'
 
+let cachedPlans = null
+let plansCachedAt = 0
+const PLANS_CACHE_TTL = 60000 // 60s cache
+
 export const GET = withApi(async () => {
   const session = await requireAuth()
   requirePlatformPermission(session, 'plan.view')
   if (session.devLogin && process.env.NODE_ENV !== 'production') return ok(devSuperAdminStore.listPlans())
-  const plans = await Plan.find({ deleted: false }).sort({ sortOrder: 1 })
+  
+  if (cachedPlans && Date.now() - plansCachedAt < PLANS_CACHE_TTL) {
+    return ok(cachedPlans)
+  }
+
+  const plans = await Plan.find({ deleted: false }).sort({ sortOrder: 1 }).lean()
+  cachedPlans = plans
+  plansCachedAt = Date.now()
   return ok(plans)
 })
 
@@ -54,5 +65,6 @@ export const POST = withApi(async (req) => {
     req,
   })
 
+  cachedPlans = null
   return ok(plan, 'Plan created', 201)
 })

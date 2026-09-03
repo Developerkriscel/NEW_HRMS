@@ -2,12 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Bell, Moon, Sun, Menu, Search, LogOut, Settings, User, ChevronDown } from 'lucide-react'
+import { Bell, Moon, Sun, Menu, Search, LogOut, Settings, User, ChevronDown, HelpCircle } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
 import { Avatar } from '@/components/common/Avatar'
-import { searchApi } from '@/services/searchApi'
-import { formatRelativeTime, ROLE_PANEL_LABELS } from '@/lib/utils'
+import { ROLE_PANEL_LABELS } from '@/lib/roleDashboards'
 import { MODULE_ACCESS, filterByModuleAccess } from '@/lib/moduleAccess'
 
 const MOCK_NOTIFICATIONS = [
@@ -19,6 +18,9 @@ const MOCK_NOTIFICATIONS = [
 const PROFILE_PATH_BY_ROLE = {
   SUPER_ADMIN: '/super-admin/settings',
   COMPANY_ADMIN: '/company/settings',
+  HR_MANAGER: '/hr/profile',
+  FINANCE: '/hr/profile',
+  IT_ADMIN: '/hr/profile',
   EMPLOYEE: '/employee/profile',
 }
 
@@ -35,7 +37,19 @@ const SEARCH_NAV_BY_ROLE = {
   COMPANY_ADMIN: [
     { title: 'Dashboard', description: 'Company overview', path: '/company/dashboard', type: 'Page' },
     { title: 'Employees', description: 'Employee directory', path: '/company/employees', type: 'Page', moduleKey: MODULE_ACCESS.EMPLOYEES },
-    { title: 'Departments', description: 'Company departments', path: '/company/departments', type: 'Page', moduleKey: MODULE_ACCESS.DEPARTMENTS },
+    { title: 'Shifts', description: 'Company shifts', path: '/company/shifts', type: 'Page', moduleKey: MODULE_ACCESS.SHIFTS },
+    { title: 'Attendance', description: 'Attendance records', path: '/hr/attendance', type: 'Page', moduleKey: MODULE_ACCESS.ATTENDANCE },
+    { title: 'Leave', description: 'Leave requests and approvals', path: '/hr/leave', type: 'Page', moduleKey: MODULE_ACCESS.LEAVE },
+    { title: 'Payroll', description: 'Payroll runs', path: '/hr/payroll', type: 'Page', moduleKey: MODULE_ACCESS.PAYROLL },
+    { title: 'Recruitment', description: 'Hiring pipeline and candidates', path: '/hr/recruitment', type: 'Page', moduleKey: MODULE_ACCESS.RECRUITMENT },
+    { title: 'Onboarding', description: 'Employee onboarding', path: '/hr/onboarding', type: 'Page', moduleKey: MODULE_ACCESS.ONBOARDING },
+    { title: 'Offboarding', description: 'Employee exits and resignations', path: '/hr/offboarding', type: 'Page', moduleKey: MODULE_ACCESS.OFFBOARDING },
+    { title: 'Assets', description: 'Asset requests and allocations', path: '/hr/assets', type: 'Page', moduleKey: MODULE_ACCESS.ASSETS },
+    { title: 'Documents', description: 'Employee document records', path: '/hr/documents', type: 'Page', moduleKey: MODULE_ACCESS.DOCUMENTS },
+    { title: 'Helpdesk', description: 'Employee support tickets', path: '/hr/helpdesk', type: 'Page', moduleKey: MODULE_ACCESS.HELPDESK },
+    { title: 'Training', description: 'Learning sessions and assignments', path: '/hr/training', type: 'Page', moduleKey: MODULE_ACCESS.TRAINING },
+    { title: 'Reports', description: 'Company reports', path: '/company/reports', type: 'Page', moduleKey: MODULE_ACCESS.REPORTS },
+    { title: 'Audit Logs', description: 'Company activity logs', path: '/company/audit-logs', type: 'Page', moduleKey: MODULE_ACCESS.AUDIT_LOGS },
     { title: 'Settings', description: 'Company settings', path: '/company/settings', type: 'Page', moduleKey: MODULE_ACCESS.SETTINGS },
   ],
   HR_MANAGER: [
@@ -46,14 +60,17 @@ const SEARCH_NAV_BY_ROLE = {
     { title: 'Payroll', description: 'Payroll runs', path: '/hr/payroll', type: 'Page', moduleKey: MODULE_ACCESS.PAYROLL },
     { title: 'Recruitment', description: 'Hiring pipeline and candidates', path: '/hr/recruitment', type: 'Page', moduleKey: MODULE_ACCESS.RECRUITMENT },
     { title: 'Onboarding', description: 'Employee onboarding', path: '/hr/onboarding', type: 'Page', moduleKey: MODULE_ACCESS.ONBOARDING },
+    { title: 'Profile', description: 'My profile', path: '/hr/profile', type: 'Page' },
   ],
   FINANCE: [
     { title: 'Payroll', description: 'Payroll runs', path: '/hr/payroll', type: 'Page', moduleKey: MODULE_ACCESS.PAYROLL },
     { title: 'Reports', description: 'Payroll reports', path: '/hr/reports', type: 'Page', moduleKey: MODULE_ACCESS.REPORTS },
+    { title: 'Profile', description: 'My profile', path: '/hr/profile', type: 'Page' },
   ],
   IT_ADMIN: [
     { title: 'Helpdesk', description: 'Employee tickets', path: '/hr/helpdesk', type: 'Page', moduleKey: MODULE_ACCESS.HELPDESK },
     { title: 'Assets', description: 'Asset tracking', path: '/hr/assets', type: 'Page', moduleKey: MODULE_ACCESS.ASSETS },
+    { title: 'Profile', description: 'My profile', path: '/hr/profile', type: 'Page' },
   ],
   MANAGER: [
     { title: 'Dashboard', description: 'Manager overview', path: '/manager/dashboard', type: 'Page' },
@@ -61,7 +78,7 @@ const SEARCH_NAV_BY_ROLE = {
     { title: 'Approvals', description: 'Pending team approvals', path: '/manager/leave-approvals', type: 'Page' },
     { title: 'Attendance', description: 'Team attendance', path: '/manager/attendance', type: 'Page' },
     { title: 'Tasks', description: 'Assign and track team work', path: '/manager/tasks', type: 'Page' },
-    { title: 'Performance', description: 'KRAs and reviews', path: '/manager/performance', type: 'Page' },
+
     { title: 'Reports', description: 'Team reports', path: '/manager/reports', type: 'Page' },
   ],
   EMPLOYEE: [
@@ -69,10 +86,10 @@ const SEARCH_NAV_BY_ROLE = {
     { title: 'Attendance', description: 'My attendance', path: '/employee/attendance', type: 'Page' },
     { title: 'Leave', description: 'My leave requests', path: '/employee/leave', type: 'Page' },
     { title: 'Tasks', description: 'Assigned tasks', path: '/employee/tasks', type: 'Page' },
-    { title: 'Performance', description: 'KRAs and reviews', path: '/employee/performance', type: 'Page' },
+
     { title: 'Payslips', description: 'Salary slips', path: '/employee/payslips', type: 'Page' },
     { title: 'Expenses', description: 'Expense claims', path: '/employee/expenses', type: 'Page' },
-    { title: 'Requests', description: 'Shift, overtime and WFH requests', path: '/employee/requests', type: 'Page' },
+
     { title: 'Documents', description: 'My documents', path: '/employee/documents', type: 'Page' },
     { title: 'Assets', description: 'My assigned assets', path: '/employee/assets', type: 'Page' },
     { title: 'Helpdesk', description: 'Support tickets', path: '/employee/helpdesk', type: 'Page' },
@@ -83,6 +100,19 @@ const SEARCH_NAV_BY_ROLE = {
 }
 
 const searchableText = (item) => `${item.title} ${item.description || ''} ${item.type || ''}`.toLowerCase()
+
+function formatRelativeTime(date) {
+  const value = date instanceof Date ? date.getTime() : new Date(date).getTime()
+  if (!Number.isFinite(value)) return '-'
+  const seconds = Math.max(0, Math.floor((Date.now() - value) / 1000))
+  if (seconds < 60) return 'just now'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
 
 export function Navbar({ onMobileMenuToggle }) {
   const router = useRouter()
@@ -156,6 +186,7 @@ export function Navbar({ onMobileMenuToggle }) {
     const timer = setTimeout(async () => {
       setSearchLoading(true)
       try {
+        const { searchApi } = await import('@/services/searchApi')
         const res = await searchApi.global(query, { signal: controller.signal })
         if (!cancelled) setRemoteResults(res.data.data || [])
       } catch (err) {
@@ -186,21 +217,14 @@ export function Navbar({ onMobileMenuToggle }) {
   }
 
   return (
-    <header className="sticky top-0 z-30 px-4 py-3 lg:px-6 pointer-events-none">
-      <div className="fixed left-4 top-4 z-40 hidden items-center gap-2.5 pointer-events-auto lg:flex">
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-700 to-blue-500 flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-500/20">
-          <span className="text-white font-bold text-sm">N</span>
-        </div>
-        <span className="font-bold text-slate-900 dark:text-white text-sm tracking-tight">
-          NexaHR
-        </span>
-      </div>
+    <header className="sticky top-0 z-30 px-4 pt-3 pb-1 lg:px-6 bg-slate-50/90 dark:bg-slate-950/90 backdrop-blur-md pointer-events-none">
+      {/* Fixed Desktop Logo Removed to prevent overlap with greeting */}
 
       <div className="max-w-[1400px] mx-auto pointer-events-auto">
         {/* Transparent toolbar with mobile brand/menu on the left and actions on the right. */}
         <div className="flex min-h-10 items-center justify-between gap-3">
 
-          {/* Left: mobile menu trigger + brand */}
+          {/* Left: Greeting (Desktop) & Mobile Brand */}
           <div className="flex items-center gap-2">
             <button
               onClick={onMobileMenuToggle}
@@ -208,48 +232,34 @@ export function Navbar({ onMobileMenuToggle }) {
             >
               <Menu className="w-5 h-5 text-slate-600 dark:text-slate-400" />
             </button>
-
+            <div className="hidden lg:flex items-center gap-2">
+              <span className="font-black text-slate-900 dark:text-white text-xl tracking-tight">
+                NexaHR
+              </span>
+            </div>
             <div className="flex items-center gap-2.5 px-1 py-1 lg:hidden">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-700 to-blue-500 flex items-center justify-center flex-shrink-0">
-                <span className="text-white font-bold text-xs">N</span>
-              </div>
               <span className="font-bold text-slate-900 dark:text-white text-sm tracking-tight hidden sm:inline">
                 NexaHR
               </span>
             </div>
           </div>
 
-          {/* Right: panel name + search + notifications + profile */}
-          <div className="flex items-center gap-3 rounded-2xl bg-white px-4 py-2.5 shadow-sm dark:bg-slate-900">
-            <span className="hidden sm:inline-block px-3 py-1 rounded-lg bg-white/70 dark:bg-slate-900/70 border border-slate-200/70 dark:border-slate-800 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 shadow-sm">
-              {panelLabel}
-            </span>
-
-            <div className="relative" ref={searchBoxRef}>
-            <button
-              onClick={() => { setShowSearch(!showSearch); setShowNotifications(false); setShowProfile(false) }}
-              className="px-4 py-1.5 rounded-xl text-sm font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-2"
-            >
-              <Search className="w-4 h-4" />
-              <span className="hidden md:inline">Search</span>
-            </button>
-
-            {showSearch && (
-                <div className="absolute right-0 mt-3 w-[420px] overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900 z-50 animate-fade-in">
-                  <form onSubmit={handleSearchSubmit} className="border-b border-slate-100 dark:border-slate-800 p-3">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input
-                        ref={searchRef}
-                        type="search"
-                        value={search}
-                        onChange={(event) => { setSearch(event.target.value); setShowSearch(true) }}
-                        placeholder="Search anything..."
-                        className="w-full rounded-xl bg-slate-100 dark:bg-slate-800 py-2 pl-9 pr-16 text-sm text-slate-700 dark:text-slate-200 outline-none placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500/30"
-                      />
-                      <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded bg-slate-200 px-1.5 py-0.5 text-xs text-slate-500 dark:bg-slate-700 dark:text-slate-300">Ctrl K</kbd>
-                    </div>
-                  </form>
+          {/* Right: Search + Actions */}
+          <div className="flex items-center gap-4">
+            {/* Expanded Search Bar */}
+            <div className="hidden md:flex relative w-80 shadow-[inset_0_2px_4px_rgba(0,0,0,0.02),0_4px_12px_rgba(0,0,0,0.03)] rounded-xl bg-white dark:bg-slate-900" ref={searchBoxRef}>
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search here"
+                value={search}
+                onChange={(event) => { setSearch(event.target.value); setShowSearch(true) }}
+                onFocus={() => setShowSearch(true)}
+                className="w-full bg-transparent border-0 py-2.5 pl-10 pr-4 text-sm text-slate-700 dark:text-slate-200 outline-none placeholder:text-slate-400 font-medium rounded-xl"
+              />
+              
+              {showSearch && (
+                <div className="absolute right-0 top-full mt-3 w-full overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900 z-50 animate-fade-in">
                   <div className="max-h-96 overflow-y-auto p-2">
                     {searchLoading && query && (
                       <div className="px-3 py-2 text-xs text-slate-400">Searching...</div>
@@ -264,38 +274,38 @@ export function Navbar({ onMobileMenuToggle }) {
                         >
                           <div className="flex items-center justify-between gap-3">
                             <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{item.title}</span>
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400">{item.type}</span>
                           </div>
                           <p className="mt-0.5 truncate text-xs text-slate-400">{item.description}</p>
                         </button>
                       ))
                     ) : (
-                      <div className="px-3 py-8 text-center text-sm text-slate-400">
+                      <div className="px-3 py-4 text-center text-sm text-slate-400">
                         No results found
                       </div>
                     )}
                   </div>
                 </div>
               )}
-          </div>
+            </div>
 
-          <div className="w-px h-6 bg-slate-200 dark:bg-slate-700" />
-
-          {/* Notification */}
-          <div className="relative">
-            <button
-              onClick={() => { setShowNotifications(!showNotifications); setShowProfile(false); setShowSearch(false) }}
-              className="relative p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            >
-              <Bell className="w-5 h-5 text-slate-500 dark:text-slate-400" />
-              {unreadCount > 0 && (
-                <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
-                  {unreadCount}
-                </span>
-              )}
+            {/* Help Icon */}
+            <button className="hidden sm:flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-slate-800 shadow-[4px_4px_10px_rgba(0,0,0,0.05),-4px_-4px_10px_rgba(255,255,255,0.8)] dark:shadow-[4px_4px_10px_rgba(0,0,0,0.3),-4px_-4px_10px_rgba(255,255,255,0.02)] transition-all hover:-translate-y-0.5 text-slate-700 dark:text-slate-300">
+              <HelpCircle className="w-4 h-4" strokeWidth={2.5} />
             </button>
 
-            {showNotifications && (
+            {/* Notification */}
+            <div className="relative">
+              <button
+                onClick={() => { setShowNotifications(!showNotifications); setShowProfile(false); setShowSearch(false) }}
+                className="relative flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-slate-800 shadow-[4px_4px_10px_rgba(0,0,0,0.05),-4px_-4px_10px_rgba(255,255,255,0.8)] dark:shadow-[4px_4px_10px_rgba(0,0,0,0.3),-4px_-4px_10px_rgba(255,255,255,0.02)] transition-all hover:-translate-y-0.5 text-slate-700 dark:text-slate-300"
+              >
+                <Bell className="w-4 h-4" strokeWidth={2.5} />
+                {unreadCount > 0 && (
+                  <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-800"></span>
+                )}
+              </button>
+
+              {showNotifications && (
                 <div className="absolute right-0 mt-3 w-80 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 overflow-hidden z-50 animate-fade-in">
                   <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
                     <span className="font-semibold text-slate-800 dark:text-slate-100">Notifications</span>
@@ -324,22 +334,20 @@ export function Navbar({ onMobileMenuToggle }) {
                   </div>
                 </div>
               )}
-          </div>
+            </div>
 
-          {/* Profile */}
-          <div className="relative">
-            <button
-              onClick={() => { setShowProfile(!showProfile); setShowNotifications(false); setShowSearch(false) }}
-              className="flex items-center gap-2 px-1.5 py-1 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            >
-              <div className="relative">
-                <Avatar name={user?.name || 'U'} size="sm" />
-                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-400 rounded-full ring-2 ring-white dark:ring-slate-900" />
-              </div>
-              <ChevronDown className="hidden md:block w-4 h-4 text-slate-400 mr-1" />
-            </button>
+            {/* Profile */}
+            <div className="relative">
+              <button
+                onClick={() => { setShowProfile(!showProfile); setShowNotifications(false); setShowSearch(false) }}
+                className="flex items-center ml-2 transition-all hover:-translate-y-0.5"
+              >
+                <div className="relative shadow-md rounded-full">
+                  <Avatar name={user?.name || 'U'} size="sm" />
+                </div>
+              </button>
 
-            {showProfile && (
+              {showProfile && (
                 <div className="absolute right-0 mt-3 w-56 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 overflow-hidden z-50 animate-fade-in">
                   <div className="p-3 border-b border-slate-100 dark:border-slate-800">
                     <p className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{user?.name}</p>
@@ -371,7 +379,7 @@ export function Navbar({ onMobileMenuToggle }) {
                   </div>
                 </div>
               )}
-          </div>
+            </div>
           </div>
         </div>
       </div>

@@ -14,6 +14,7 @@ export const employeeApi = {
   getTimeline: (id) => api.get(`/employees/${id}/timeline`),
   getAssets: (id) => api.get(`/employees/${id}/assets`),
   getPayslips: (id) => api.get(`/employees/${id}/payslips`),
+  downloadPayslipPdf: (payslipId) => api.get(`/payroll/payslip/${payslipId}/pdf`, { responseType: 'blob' }),
   getLeaveBalance: (id) => api.get(`/employees/${id}/leave-balance`),
   resetPassword: (id, reason) => api.post(`/employees/${id}/reset-password`, { reason }),
   updatePermissions: (id, permissionIds) => api.put(`/employees/${id}/permissions`, { permissionIds }),

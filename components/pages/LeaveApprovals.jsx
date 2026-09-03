@@ -7,7 +7,7 @@ import { PageLoader } from '@/components/common/LoadingSpinner'
 import { leaveApi } from '@/services/leaveApi'
 import { formatDate } from '@/lib/utils'
 
-export function LeaveApprovals({ title, subtitle }) {
+export function LeaveApprovals({ title = 'Leave Approvals', subtitle = 'Pending requests' }) {
   const [leaves, setLeaves] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -30,9 +30,11 @@ export function LeaveApprovals({ title, subtitle }) {
 
   return (
     <div className="animate-fade-in space-y-6">
-      <div className="page-header">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{title}</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div className="flex-1">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <h1 className="text-2xl font-bold text-slate-800 dark:text-white">{title}</h1>
+          </div>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">{subtitle}</p>
         </div>
       </div>

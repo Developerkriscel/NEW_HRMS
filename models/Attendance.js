@@ -11,6 +11,20 @@ const AttendanceSchema = new mongoose.Schema(
     checkInLongitude: { type: Number },
     checkOutLatitude: { type: Number },
     checkOutLongitude: { type: Number },
+    checkInAccuracy: { type: Number },
+    checkOutAccuracy: { type: Number },
+    checkInPhoto: { type: String, default: null },
+    checkOutPhoto: { type: String, default: null },
+    breaks: [{
+      start: { type: Date, required: true },
+      end: { type: Date, default: null },
+      duration: { type: Number, default: 0 } // in minutes
+    }],
+    verificationStatus: {
+      type: String,
+      enum: ['PENDING', 'CAMERA_VERIFIED', 'LOCATION_VERIFIED', 'VERIFIED', 'REJECTED'],
+      default: 'PENDING'
+    },
     checkInSource: {
       type: String,
       enum: ['WEB', 'MOBILE', 'GPS', 'BIOMETRIC', 'QR_CODE', 'FACE_RECOGNITION', 'MANUAL', 'WFH'],
@@ -44,5 +58,8 @@ const AttendanceSchema = new mongoose.Schema(
 
 AttendanceSchema.index({ employee: 1, date: 1 }, { unique: true })
 AttendanceSchema.index({ tenantId: 1, date: 1 })
+AttendanceSchema.index({ tenantId: 1, date: -1 })
+AttendanceSchema.index({ tenantId: 1, regularizationStatus: 1, date: -1 })
+AttendanceSchema.index({ employee: 1, date: -1 })
 
 export default model('Attendance', AttendanceSchema)

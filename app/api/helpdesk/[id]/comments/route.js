@@ -23,6 +23,8 @@ export const POST = withApi(async (req, { params }) => {
 
   ticket.comments.push({ text: body.text, by: session.userId, at: new Date() })
   await ticket.save()
+  
+  await ticket.populate('comments.by', 'firstName lastName role')
 
   return ok(ticket, 'Comment added')
 })

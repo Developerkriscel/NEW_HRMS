@@ -22,4 +22,6 @@ const PlanSchema = new mongoose.Schema(
   { timestamps: true }
 )
 
+PlanSchema.index({ deleted: 1, active: 1, sortOrder: 1 })
+
 export default model('Plan', PlanSchema)

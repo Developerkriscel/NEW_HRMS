@@ -12,7 +12,14 @@ export const GET = withApi(async (req) => {
   const tenantId = requireTenantId(session)
   const { searchParams } = new URL(req.url)
 
-  const date = searchParams.get('date') ? new Date(searchParams.get('date')) : new Date(new Date().toDateString())
+  const dateParam = searchParams.get('date')
+  let date;
+  if (dateParam) {
+    const [y, m, d] = dateParam.split('-')
+    date = new Date(y, m - 1, d)
+  } else {
+    date = new Date(new Date().toDateString())
+  }
 
   const reports = await Employee.find({ reportingManager: session.userId, tenantId, deleted: false }).limit(200)
   const result = []

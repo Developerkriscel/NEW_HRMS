@@ -1,16 +1,15 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Sidebar } from '@/components/common/Sidebar'
-import { Navbar } from '@/components/common/Navbar'
-import { Breadcrumbs } from '@/components/common/Breadcrumbs'
 import { PageLoader } from '@/components/common/LoadingSpinner'
+import { Navbar } from '@/components/common/Navbar'
+import { Sidebar } from '@/components/common/Sidebar'
 import { useUIStore } from '@/store/uiStore'
 import { useAuthStore } from '@/store/authStore'
 
 export function DashboardShell({ children }) {
   const { theme } = useUIStore()
-  const { hydrated, isLoading, fetchMe } = useAuthStore()
+  const { hydrated, isLoading, fetchMe, isAuthenticated, logout } = useAuthStore()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [sidebarHovered, setSidebarHovered] = useState(false)
 
@@ -26,7 +25,13 @@ export function DashboardShell({ children }) {
     if (!hydrated) fetchMe()
   }, [hydrated, fetchMe])
 
-  if (isLoading && !hydrated) {
+  useEffect(() => {
+    if (hydrated && !isAuthenticated) {
+      logout()
+    }
+  }, [hydrated, isAuthenticated, logout])
+
+  if (!hydrated || isLoading || !isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
         <PageLoader />
@@ -51,8 +56,7 @@ export function DashboardShell({ children }) {
         <div className="lg:hidden" />
         <Navbar onMobileMenuToggle={() => setMobileOpen(true)} />
 
-        <main className="flex-1 p-4 lg:p-6">
-          <Breadcrumbs />
+        <main className="flex-1 p-4 lg:p-6 lg:pt-4">
           <div className="animate-fade-in">
             {children}
           </div>

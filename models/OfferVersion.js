@@ -25,6 +25,7 @@ const OfferVersionSchema = new mongoose.Schema(
 
     joiningDate: { type: Date, required: true },
     locationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', default: null },
+    shiftId: { type: mongoose.Schema.Types.ObjectId, ref: 'Shift', default: null },
     employmentType: { type: String, default: null },
     workMode: { type: String, default: null },
 

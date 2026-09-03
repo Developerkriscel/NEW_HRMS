@@ -1,5 +1,5 @@
 import mongoose from 'mongoose'
-import { tenantFields, model } from './_base'
+import { baseFields, model } from './_base'
 import { SELECTION_APPROVAL_LEVEL, SELECTION_APPROVAL_LEVEL_LIST } from '@/lib/selectionConstants'
 import { COMPENSATION_APPROVAL_LEVEL, COMPENSATION_APPROVAL_LEVEL_LIST } from '@/lib/compensationConstants'
 
@@ -11,11 +11,10 @@ const RecruitmentSettingsSchema = new mongoose.Schema(
     selectionApprovalLevel: { type: String, enum: SELECTION_APPROVAL_LEVEL_LIST, default: SELECTION_APPROVAL_LEVEL.NONE },
     compensationApprovalLevel: { type: String, enum: COMPENSATION_APPROVAL_LEVEL_LIST, default: COMPENSATION_APPROVAL_LEVEL.HIRING_MANAGER },
     updatedByName: { type: String, default: null },
-    ...tenantFields,
+    ...baseFields,
+    tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', required: true, unique: true },
   },
   { timestamps: true, collection: 'recruitment_settings' }
 )
-
-RecruitmentSettingsSchema.index({ tenantId: 1 }, { unique: true })
 
 export default model('RecruitmentSettings', RecruitmentSettingsSchema)

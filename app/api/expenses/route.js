@@ -16,7 +16,9 @@ export const GET = withApi(async (req) => {
   const status = searchParams.get('status')
 
   const query = { tenantId }
-  if (session.role === 'EMPLOYEE') {
+  const myExpenses = searchParams.get('myExpenses') === 'true'
+
+  if (session.role === 'EMPLOYEE' || myExpenses) {
     query.employee = session.userId
   } else if (session.role === 'MANAGER') {
     const reports = await Employee.find({ reportingManager: session.userId, tenantId, deleted: false }).select('_id')

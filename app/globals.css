@@ -4,6 +4,7 @@
 
 @layer base {
   :root {
+    --font-sans: "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif;
     --background: 0 0% 100%;
     --foreground: 224 71% 4%;
     --card: 0 0% 100%;
@@ -87,41 +88,70 @@
   .sidebar-item-inactive {
     @apply text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100;
   }
+  .premium-card {
+    @apply bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm rounded-2xl transition-all duration-300;
+  }
+  .neumorphic-card {
+    @apply bg-white dark:bg-slate-900 rounded-[2rem] border-0 shadow-[4px_4px_20px_rgba(0,0,0,0.03),-4px_-4px_20px_rgba(255,255,255,1)] dark:shadow-[4px_4px_20px_rgba(0,0,0,0.4)] transition-all duration-300 relative overflow-hidden;
+  }
   .stat-card {
-    @apply bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 shadow-sm transition-shadow duration-200;
+    @apply neumorphic-card p-6 hover:-translate-y-1 hover:shadow-[8px_12px_30px_rgba(0,0,0,0.08),-4px_-4px_20px_rgba(255,255,255,1)] dark:hover:shadow-[8px_12px_30px_rgba(0,0,0,0.6)];
+  }
+  .gradient-primary-mesh {
+    @apply bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-500 via-blue-600 to-violet-700;
   }
   .page-header {
-    @apply flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6;
+    @apply flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8;
   }
   .data-table {
-    @apply w-full text-sm;
+    @apply w-full text-sm border-separate border-spacing-y-2 -mt-2;
   }
   .data-table th {
-    @apply text-left py-3 px-4 font-semibold text-slate-600 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50;
+    @apply text-left py-3 px-5 font-semibold text-slate-500 dark:text-slate-400 border-none bg-transparent uppercase tracking-wider text-xs;
+  }
+  .data-table tbody tr {
+    @apply bg-slate-50/40 dark:bg-slate-800/20 hover:bg-white dark:hover:bg-slate-800 hover:shadow-[0_8px_30px_rgba(0,0,0,0.06)] hover:-translate-y-0.5 transition-all duration-300 relative;
   }
   .data-table td {
-    @apply py-3.5 px-4 border-b border-slate-50 dark:border-slate-800/50;
+    @apply py-4 px-5 border-none transition-colors;
   }
-  .data-table tr:hover td {
-    @apply bg-slate-50/50 dark:bg-slate-800/30;
-  }
-  .badge-active { @apply bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400; }
-  .badge-inactive { @apply bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400; }
-  .badge-pending { @apply bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400; }
-  .badge-danger { @apply bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400; }
+  .data-table td:first-child { @apply rounded-l-2xl; }
+  .data-table td:last-child { @apply rounded-r-2xl; }
+  .badge-active { @apply bg-emerald-100/80 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 backdrop-blur-sm border border-emerald-200 dark:border-emerald-800/50; }
+  .badge-inactive { @apply bg-slate-100/80 text-slate-600 dark:bg-slate-800 dark:text-slate-400 backdrop-blur-sm border border-slate-200 dark:border-slate-700/50; }
+  .badge-pending { @apply bg-amber-100/80 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 backdrop-blur-sm border border-amber-200 dark:border-amber-800/50; }
+  .badge-danger { @apply bg-red-100/80 text-red-700 dark:bg-red-900/30 dark:text-red-400 backdrop-blur-sm border border-red-200 dark:border-red-800/50; }
   .btn-primary {
-    @apply bg-blue-700 hover:bg-blue-800 text-white font-medium px-4 py-2 rounded-xl transition-colors duration-200 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply gradient-primary-mesh text-white font-medium px-5 py-2.5 rounded-xl shadow-[0_8px_20px_rgba(37,99,235,0.25)] hover:shadow-[0_12px_25px_rgba(37,99,235,0.4)] hover:-translate-y-0.5 transition-all duration-300 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none border border-white/10;
   }
   .btn-secondary {
-    @apply bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium px-4 py-2 rounded-xl transition-colors duration-200 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-medium px-5 py-2.5 rounded-xl shadow-sm transition-all duration-200 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-danger {
-    @apply bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 rounded-xl transition-colors duration-200 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-red-600 hover:bg-red-700 text-white font-medium px-5 py-2.5 rounded-xl shadow-[0_4px_14px_0_rgb(220,38,38,0.39)] transition-all duration-200 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .input-field {
-    @apply w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600 transition-colors duration-200 text-sm;
+    @apply w-full px-4 py-2.5 rounded-xl border-0 bg-slate-50/80 dark:bg-slate-900/80 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 text-sm shadow-[inset_0_2px_6px_rgba(0,0,0,0.03)] hover:bg-slate-100/50 dark:hover:bg-slate-800/50;
   }
 }
+
+/* Animations */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@keyframes fade-in-up {
+  0% { opacity: 0; transform: translateY(15px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in-up {
+  opacity: 0;
+  animation: fade-in-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.stagger-1 { animation-delay: 50ms; }
+.stagger-2 { animation-delay: 100ms; }
+.stagger-3 { animation-delay: 150ms; }
+.stagger-4 { animation-delay: 200ms; }
 
 /* Shimmer loading effect */
 .shimmer {

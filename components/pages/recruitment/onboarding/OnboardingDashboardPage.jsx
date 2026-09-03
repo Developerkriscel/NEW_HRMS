@@ -1,149 +1,190 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import Link from 'next/link'
-import { UserCheck, Send, Bell } from 'lucide-react'
-import { Badge } from '@/components/common/Badge'
-import { PageLoader } from '@/components/common/LoadingSpinner'
-import { preboardingApi } from '@/services/preboardingApi'
-import { formatDate, cn } from '@/lib/utils'
-import { PREBOARDING_TABS, FORM_STATUS_LABELS } from '@/lib/preboardingConstants'
+import React, { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Users, Calendar, Clock, FileText, CheckCircle2, ListTodo, Search, Filter, MoreVertical, Plus, ChevronDown, Download, Eye, PauseCircle, XCircle } from 'lucide-react'
+import { useOnboardingStore } from '@/store/onboardingStore'
+import { OnboardingStatusBadge } from './components/OnboardingStatusBadge'
+import { OnboardingProgress } from './components/OnboardingProgress'
+import { EmptyState } from './components/EmptyState'
+import { StartOnboardingModal } from './StartOnboardingModal'
 
-const CARD_DEFS = [
-  { key: 'acceptedOffers', label: 'Accepted Offers' },
-  { key: 'formsPending', label: 'Forms Pending' },
-  { key: 'documentsPending', label: 'Documents Pending' },
-  { key: 'verificationPending', label: 'Verification Pending' },
-  { key: 'readyToJoin', label: 'Ready to Join' },
-  { key: 'joiningThisWeek', label: 'Joining This Week' },
-]
-
-// item 1 — /hr/onboarding, the Preboarding Dashboard: 8 tabs,
-// 6 summary cards, candidate table with progress columns.
 export function OnboardingDashboardPage() {
-  const [tab, setTab] = useState('ACCEPTED')
-  const [rows, setRows] = useState([])
-  const [cards, setCards] = useState(null)
-  const [tabCounts, setTabCounts] = useState({})
-  const [loading, setLoading] = useState(true)
+  const router = useRouter()
+  const { records } = useOnboardingStore()
+  
+  const [isStartModalOpen, setIsStartModalOpen] = useState(false)
   const [search, setSearch] = useState('')
-  const [busyId, setBusyId] = useState(null)
+  const [statusFilter, setStatusFilter] = useState('All')
 
-  function load() {
-    setLoading(true)
-    const params = { status: tab, size: 100 }
-    if (search) params.search = search
-    preboardingApi.list(params).then((res) => {
-      setRows(res.data.data.content || [])
-      setCards(res.data.data.cards)
-      setTabCounts(res.data.data.tabCounts || {})
-    }).finally(() => setLoading(false))
-  }
-  useEffect(load, [tab, search])
+  // Derived metrics
+  const total = records.length
+  const inProgress = records.filter(r => r.status === 'IN_PROGRESS').length
+  const completed = records.filter(r => r.status === 'COMPLETED').length
+  const upcoming = records.filter(r => r.status !== 'COMPLETED' && r.status !== 'CANCELLED').length
+  
+  const pendingDocs = records.reduce((acc, r) => acc + r.documents.filter(d => d.status !== 'VERIFIED').length, 0)
+  const pendingTasks = records.reduce((acc, r) => acc + r.tasks.filter(t => t.status !== 'COMPLETED').length, 0)
 
-  async function sendForm(id) {
-    setBusyId(id)
-    try {
-      const res = await preboardingApi.sendForm(id)
-      alert(`Form link: ${window.location.origin}${res.data.data.portalUrl}`)
-      load()
-    } catch (err) { alert(err.response?.data?.message || 'Could not send form') } finally { setBusyId(null) }
-  }
-  async function sendReminder(id) {
-    setBusyId(id)
-    try { await preboardingApi.sendForm(id); alert('Reminder sent — a fresh link was issued.'); load() }
-    catch (err) { alert(err.response?.data?.message || 'Could not send reminder') } finally { setBusyId(null) }
-  }
+  // Filtering
+  const filteredRecords = records.filter(r => {
+    const matchesSearch = r.candidate.name.toLowerCase().includes(search.toLowerCase()) || r.candidate.id.toLowerCase().includes(search.toLowerCase()) || r.position.toLowerCase().includes(search.toLowerCase())
+    const matchesStatus = statusFilter === 'All' ? true : statusFilter === 'Completed' ? r.status === 'COMPLETED' : statusFilter === 'In Progress' ? r.status === 'IN_PROGRESS' : r.status === 'NOT_STARTED'
+    return matchesSearch && matchesStatus
+  })
 
   return (
     <div className="animate-fade-in space-y-6">
-      <div className="page-header">
+      
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Preboarding</h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Candidate information, documents and joining readiness after offer acceptance.</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Onboarding</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Manage new hires, joining formalities, documents and onboarding progress.</p>
         </div>
-        <Link href="/hr/recruitment/document-requirements" className="btn-secondary">Document Requirements</Link>
+        <div className="flex items-center gap-3">
+          <button className="btn-secondary hidden sm:flex">
+            <Download className="w-4 h-4" /> Export
+          </button>
+          <button onClick={() => setIsStartModalOpen(true)} className="btn-primary">
+            <Plus className="w-4 h-4" /> Start Onboarding
+          </button>
+        </div>
       </div>
 
-      {cards && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {CARD_DEFS.map((c) => (
-            <div key={c.key} className="stat-card !p-4">
-              <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{cards[c.key]}</p>
-              <p className="text-xs text-slate-400 mt-0.5">{c.label}</p>
+      {/* KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        {[
+          { label: 'Total Onboarding', value: total, icon: Users, color: 'text-white', bg: 'bg-gradient-to-br from-blue-500 to-blue-600 shadow-blue-500/30 shadow-lg' },
+          { label: 'Upcoming Joining', value: upcoming, icon: Calendar, color: 'text-white', bg: 'bg-gradient-to-br from-indigo-500 to-indigo-600 shadow-indigo-500/30 shadow-lg' },
+          { label: 'In Progress', value: inProgress, icon: Clock, color: 'text-white', bg: 'bg-gradient-to-br from-amber-400 to-amber-500 shadow-amber-500/30 shadow-lg' },
+          { label: 'Docs Pending', value: pendingDocs, icon: FileText, color: 'text-white', bg: 'bg-gradient-to-br from-rose-500 to-rose-600 shadow-rose-500/30 shadow-lg' },
+          { label: 'Tasks Pending', value: pendingTasks, icon: ListTodo, color: 'text-white', bg: 'bg-gradient-to-br from-orange-400 to-orange-500 shadow-orange-500/30 shadow-lg' },
+          { label: 'Completed', value: completed, icon: CheckCircle2, color: 'text-white', bg: 'bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-emerald-500/30 shadow-lg' },
+        ].map((kpi, idx) => (
+          <div key={idx} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 group flex flex-col justify-center">
+            <div className="flex items-center justify-between mb-2">
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110 duration-300 ${kpi.bg} ${kpi.color}`}>
+                <kpi.icon className="w-4 h-4 drop-shadow-sm" />
+              </div>
             </div>
-          ))}
-        </div>
-      )}
+            <div>
+              <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-0.5 leading-tight">{kpi.label}</p>
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white transition-colors group-hover:text-blue-600 dark:group-hover:text-blue-400">{kpi.value}</h3>
+            </div>
+          </div>
+        ))}
+      </div>
 
-      <div className="border-b border-slate-100 dark:border-slate-800 overflow-x-auto">
-        <div className="flex gap-1 min-w-max">
-          {PREBOARDING_TABS.map((t) => (
-            <button key={t.key} onClick={() => setTab(t.key)} className={cn('px-3.5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap', tab === t.key ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200')}>
-              {t.label} {tabCounts[t.key] ? <span className="ml-1 text-xs text-slate-400">({tabCounts[t.key]})</span> : null}
-            </button>
-          ))}
+      {/* Filters */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row items-center gap-4 shadow-sm">
+        <div className="relative flex-1 w-full">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input 
+            type="text" 
+            placeholder="Search candidate, position, department or ID..." 
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+          />
+        </div>
+        <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 hide-scrollbar">
+          <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 whitespace-nowrap">
+            <Filter className="w-4 h-4 text-slate-400" /> Filters
+          </button>
+          <select 
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-medium bg-white dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/50 cursor-pointer"
+          >
+            <option value="All">All Status</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Completed">Completed</option>
+            <option value="Not Started">Not Started</option>
+          </select>
         </div>
       </div>
 
-      <div className="stat-card !p-4">
-        <input className="input-field max-w-sm" placeholder="Search candidate..." value={search} onChange={(e) => setSearch(e.target.value)} />
-      </div>
-
-      {loading ? (
-        <PageLoader />
-      ) : rows.length === 0 ? (
-        <div className="stat-card text-center py-16">
-          <UserCheck className="w-8 h-8 text-slate-300 dark:text-slate-700 mx-auto mb-2" />
-          <p className="text-slate-500 dark:text-slate-400">No candidates in this stage.</p>
-        </div>
-      ) : (
-        <div className="stat-card !p-0 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-slate-400 border-b border-slate-100 dark:border-slate-800">
-                <th className="py-3 px-4 font-medium">Candidate</th>
-                <th className="py-3 px-4 font-medium">Position</th>
-                <th className="py-3 px-4 font-medium">Joining Date</th>
-                <th className="py-3 px-4 font-medium">Form</th>
-                <th className="py-3 px-4 font-medium">Documents</th>
-                <th className="py-3 px-4 font-medium">Verification</th>
-                <th className="py-3 px-4 font-medium">Status</th>
-                <th className="py-3 px-4 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50 dark:divide-slate-800/60">
-              {rows.map((r) => (
-                <tr key={r.preboardingId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30">
-                  <td className="py-3 px-4">
-                    <Link href={`/hr/onboarding/${r.preboardingId}`} className="font-medium text-blue-600 dark:text-blue-400 hover:underline">{r.candidateName}</Link>
-                  </td>
-                  <td className="py-3 px-4 text-slate-600 dark:text-slate-300">{r.jobTitle}</td>
-                  <td className="py-3 px-4 text-slate-600 dark:text-slate-300">{r.joiningDate ? formatDate(r.joiningDate, 'dd MMM yyyy') : '—'}</td>
-                  <td className="py-3 px-4"><Badge variant={r.formStatus}>{r.formStatusLabel}</Badge></td>
-                  <td className="py-3 px-4 text-slate-600 dark:text-slate-300">{r.documentsPercent != null ? `${r.documentsPercent}%` : '—'}</td>
-                  <td className="py-3 px-4"><Badge variant={r.verificationStatus}>{r.verificationStatus === 'COMPLETE' ? 'Verified' : 'Pending'}</Badge></td>
-                  <td className="py-3 px-4"><Badge variant={r.status}>{r.status.replace(/_/g, ' ')}</Badge></td>
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-1.5">
-                      <Link href={`/hr/onboarding/${r.preboardingId}`} className="btn-secondary !text-xs !py-1">View</Link>
-                      {['READY_TO_JOIN', 'JOINED'].includes(r.status) && (
-                        <Link href={`/hr/onboarding/${r.preboardingId}/joining`} className="btn-secondary !text-xs !py-1">Employee Setup</Link>
-                      )}
-                      {r.formStatus === 'NOT_SENT' && (
-                        <button disabled={busyId === r.preboardingId} onClick={() => sendForm(r.preboardingId)} className="btn-secondary !text-xs !py-1"><Send className="w-3 h-3" /> Send Form</button>
-                      )}
-                      {['SENT', 'OPENED', 'IN_PROGRESS', 'CORRECTION_REQUIRED'].includes(r.formStatus) && (
-                        <button disabled={busyId === r.preboardingId} onClick={() => sendReminder(r.preboardingId)} className="btn-secondary !text-xs !py-1"><Bell className="w-3 h-3" /> Reminder</button>
-                      )}
-                    </div>
-                  </td>
+      {/* Table */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden">
+        {filteredRecords.length === 0 ? (
+          <EmptyState 
+            icon={Users}
+            title="No onboarding records found"
+            description="Start onboarding a hired candidate to begin the joining process."
+            action={
+              <button onClick={() => setIsStartModalOpen(true)} className="btn-primary">
+                <Plus className="w-4 h-4" /> Start Onboarding
+              </button>
+            }
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+                  <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Candidate</th>
+                  <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Position</th>
+                  <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Joining Date</th>
+                  <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Progress</th>
+                  <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Assigned To</th>
+                  <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                  <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {filteredRecords.map(record => (
+                  <tr key={record.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors group cursor-pointer" onClick={() => router.push(`/hr/onboarding/${record.id}`)}>
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
+                          {record.candidate.name.charAt(0)}
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-900 dark:text-white group-hover:text-blue-600 transition-colors">{record.candidate.name}</p>
+                          <p className="text-xs text-slate-500">{record.candidate.id}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6">
+                      <p className="font-medium text-slate-900 dark:text-white">{record.position}</p>
+                      <p className="text-xs text-slate-500">{record.department}</p>
+                    </td>
+                    <td className="py-4 px-6">
+                      <span className="font-medium text-slate-900 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg text-sm">{new Date(record.joiningDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                    </td>
+                    <td className="py-4 px-6 w-48">
+                      <OnboardingProgress progress={record.progress} size="sm" />
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[10px] font-bold">{record.onboardingOwner.charAt(0)}</div>
+                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{record.onboardingOwner.split(' ')[0]}</span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6">
+                      <OnboardingStatusBadge status={record.status} />
+                    </td>
+                    <td className="py-4 px-6 text-right">
+                      <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => router.push(`/hr/onboarding/${record.id}`)} className="p-2 text-slate-400 hover:text-blue-600 bg-white dark:bg-slate-900 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm transition-all">
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button className="p-2 text-slate-400 hover:text-slate-600 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm transition-all">
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <StartOnboardingModal isOpen={isStartModalOpen} onClose={() => setIsStartModalOpen(false)} />
     </div>
   )
 }
+

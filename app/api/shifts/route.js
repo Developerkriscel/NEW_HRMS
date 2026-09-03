@@ -5,6 +5,13 @@ import { ok } from '@/lib/apiResponse'
 import { requireAuth, requireRole, requireTenantId } from '@/lib/auth'
 import Shift from '@/models/Shift'
 
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+function normalizeDays(days, fallback) {
+  if (!Array.isArray(days)) return fallback
+  return days.filter((day) => DAYS.includes(day))
+}
+
 export const GET = withApi(async () => {
   const session = await requireAuth()
   const tenantId = requireTenantId(session)
@@ -17,12 +24,15 @@ export const POST = withApi(async (req) => {
   await requireRole(session, ['COMPANY_ADMIN', 'HR_MANAGER', 'SUPER_ADMIN'])
   const tenantId = requireTenantId(session)
   const body = await req.json()
+  const workingDays = normalizeDays(body.workingDays, DAYS.slice(0, 5))
 
   const shift = await Shift.create({
     name: body.name,
     startTime: body.startTime,
     endTime: body.endTime,
     gracePeriodMinutes: body.gracePeriodMinutes ?? 0,
+    workingDays,
+    weeklyOff: normalizeDays(body.weeklyOff, DAYS.filter((day) => !workingDays.includes(day))),
     active: body.active ?? true,
     tenantId,
     createdBy: session.sub,

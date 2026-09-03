@@ -8,7 +8,7 @@ import TrainingSession from '@/models/TrainingSession'
 
 export const PUT = withApi(async (req, { params }) => {
   const session = await requireAuth()
-  await requireRole(session, ['HR_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN'])
+  await requireRole(session, ['HR_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'MANAGER'])
   const tenantId = requireTenantId(session)
   const body = await req.json()
 

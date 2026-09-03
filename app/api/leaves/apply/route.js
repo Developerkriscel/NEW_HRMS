@@ -49,6 +49,8 @@ export const POST = withApi(async (req) => {
 
   const employee = await Employee.findById(session.userId)
 
+  const isSelfApprove = ['COMPANY_ADMIN', 'SUPER_ADMIN'].includes(session.role) && !employee?.reportingManager;
+
   const leaveRequest = await LeaveRequest.create({
     employee: session.userId,
     leaveType: body.leaveTypeId,
@@ -59,7 +61,7 @@ export const POST = withApi(async (req) => {
     halfDay: body.halfDay ?? false,
     halfDayType: body.halfDayType || null,
     status: 'PENDING',
-    approvedBy: employee?.reportingManager || null,
+    approvedBy: isSelfApprove ? session.userId : (employee?.reportingManager || null),
     tenantId,
     createdBy: session.sub,
   })

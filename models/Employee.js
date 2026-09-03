@@ -113,7 +113,10 @@ const EmployeeSchema = new mongoose.Schema(
 )
 
 EmployeeSchema.index({ tenantId: 1, deleted: 1 })
-EmployeeSchema.index({ email: 1, tenantId: 1 })
+EmployeeSchema.index({ email: 1, tenantId: 1, deleted: 1 })
+EmployeeSchema.index({ tenantId: 1, deleted: 1, status: 1 })
+EmployeeSchema.index({ tenantId: 1, deleted: 1, role: 1 })
+EmployeeSchema.index({ tenantId: 1, deleted: 1, createdAt: -1 })
 EmployeeSchema.index({ tenantId: 1, firstName: 1 })
 
 EmployeeSchema.methods.getFullName = function () {

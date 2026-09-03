@@ -1,7 +1,5 @@
-import { Plus_Jakarta_Sans } from 'next/font/google'
 import './globals.css'
-
-const jakarta = Plus_Jakarta_Sans({ subsets: ['latin'], weight: ['300', '400', '500', '600', '700', '800'], variable: '--font-sans' })
+import { ChunkRecovery } from '@/components/common/ChunkRecovery'
 
 export const metadata = {
   title: 'NexaHR — Enterprise HRMS',
@@ -10,8 +8,11 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={jakarta.variable}>
-      <body>{children}</body>
+    <html lang="en">
+      <body>
+        <ChunkRecovery />
+        {children}
+      </body>
     </html>
   )
 }

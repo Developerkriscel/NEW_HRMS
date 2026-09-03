@@ -1,9 +1,15 @@
 export const dynamic = 'force-dynamic'
 
 import { withApi } from '@/lib/handler'
-import { ok } from '@/lib/apiResponse'
+import { ok, fail } from '@/lib/apiResponse'
 import { requireAuth, requireRole, requireTenantId } from '@/lib/auth'
 import Holiday from '@/models/Holiday'
+
+function parseHolidayDate(value) {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
 
 export const GET = withApi(async (req) => {
   const session = await requireAuth()
@@ -26,9 +32,13 @@ export const POST = withApi(async (req) => {
   const tenantId = requireTenantId(session)
   const body = await req.json()
 
+  if (!body.name?.trim()) return fail('Holiday name is required', 400)
+  const date = parseHolidayDate(body.date)
+  if (!date) return fail('Holiday date is required', 400)
+
   const holiday = await Holiday.create({
-    name: body.name,
-    date: body.date,
+    name: body.name.trim(),
+    date,
     recurringAnnually: body.recurringAnnually ?? false,
     optional: body.optional ?? false,
     tenantId,

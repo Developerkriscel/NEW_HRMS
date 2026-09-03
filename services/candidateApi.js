@@ -4,6 +4,7 @@ export const candidateApi = {
   list: (params) => api.get('/recruitment/candidates', { params }),
   get: (id) => api.get(`/recruitment/candidates/${id}`),
   create: (data) => api.post('/recruitment/candidates', data),
+  bulkApply: (data) => api.post('/recruitment/candidates/bulk-apply', data),
   update: (id, data) => api.patch(`/recruitment/candidates/${id}`, data),
   addNote: (id, note) => api.post(`/recruitment/candidates/${id}/notes`, { note }),
 
@@ -12,6 +13,7 @@ export const candidateApi = {
   addApplicationNote: (id, note) => api.post(`/recruitment/applications/${id}/notes`, { note }),
   getStageHistory: (id) => api.get(`/recruitment/applications/${id}/stage-history`),
   assignRecruiter: (id, recruiterId) => api.post(`/recruitment/applications/${id}/assign-recruiter`, { recruiterId }),
+  quickOffer: (id, data) => api.post(`/recruitment/applications/${id}/quick-offer`, data),
 
   // Step 7 — AI matching + HR screening
   getMatch: (applicationId) => api.get(`/recruitment/applications/${applicationId}/match`),

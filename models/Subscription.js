@@ -25,4 +25,9 @@ SubscriptionSchema.methods.isExpired = function () {
   return this.endDate && this.endDate < new Date() && this.status !== 'CANCELLED'
 }
 
+SubscriptionSchema.index({ status: 1, createdAt: -1 })
+SubscriptionSchema.index({ tenant: 1, status: 1 })
+SubscriptionSchema.index({ endDate: 1, status: 1 })
+SubscriptionSchema.index({ deleted: 1, createdAt: -1 })
+
 export default model('Subscription', SubscriptionSchema)

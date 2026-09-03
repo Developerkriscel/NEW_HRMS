@@ -8,6 +8,16 @@ const JWT_SECRET = process.env.JWT_SECRET || 'NexaHRSuperSecretKey2025ForJWTToke
 const ACCESS_TOKEN_EXPIRY_MS = Number(process.env.JWT_ACCESS_TOKEN_EXPIRY || 3600000)
 const REFRESH_TOKEN_EXPIRY_MS = Number(process.env.JWT_REFRESH_TOKEN_EXPIRY || 604800000)
 
+function prewarmDatabaseConnection() {
+  // Do not block the dev-login response, but start the Mongo handshake early
+  // so the first real data module does not pay the full connection cost.
+  setTimeout(() => {
+    void import('@/lib/db')
+      .then(({ connectDB }) => connectDB())
+      .catch(() => {})
+  }, 0)
+}
+
 function cookieOptions(maxAgeMs) {
   return {
     httpOnly: true,
@@ -52,6 +62,7 @@ export async function POST() {
   const cookieStore = cookies()
   cookieStore.set('nexahr_token', signToken('access'), cookieOptions(ACCESS_TOKEN_EXPIRY_MS))
   cookieStore.set('nexahr_refresh', signToken('refresh'), cookieOptions(REFRESH_TOKEN_EXPIRY_MS))
+  prewarmDatabaseConnection()
 
   return NextResponse.json({
     success: true,

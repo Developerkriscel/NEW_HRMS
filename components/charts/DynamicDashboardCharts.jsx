@@ -40,6 +40,11 @@ export const GenericBarChart = dynamic(
   { ssr: false, loading: ChartFallback }
 )
 
+export const GenericLineChart = dynamic(
+  () => import('@/components/charts/DashboardCharts').then((mod) => mod.GenericLineChart),
+  { ssr: false, loading: ChartFallback }
+)
+
 export const Sparkline = dynamic(
   () => import('@/components/charts/DashboardCharts').then((mod) => mod.Sparkline),
   {

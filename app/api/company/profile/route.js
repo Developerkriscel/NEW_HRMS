@@ -25,17 +25,24 @@ export const GET = withApi(async () => {
 
 export const PUT = withApi(async (req) => {
   const session = await requireAuth()
-  await requireRole(session, ['COMPANY_ADMIN'])
+  await requireRole(session, ['COMPANY_ADMIN', 'HR_MANAGER', 'SUPER_ADMIN'])
   const tenantId = requireTenantId(session)
   const body = await req.json()
 
   const tenant = await Tenant.findById(tenantId)
   if (!tenant) return fail('Company profile not found', 404)
 
+  const hasProfileUpdate = PROFILE_FIELDS.some((field) => body[field] !== undefined)
+  const hasHrSettingsUpdate = body.hrSettings !== undefined
+
+  if (hasProfileUpdate && !['COMPANY_ADMIN', 'SUPER_ADMIN'].includes(session.role)) {
+    return fail('Only company admins can update company profile fields', 403)
+  }
+
   for (const field of PROFILE_FIELDS) {
     if (body[field] !== undefined) tenant[field] = body[field]
   }
-  if (body.hrSettings) {
+  if (hasHrSettingsUpdate) {
     if (body.hrSettings.employeeIdPrefix !== undefined) tenant.hrSettings.employeeIdPrefix = body.hrSettings.employeeIdPrefix
     if (body.hrSettings.officeStartTime !== undefined) tenant.hrSettings.officeStartTime = body.hrSettings.officeStartTime
     if (body.hrSettings.officeEndTime !== undefined) tenant.hrSettings.officeEndTime = body.hrSettings.officeEndTime

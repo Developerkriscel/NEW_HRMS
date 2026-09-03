@@ -15,3 +15,6 @@ node_modules/
 
 # Locally-stored uploads (resumes, generated PDFs) — see lib/resumeStorage.js
 output/
+scratchpad/
+frontend/
+navbar-sidebar-smoke.png

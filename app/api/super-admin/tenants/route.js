@@ -47,6 +47,7 @@ export const GET = withApi(async (req) => {
     .sort({ [sortBy]: sortDir })
     .skip(page * size)
     .limit(size)
+    .lean()
 
   return ok(paged(content, page, size, totalElements))
 })

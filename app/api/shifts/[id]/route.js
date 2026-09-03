@@ -5,6 +5,13 @@ import { ok, fail } from '@/lib/apiResponse'
 import { requireAuth, requireRole, requireTenantId } from '@/lib/auth'
 import Shift from '@/models/Shift'
 
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+function normalizeDays(days) {
+  if (!Array.isArray(days)) return null
+  return days.filter((day) => DAYS.includes(day))
+}
+
 export const PUT = withApi(async (req, { params }) => {
   const session = await requireAuth()
   await requireRole(session, ['COMPANY_ADMIN', 'HR_MANAGER', 'SUPER_ADMIN'])
@@ -18,6 +25,8 @@ export const PUT = withApi(async (req, { params }) => {
   if (body.startTime != null) shift.startTime = body.startTime
   if (body.endTime != null) shift.endTime = body.endTime
   if (body.gracePeriodMinutes != null) shift.gracePeriodMinutes = body.gracePeriodMinutes
+  if (body.workingDays != null) shift.workingDays = normalizeDays(body.workingDays) || shift.workingDays
+  if (body.weeklyOff != null) shift.weeklyOff = normalizeDays(body.weeklyOff) || shift.weeklyOff
   if (body.active != null) shift.active = body.active
   shift.updatedBy = session.sub
   await shift.save()
@@ -27,7 +36,7 @@ export const PUT = withApi(async (req, { params }) => {
 
 export const DELETE = withApi(async (_req, { params }) => {
   const session = await requireAuth()
-  await requireRole(session, ['COMPANY_ADMIN', 'SUPER_ADMIN'])
+  await requireRole(session, ['COMPANY_ADMIN', 'HR_MANAGER', 'SUPER_ADMIN'])
   const tenantId = requireTenantId(session)
 
   const shift = await Shift.findOne({ _id: params.id, tenantId, deleted: false })

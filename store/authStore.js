@@ -1,6 +1,9 @@
 import { create } from 'zustand'
-import { ROLE_DASHBOARDS } from '@/lib/utils'
+import { ROLE_DASHBOARDS } from '@/lib/roleDashboards'
+
 import api from '@/services/api'
+
+let fetchMePromise = null
 
 // Unlike the original (Zustand + localStorage + a raw JWT held in JS), the
 // actual access/refresh tokens now live only in httpOnly cookies set by the
@@ -12,17 +15,31 @@ export const useAuthStore = create((set, get) => ({
   isLoading: true,
   hydrated: false,
 
-  setAuth: (user) => set({ user, isAuthenticated: true, isLoading: false }),
+  setAuth: (user) => set({ user, isAuthenticated: true, isLoading: false, hydrated: true }),
 
   setUser: (user) => set({ user }),
 
   fetchMe: async () => {
-    try {
-      const { data } = await api.get('/auth/me')
-      set({ user: data.data, isAuthenticated: true, isLoading: false, hydrated: true })
-    } catch {
-      set({ user: null, isAuthenticated: false, isLoading: false, hydrated: true })
-    }
+    const current = get()
+    if (current.hydrated) return current.user
+    if (fetchMePromise) return fetchMePromise
+
+    set({ isLoading: true })
+    fetchMePromise = api.get('/auth/me')
+      .then(({ data }) => {
+        const user = data.data
+        set({ user, isAuthenticated: true, isLoading: false, hydrated: true })
+        return user
+      })
+      .catch(() => {
+        set({ user: null, isAuthenticated: false, isLoading: false, hydrated: true })
+        return null
+      })
+      .finally(() => {
+        fetchMePromise = null
+      })
+
+    return fetchMePromise
   },
 
   logout: async () => {

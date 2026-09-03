@@ -34,6 +34,7 @@ export const GET = withApi(async (req) => {
   const totalElements = await HelpdeskTicket.countDocuments(query)
   const content = await HelpdeskTicket.find(query)
     .populate('raisedBy', 'firstName lastName employeeCode')
+    .populate('comments.by', 'firstName lastName role')
     .sort({ createdAt: -1 })
     .skip(page * size)
     .limit(size)

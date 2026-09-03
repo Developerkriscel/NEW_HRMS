@@ -4,30 +4,43 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api'
 
 const api = axios.create({
   baseURL: BASE_URL,
-  // 60s, not 30s — the first request after a dev-server restart pays for a
-  // cold MongoDB connection (see lib/db.js) on top of the query itself, and
-  // has been observed taking ~30s alone, tripping a tighter timeout.
+  // Keep the timeout generous for cold dev starts, but avoid refresh storms
+  // below so normal navigation is not delayed by duplicate auth retries.
   timeout: 60000,
   headers: { 'Content-Type': 'application/json' },
-  withCredentials: true, // send the httpOnly auth cookies
+  withCredentials: true,
 })
 
-// Response interceptor — silent refresh on 401. Unlike the original (which
-// carried the JWT in JS and had to manually attach it), the access/refresh
-// tokens now live in httpOnly cookies, so there's nothing to read/attach
-// here — the browser sends them automatically and the refresh endpoint
-// reads/rewrites them server-side.
+let refreshPromise = null
+let redirectingToLogin = false
+
+async function refreshSession() {
+  if (!refreshPromise) {
+    refreshPromise = api.post('/auth/refresh-token').finally(() => {
+      refreshPromise = null
+    })
+  }
+  return refreshPromise
+}
+
+async function redirectToLoginOnce() {
+  if (redirectingToLogin || typeof window === 'undefined') return
+  redirectingToLogin = true
+  try { await api.post('/auth/logout') } catch {}
+  window.location.href = '/login'
+}
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const original = error.config
-    if (error.response?.status === 401 && !original._retry && !original.url?.includes('/auth/')) {
+    if (error.response?.status === 401 && original && !original._retry && !original.url?.includes('/auth/')) {
       original._retry = true
       try {
-        await api.post('/auth/refresh-token')
+        await refreshSession()
         return api(original)
       } catch {
-        if (typeof window !== 'undefined') window.location.href = '/login'
+        redirectToLoginOnce()
       }
     }
     return Promise.reject(error)

@@ -6,6 +6,7 @@ export const preboardingApi = {
   list: (params) => api.get('/recruitment/onboarding', { params }),
   get: (id) => api.get(`/recruitment/onboarding/${id}`),
   joiningReadiness: (id) => api.get(`/recruitment/onboarding/${id}/joining`),
+  updateJoiningConfig: (id, data) => api.put(`/recruitment/onboarding/${id}/joining`, data),
   conversionPreview: (id) => api.get(`/recruitment/onboarding/${id}/convert`),
   convertToEmployee: (id, data = {}) => api.post(`/recruitment/onboarding/${id}/convert`, data),
 

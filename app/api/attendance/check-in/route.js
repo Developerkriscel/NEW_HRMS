@@ -4,10 +4,15 @@ import { withApi } from '@/lib/handler'
 import { ok, fail } from '@/lib/apiResponse'
 import { requireAuth, requireTenantId } from '@/lib/auth'
 import Attendance from '@/models/Attendance'
+import Employee from '@/models/Employee'
+import Tenant from '@/models/Tenant'
 
 const CHECK_IN_SOURCES = ['WEB', 'MOBILE', 'GPS', 'BIOMETRIC', 'QR_CODE', 'FACE_RECOGNITION', 'MANUAL', 'WFH']
-const LATE_HOUR = 10
-const LATE_MINUTE = 15
+const DEFAULT_LATE_GRACE_MINUTES = 15
+
+function todayName() {
+  return new Date().toLocaleDateString('en-US', { weekday: 'long' })
+}
 
 function startOfToday() {
   return new Date(new Date().toDateString())
@@ -34,14 +39,54 @@ export const POST = withApi(async (req) => {
   // Geo-fence validation is intentionally a no-op — Branch.geoFenceRadius
   // exists but no haversine-distance enforcement is implemented anywhere
   // in this system, matching the original.
-  const isLate = now.getHours() > LATE_HOUR || (now.getHours() === LATE_HOUR && now.getMinutes() > LATE_MINUTE)
+  
+  const [employee, tenantDoc] = await Promise.all([
+    Employee.findOne({ _id: session.userId, tenantId, deleted: false }).populate('shift'),
+    Tenant.findById(tenantId),
+  ])
+  const assignedShift = employee?.shift?.active !== false ? employee?.shift : null
+  const shiftWorkingDays = Array.isArray(assignedShift?.workingDays) ? assignedShift.workingDays : null
+  if (shiftWorkingDays?.length && !shiftWorkingDays.includes(todayName())) {
+    return fail(`Today is weekly off for your assigned shift (${assignedShift.name})`, 400)
+  }
+
+  const officeStartTime = assignedShift?.startTime || tenantDoc?.hrSettings?.officeStartTime || '09:00'
+  const graceMinutes = assignedShift?.gracePeriodMinutes ?? DEFAULT_LATE_GRACE_MINUTES
+  const [startHour, startMin] = officeStartTime.split(':').map(Number)
+  
+  const expectedStartTime = new Date(now)
+  expectedStartTime.setHours(startHour, startMin, 0, 0)
+  const graceTime = new Date(expectedStartTime.getTime() + graceMinutes * 60000)
+  
+  const isLate = now > graceTime
 
   if (!attendance) {
     attendance = new Attendance({ employee: session.userId, date: today, tenantId, createdBy: session.sub })
   }
   attendance.checkInTime = now
-  attendance.checkInLatitude = body.latitude
-  attendance.checkInLongitude = body.longitude
+  
+  if (body.location) {
+    attendance.checkInLatitude = body.location.lat
+    attendance.checkInLongitude = body.location.lng
+    attendance.checkInAccuracy = body.location.accuracy
+  } else {
+    attendance.checkInLatitude = body.latitude
+    attendance.checkInLongitude = body.longitude
+  }
+  
+  if (body.photo) {
+    attendance.checkInPhoto = body.photo
+  }
+
+  // Determine verification status
+  if (attendance.checkInPhoto && attendance.checkInLatitude) {
+    attendance.verificationStatus = 'VERIFIED'
+  } else if (attendance.checkInPhoto) {
+    attendance.verificationStatus = 'CAMERA_VERIFIED'
+  } else if (attendance.checkInLatitude) {
+    attendance.verificationStatus = 'LOCATION_VERIFIED'
+  }
+
   attendance.checkInSource = source
   attendance.lateMark = isLate
   attendance.status = 'PRESENT'

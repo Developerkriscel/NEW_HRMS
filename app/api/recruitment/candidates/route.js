@@ -11,6 +11,8 @@ import Candidate from '@/models/Candidate'
 import Application from '@/models/Application'
 import CandidateJobMatch from '@/models/CandidateJobMatch'
 import CandidateTagAssignment from '@/models/CandidateTagAssignment'
+import Offer from '@/models/Offer'
+import Interview from '@/models/Interview'
 
 // Application-centric on purpose — the HR Candidates table is really "one
 // row per application" (a candidate with two applications shows up twice,
@@ -97,10 +99,29 @@ export const GET = withApi(async (req) => {
 
   const totalElements = applications.length
   const pageApplications = applications.slice(page * size, page * size + size)
+  const offers = await Offer.find({
+    tenantId,
+    applicationId: { $in: pageApplications.map((a) => a._id) },
+    deleted: false,
+  }).select('_id applicationId status sentAt acceptedAt declinedAt expiresAt').lean()
+  const offerByApplication = new Map(offers.map((offer) => [String(offer.applicationId), offer]))
+  const interviews = await Interview.find({
+    tenantId,
+    applicationId: { $in: pageApplications.map((a) => a._id) },
+    deleted: false,
+    status: { $in: ['SCHEDULED', 'CONFIRMED', 'RESCHEDULED', 'IN_PROGRESS', 'FEEDBACK_PENDING'] },
+  }).sort({ date: -1, startTime: -1 }).lean()
+  const latestInterviewByApplication = new Map()
+  for (const interview of interviews) {
+    const key = String(interview.applicationId)
+    if (!latestInterviewByApplication.has(key)) latestInterviewByApplication.set(key, interview)
+  }
 
   const rows = pageApplications
     .map((a) => {
       const match = matchByApplication.get(String(a._id))
+      const offer = offerByApplication.get(String(a._id))
+      const interview = latestInterviewByApplication.get(String(a._id))
       return {
         applicationId: a._id,
         applicationCode: a.applicationCode,
@@ -118,6 +139,27 @@ export const GET = withApi(async (req) => {
         appliedAt: a.appliedAt,
         stage: a.currentStageName,
         status: a.status,
+        selectionStatus: a.selectionStatus,
+        readyForOffer: a.readyForOffer,
+        offerId: offer?._id || null,
+        offerStatus: offer?.status || null,
+        offerSentAt: offer?.sentAt || null,
+        offerAcceptedAt: offer?.acceptedAt || null,
+        offerDeclinedAt: offer?.declinedAt || null,
+        offerExpiresAt: offer?.expiresAt || null,
+        latestInterview: interview ? {
+          interviewId: interview._id,
+          roundName: interview.roundName,
+          type: interview.type,
+          date: interview.date,
+          startTime: interview.startTime,
+          endTime: interview.endTime,
+          timezone: interview.timezone,
+          mode: interview.mode,
+          status: interview.status,
+          meetingUrl: interview.meetingUrl,
+          location: interview.location,
+        } : null,
         assignedRecruiterId: a.assignedRecruiterId,
         aiMatchScore: match?.overallScore ?? null,
         matchLabel: match?.matchLabel ?? null,

@@ -16,7 +16,9 @@ export const GET = withApi(async (req) => {
   const status = searchParams.get('status')
 
   const query = { tenantId }
-  if (session.role === 'EMPLOYEE') {
+  const myResignation = searchParams.get('myResignation') === 'true'
+
+  if (session.role === 'EMPLOYEE' || myResignation) {
     query.$or = [{ employee: session.userId }, { handoverEmployee: session.userId }]
   } else if (session.role === 'MANAGER') {
     const reports = await Employee.find({ reportingManager: session.userId, tenantId, deleted: false }).select('_id')

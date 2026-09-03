@@ -23,7 +23,7 @@ export const GET = withApi(async (req) => {
   if (action) query.action = action
 
   const totalElements = await AuditLog.countDocuments(query)
-  const content = await AuditLog.find(query).sort({ createdAt: -1 }).skip(page * size).limit(size)
+  const content = await AuditLog.find(query).sort({ createdAt: -1 }).skip(page * size).limit(size).lean()
 
   return ok(paged(content, page, size, totalElements))
 })

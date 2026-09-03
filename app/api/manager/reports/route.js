@@ -7,7 +7,6 @@ import Employee from '@/models/Employee'
 import Attendance from '@/models/Attendance'
 import LeaveRequest from '@/models/LeaveRequest'
 import Kra from '@/models/Kra'
-import Task from '@/models/Task'
 import PerformanceReview from '@/models/PerformanceReview'
 import TeamRequest from '@/models/TeamRequest'
 import Expense from '@/models/Expense'
@@ -74,14 +73,6 @@ export const GET = withApi(async (req) => {
           ? Math.floor((Date.now() - k.dueDate.getTime()) / 86400000) : 0,
       }))
       .filter((r) => (type === 'delay' ? r.delayDays > 0 : true))
-  } else if (type === 'task') {
-    const query = { assignedTo: { $in: reportIds }, tenantId, assignedBy: session.userId }
-    if (status) query.status = status
-    const records = await Task.find(query)
-    rows = records.map((t) => ({
-      employee: nameOf(t.assignedTo), title: t.title, dueDate: t.dueDate, status: t.status, priority: t.priority,
-      isOverdue: t.dueDate && t.dueDate < new Date() && !['COMPLETED', 'APPROVED'].includes(t.status),
-    }))
   } else if (type === 'performance') {
     const records = await PerformanceReview.find({ employee: { $in: reportIds }, tenantId, reviewer: session.userId })
     rows = records.map((p) => ({

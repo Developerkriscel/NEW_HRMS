@@ -53,6 +53,7 @@ export const POST = withApi(async (req) => {
     fromDate: body.fromDate || null,
     toDate: body.toDate || null,
     reason: body.reason,
+    status: 'PENDING',
     tenantId,
     createdBy: session.sub,
   })

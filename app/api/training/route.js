@@ -10,10 +10,18 @@ import Employee from '@/models/Employee'
 export const GET = withApi(async (req) => {
   const session = await requireAuth()
   const tenantId = requireTenantId(session)
+  const myTraining = new URL(req.url).searchParams.get('myTraining') === 'true'
   const status = new URL(req.url).searchParams.get('status')
   const query = { tenantId, deleted: false }
-  if (session.role === 'EMPLOYEE') query.attendees = session.userId
-  else await requireRole(session, ['HR_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN'])
+  
+  if (session.role === 'EMPLOYEE' || (session.role === 'MANAGER' && myTraining)) {
+    query.attendees = session.userId
+  } else if (session.role === 'MANAGER' && !myTraining) {
+    const reports = await Employee.find({ reportingManager: session.userId, tenantId, deleted: false }).select('_id')
+    query.attendees = { $in: reports.map((r) => r._id) }
+  } else {
+    await requireRole(session, ['HR_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN'])
+  }
   if (status) query.status = status
 
   const sessions = await TrainingSession.find(query)
@@ -25,7 +33,7 @@ export const GET = withApi(async (req) => {
 
 export const POST = withApi(async (req) => {
   const session = await requireAuth()
-  await requireRole(session, ['HR_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN'])
+  await requireRole(session, ['HR_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'MANAGER'])
   const tenantId = requireTenantId(session)
   const body = await req.json()
 

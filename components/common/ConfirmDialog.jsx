@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { AlertTriangle, Loader2, X } from 'lucide-react'
+import { Portal } from '@/components/common/Portal'
 
 // Shared confirmation modal for sensitive platform actions — captures a
 // required reason and shows a typed confirmation for the most destructive
@@ -41,8 +42,8 @@ export function ConfirmDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md p-6">
+    <Portal><div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="max-h-[90dvh] overflow-y-auto bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md p-6">
         <div className="flex items-start justify-between gap-4 mb-4">
           <div className="flex items-start gap-3">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${variant === 'danger' ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' : 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'}`}>
@@ -110,6 +111,7 @@ export function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+      </div>
+    </Portal>
   )
 }
