@@ -76,6 +76,10 @@ export async function middleware(req) {
   let session
   let sessionRead = false
 
+  if (pathname === '/api/health') {
+    return NextResponse.next()
+  }
+
   async function getSession() {
     if (!sessionRead) {
       session = await readSession(req)
