@@ -1,6 +1,7 @@
-// middleware.js redirects every request to "/" before this ever renders
-// (to a role dashboard if authenticated, else /login) — this is just a
-// fallback for the rare case middleware is bypassed.
+import { redirect } from 'next/navigation'
+
+// middleware.js normally redirects "/" based on role. This server fallback
+// keeps the Render root URL useful even if middleware is bypassed.
 export default function RootPage() {
-  return null
+  redirect('/login')
 }

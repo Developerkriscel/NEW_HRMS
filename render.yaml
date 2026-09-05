@@ -5,6 +5,7 @@ services:
     plan: starter
     buildCommand: npm ci && npm run build:render
     startCommand: npm run start:render
+    healthCheckPath: /api/health
     autoDeploy: true
     envVars:
       - key: NODE_ENV
