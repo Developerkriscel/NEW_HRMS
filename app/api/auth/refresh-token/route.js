@@ -5,6 +5,7 @@ import { withApi } from '@/lib/handler'
 import { ok, fail } from '@/lib/apiResponse'
 import { verifyJwt, generateAccessToken, generateRefreshToken, setAuthCookies, isTokenBlacklisted, isPlatformSessionRevoked, createPlatformSession, ACCESS_TOKEN_EXPIRY_MS } from '@/lib/auth'
 import { findUserByEmail, isAccountUsable, buildUserInfo, toAuthUser } from '@/lib/userLookup'
+import { createAccountSession, isAccountSessionRevoked, touchAccountSession } from '@/lib/accountSessions'
 
 const DEV_USER = {
   _id: 'dev-super-admin',
@@ -33,6 +34,9 @@ export const POST = withApi(async (req) => {
   if (decoded.type !== 'refresh') return fail('Invalid token type', 401, 'INVALID_TOKEN')
   if (await isTokenBlacklisted(refreshToken)) return fail('Token has been revoked', 401, 'TOKEN_REVOKED')
   if (decoded.isSuperAdmin && !decoded.devLogin && decoded.sessionId && await isPlatformSessionRevoked(decoded.sessionId)) {
+    return fail('Session has been revoked', 401, 'SESSION_REVOKED')
+  }
+  if (!decoded.devLogin && decoded.accountSessionId && await isAccountSessionRevoked(decoded.accountSessionId)) {
     return fail('Session has been revoked', 401, 'SESSION_REVOKED')
   }
 
@@ -68,6 +72,8 @@ export const POST = withApi(async (req) => {
     // fresh session record instead of silently running unsession-tracked.
     authUser.sessionId = decoded.sessionId || await createPlatformSession(authUser._id, req)
   }
+  authUser.accountSessionId = decoded.accountSessionId || await createAccountSession(authUser, req)
+  await touchAccountSession(authUser.accountSessionId)
 
   const newAccessToken = generateAccessToken(authUser)
   const newRefreshToken = generateRefreshToken(authUser)

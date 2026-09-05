@@ -25,7 +25,7 @@ export const POST = withApi(async (req, { params }) => {
   const { invoiceNumber, amount, currency, status, issuedAt, dueAt, notes } = body
   if (!invoiceNumber || !amount) return fail('invoiceNumber and amount are required', 400)
 
-  const subscription = await Subscription.findById(params.id)
+  const subscription = await Subscription.findOne({ _id: params.id, deleted: false })
   if (!subscription) return fail('Subscription not found', 404)
 
   const existing = await InvoiceMetadata.findOne({ invoiceNumber })

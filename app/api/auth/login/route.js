@@ -6,6 +6,7 @@ import { ok, fail } from '@/lib/apiResponse'
 import { comparePassword, generateAccessToken, generateRefreshToken, setAuthCookies, createPlatformSession, ACCESS_TOKEN_EXPIRY_MS } from '@/lib/auth'
 import { findUserByEmail, isAccountUsable, buildUserInfo, toAuthUser } from '@/lib/userLookup'
 import PlatformOperator from '@/models/PlatformOperator'
+import { createAccountSession } from '@/lib/accountSessions'
 
 // twoFactorCode is accepted for shape-compatibility with the old
 // LoginRequest DTO but, matching the original backend, is never validated —
@@ -30,6 +31,7 @@ export const POST = withApi(async (req) => {
     authUser.sessionId = await createPlatformSession(authUser._id, req)
     await PlatformOperator.updateOne({ _id: authUser._id }, { lastLoginAt: new Date(), lastLoginIp: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null })
   }
+  authUser.accountSessionId = await createAccountSession(authUser, req)
 
   const accessToken = generateAccessToken(authUser)
   const refreshToken = generateRefreshToken(authUser)

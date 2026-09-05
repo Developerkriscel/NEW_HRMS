@@ -24,7 +24,7 @@ export const GET = withApi(async (req) => {
   if (status) query.status = status
 
   let offers = await Offer.find(query)
-    .populate('candidateId', 'firstName lastName candidateCode')
+    .populate('candidateId', 'firstName lastName candidateCode email phone')
     .populate('jobId', 'jobCode jobTitle publicTitle')
     .sort({ updatedAt: -1 })
 
@@ -49,7 +49,10 @@ export const GET = withApi(async (req) => {
       offerId: o._id,
       offerCode: o.offerCode,
       candidateId: o.candidateId?._id,
+      candidateCode: o.candidateId?.candidateCode,
       candidateName: o.candidateId ? `${o.candidateId.firstName} ${o.candidateId.lastName}` : null,
+      candidateEmail: o.candidateId?.email,
+      candidatePhone: o.candidateId?.phone,
       jobId: o.jobId?._id,
       jobTitle: o.jobId?.publicTitle || o.jobId?.jobTitle,
       proposedCtc: v?.ctc ?? null,

@@ -31,6 +31,11 @@ const OfferVersionSchema = new mongoose.Schema(
 
     ctc: { type: Number, required: true },
     salaryStructureId: { type: mongoose.Schema.Types.ObjectId, ref: 'SalaryStructure', default: null },
+    salaryStructure: { type: String, default: 'Standard Bracket' },
+    pfEligible: { type: Boolean, default: true },
+    esiEligible: { type: Boolean, default: true },
+    ptEligible: { type: Boolean, default: true },
+    insuranceGroup: { type: String, default: null },
 
     probationPeriod: { type: String, default: null }, // free text, e.g. "6 months"
     noticePeriod: { type: String, default: null },

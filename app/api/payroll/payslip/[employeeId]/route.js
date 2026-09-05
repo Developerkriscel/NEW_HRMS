@@ -19,7 +19,7 @@ export const GET = withApi(async (req, { params }) => {
     return fail('You can only view your own payslip', 403)
   }
 
-  const payslip = await Payslip.findOne({ employee: params.employeeId, month, year, tenantId })
+  const payslip = await Payslip.findOne({ employee: params.employeeId, month, year, tenantId, deleted: false })
     .populate('employee', 'firstName lastName employeeCode')
   if (!payslip) return fail('Payslip not found', 404)
   if (session.role === 'EMPLOYEE' && !['FINALIZED', 'PAID'].includes(payslip.status)) {

@@ -67,6 +67,20 @@ export function OnboardingEmployeeDetails({ record }) {
   }
 
   const handleSave = () => {
+    const requiredKeys = ['firstName', 'lastName', 'officialEmail']
+    for (const key of requiredKeys) {
+      if (!formData[key] || !String(formData[key]).trim()) {
+        const el = document.getElementById(`field-${key}`)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          el.querySelector('input, select, textarea')?.focus()
+          el.classList.add('border-red-500', 'ring-4', 'ring-red-500/20')
+          setTimeout(() => el.classList.remove('border-red-500', 'ring-4', 'ring-red-500/20'), 2000)
+        }
+        return
+      }
+    }
+    
     setIsEditing(false)
     // Here we would typically save to the store/API
   }
@@ -74,7 +88,7 @@ export function OnboardingEmployeeDetails({ record }) {
   // Helper for rendering form fields elegantly
   const renderField = (label, key, type = 'text', options = null) => {
     return (
-      <div className="rounded-2xl border border-slate-200/70 bg-white/85 p-4 shadow-sm transition-all focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-500/10 dark:border-slate-800 dark:bg-slate-950/40">
+      <div id={`field-${key}`} className="rounded-2xl border border-slate-200/70 bg-white/85 p-4 shadow-sm transition-all focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-500/10 dark:border-slate-800 dark:bg-slate-950/40">
         <label className="mb-2 block text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{label}</label>
         {isEditing ? (
           options ? (

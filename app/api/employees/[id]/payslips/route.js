@@ -11,7 +11,7 @@ export const GET = withApi(async (_req, { params }) => {
   if (session.role === 'EMPLOYEE' && String(params.id) !== session.userId) {
     return fail('You can only view your own payslips', 403)
   }
-  const query = { employee: params.id, tenantId }
+  const query = { employee: params.id, tenantId, deleted: false }
   if (session.role === 'EMPLOYEE') {
     query.status = { $in: ['FINALIZED', 'PAID'] }
   }

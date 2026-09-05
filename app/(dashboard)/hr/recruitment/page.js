@@ -53,6 +53,8 @@ function parseCSVToCandidates(csvText) {
   const phoneIdx = findColIdx(headers, ['phone', 'mobile', 'contact', 'cell'])
   const expIdx = findColIdx(headers, ['exp', 'experience', 'years', 'yrs'])
   const roleIdx = findColIdx(headers, ['role', 'title', 'position', 'designation', 'job'])
+  const skillsIdx = findColIdx(headers, ['skill', 'technology', 'tech stack'])
+  const locationIdx = findColIdx(headers, ['location', 'city'])
   
   // Need at least one identifying column
   const hasName = nameIdx !== -1 || (firstIdx !== -1)
@@ -68,10 +70,12 @@ function parseCSVToCandidates(csvText) {
           name: cols[0] || '',
           email: cols[1] || '',
           phone: cols[2] || '',
-          exp: null,
-          role: '',
-          score: null,
-          source: 'CSV',
+      exp: null,
+      role: '',
+      skills: [],
+      location: '',
+      score: null,
+      source: 'CSV',
         }
       }).filter(c => (c.name || c.email) && c.name !== rawHeaders[0]) // skip header row if repeated
     }
@@ -93,10 +97,104 @@ function parseCSVToCandidates(csvText) {
       phone: (phoneIdx !== -1 ? cols[phoneIdx] : '') || '',
       exp: expIdx !== -1 ? cols[expIdx] || null : null,
       role: roleIdx !== -1 ? cols[roleIdx] || '' : '',
+      skills: skillsIdx !== -1 ? splitList(cols[skillsIdx]) : [],
+      location: locationIdx !== -1 ? cols[locationIdx] || '' : '',
       score: null,
       source: 'CSV',
     }
   }).filter(c => (c.name || c.email) && c.name.trim() !== '')
+}
+
+function splitList(value) {
+  return String(value || '')
+    .split(/[,;|/]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function normalizeText(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9+#. ]/g, ' ')
+}
+
+function tokenize(value) {
+  return normalizeText(value).split(/\s+/).filter((token) => token.length > 1)
+}
+
+function parseExperienceYears(value) {
+  if (value == null || value === '') return null
+  const match = String(value).match(/(\d+(?:\.\d+)?)/)
+  return match ? Number(match[1]) : null
+}
+
+function parseRequiredYears(position) {
+  const values = [position?.experience, position?.description, position?.responsibilities].filter(Boolean).join(' ')
+  const numbers = [...String(values).matchAll(/(\d+(?:\.\d+)?)/g)].map((match) => Number(match[1]))
+  return numbers.length ? Math.min(...numbers) : 0
+}
+
+function extractPositionSkills(position) {
+  const explicit = splitList(`${position?.requiredSkills || ''},${position?.preferredSkills || ''}`)
+  if (explicit.length) return explicit
+  const text = `${position?.title || ''} ${position?.description || ''} ${position?.responsibilities || ''}`
+  const common = ['react', 'next', 'node', 'javascript', 'typescript', 'python', 'java', 'mongodb', 'sql', 'excel', 'sales', 'marketing', 'design', 'figma', 'hr', 'payroll']
+  return common.filter((skill) => normalizeText(text).includes(skill))
+}
+
+function getMatchLabel(score) {
+  if (score >= 85) return 'Strong Match'
+  if (score >= 70) return 'Good Match'
+  if (score >= 50) return 'Potential Match'
+  return 'Low Match'
+}
+
+function analyzeCandidateForPosition(candidate, position) {
+  const candidateText = normalizeText([
+    candidate.name,
+    candidate.role,
+    candidate.exp,
+    candidate.location,
+    ...(candidate.skills || []),
+    ...(candidate.education || []),
+    ...(candidate.experience || []),
+  ].filter(Boolean).join(' '))
+  const positionTitleTokens = tokenize(position?.title)
+  const positionDeptTokens = tokenize(position?.department)
+  const positionSkills = extractPositionSkills(position)
+  const candidateSkills = (candidate.skills?.length ? candidate.skills : splitList(candidate.role)).map(normalizeText)
+  const matchedSkills = positionSkills.filter((skill) => candidateSkills.some((own) => own.includes(normalizeText(skill))) || candidateText.includes(normalizeText(skill)))
+  const titleHits = positionTitleTokens.filter((token) => candidateText.includes(token)).length
+  const deptHits = positionDeptTokens.filter((token) => candidateText.includes(token)).length
+  const candidateYears = parseExperienceYears(candidate.exp)
+  const requiredYears = parseRequiredYears(position)
+  const skillScore = positionSkills.length ? Math.round((matchedSkills.length / positionSkills.length) * 40) : Math.min(25, titleHits * 8)
+  const titleScore = positionTitleTokens.length ? Math.round((titleHits / positionTitleTokens.length) * 20) : 10
+  const expScore = candidateYears == null
+    ? 8
+    : requiredYears <= 0
+      ? 15
+      : Math.min(20, Math.round((candidateYears / requiredYears) * 20))
+  const deptScore = positionDeptTokens.length ? Math.min(10, deptHits * 5) : 5
+  const completenessScore = ['name', 'email', 'phone'].reduce((sum, key) => sum + (candidate[key] ? 3 : 0), 0)
+  const score = Math.max(20, Math.min(98, skillScore + titleScore + expScore + deptScore + completenessScore))
+  const strengths = []
+  const concerns = []
+  if (matchedSkills.length) strengths.push(`Matched skills: ${matchedSkills.slice(0, 4).join(', ')}`)
+  if (titleHits > 0) strengths.push('Role/title aligns with position')
+  if (candidateYears != null && requiredYears > 0 && candidateYears >= requiredYears) strengths.push(`${candidateYears}+ years meets experience need`)
+  if (positionSkills.length && matchedSkills.length < Math.ceil(positionSkills.length / 2)) concerns.push('Required skills need manual review')
+  if (candidateYears == null) concerns.push('Experience years not clearly available')
+  if (!candidate.email) concerns.push('Email missing, cannot add to pipeline until completed')
+  return {
+    ...candidate,
+    score,
+    matchScore: score,
+    matchLabel: getMatchLabel(score),
+    matchedSkills,
+    missingSkills: positionSkills.filter((skill) => !matchedSkills.includes(skill)),
+    strengths,
+    concerns,
+    analysisSummary: `${getMatchLabel(score)} for ${position?.title || 'this role'} based on uploaded profile data.`,
+  }
 }
 
 export default function RecruitmentDashboardPage() {
@@ -118,13 +216,14 @@ export default function RecruitmentDashboardPage() {
   const resumeInputRef = useRef(null)
   
   // Workflow States
-  const [candidatePhase, setCandidatePhase] = useState('idle') // idle, upload, processing, results
+  const [candidatePhase, setCandidatePhase] = useState('idle') // idle, upload, processing, uploaded, analyzing, results
   // Local status map for AI Match table — tracks Add/Reject instantly without waiting for DB
   const [localCandidateStatuses, setLocalCandidateStatuses] = useState({}) // { [email]: 'Pipeline' | 'Rejected' }
   // Real parsed candidates from backend API or CSV parsing
   const [parsedCandidates, setParsedCandidates] = useState([])
   const [uploadError, setUploadError] = useState(null)
   const [uploadFileName, setUploadFileName] = useState(null)
+  const [analysisError, setAnalysisError] = useState(null)
   const [selectedOfferCandidate, setSelectedOfferCandidate] = useState(null)
   const [schedulingCandidate, setSchedulingCandidate] = useState(null)
   const [schedulingStep, setSchedulingStep] = useState('details') // details, email, success
@@ -345,7 +444,8 @@ export default function RecruitmentDashboardPage() {
         }
         setParsedCandidates(candidates)
         setLocalCandidateStatuses({})
-        setCandidatePhase('results')
+        setAnalysisError(null)
+        setCandidatePhase('uploaded')
       } catch (err) {
         setUploadError('Failed to read the CSV file. Please check the format and try again.')
         setCandidatePhase('upload')
@@ -383,6 +483,8 @@ export default function RecruitmentDashboardPage() {
             phone: flexFind(row, ['phone', 'mobile', 'contact', 'cell']),
             exp: flexFind(row, ['exp', 'experience', 'years', 'yrs']) || null,
             role: flexFind(row, ['role', 'title', 'position', 'designation', 'job']),
+            skills: splitList(flexFind(row, ['skill', 'technology', 'tech stack'])),
+            location: flexFind(row, ['location', 'city']),
             score: null,
             source: 'EXCEL',
           }
@@ -394,7 +496,8 @@ export default function RecruitmentDashboardPage() {
         }
         setParsedCandidates(candidates)
         setLocalCandidateStatuses({})
-        setCandidatePhase('results')
+        setAnalysisError(null)
+        setCandidatePhase('uploaded')
       } catch (err) {
         console.error('Excel parse error:', err)
         setUploadError('Failed to read the Excel file. Please make sure it is a valid .xlsx or .xls file.')
@@ -422,6 +525,7 @@ export default function RecruitmentDashboardPage() {
           phone: parsed.personal?.phone || '',
           exp: parsed.personal?.totalExperience ? `${parsed.personal.totalExperience} Years` : null,
           role: parsed.personal?.currentDesignation || selectedPositionForCandidates?.title || '',
+          location: parsed.personal?.currentLocation || '',
           score: null,
           skills: (parsed.skills || []).map(s => s.skillName).slice(0, 10),
           education: (parsed.education || []).map(e => e.degree).slice(0, 3),
@@ -433,7 +537,8 @@ export default function RecruitmentDashboardPage() {
         }
         setParsedCandidates([candidate])
         setLocalCandidateStatuses({})
-        setCandidatePhase('results')
+        setAnalysisError(null)
+        setCandidatePhase('uploaded')
       } catch (err) {
         const msg = err.response?.data?.message || 'Failed to upload resume. Please try again.'
         setUploadError(msg)
@@ -444,16 +549,38 @@ export default function RecruitmentDashboardPage() {
     }
   }
 
+  const handleAnalyzeUploadedCandidates = async () => {
+    setAnalysisError(null)
+    if (!parsedCandidates.length) {
+      setAnalysisError('Please upload candidate data first.')
+      return
+    }
+    if (!selectedPositionForCandidates) {
+      setAnalysisError('Please open candidates from an open position before analyzing, so matching can use job details.')
+      return
+    }
+
+    setCandidatePhase('analyzing')
+    window.setTimeout(() => {
+      const analyzed = parsedCandidates
+        .map((candidate) => analyzeCandidateForPosition(candidate, selectedPositionForCandidates))
+        .sort((a, b) => (b.score || 0) - (a.score || 0))
+      setParsedCandidates(analyzed)
+      setLocalCandidateStatuses({})
+      setCandidatePhase('results')
+    }, 650)
+  }
+
   const handleAddAllToPipeline = async () => {
     // Update all to Pipeline in local state instantly
     const newStatuses = {}
-    parsedCandidates.forEach(c => { newStatuses[c.email || c.id] = 'Pipeline' })
+    parsedCandidates.filter(c => c.email).forEach(c => { newStatuses[c.email || c.id] = 'Pipeline' })
     setLocalCandidateStatuses(newStatuses)
 
     // Background save to DB
     try {
       const candidatesToImport = parsedCandidates.filter(cand => 
-        localCandidateStatuses[cand.email || cand.id] !== 'Pipeline'
+        cand.email && localCandidateStatuses[cand.email || cand.id] !== 'Pipeline'
       );
       if (candidatesToImport.length > 0) {
         const jobId = selectedPositionForCandidates?.id || null;
@@ -484,6 +611,10 @@ export default function RecruitmentDashboardPage() {
         console.warn('Selection failed:', err.message)
       }
     } else if (newStatus === 'Pipeline') {
+      if (!cand.email) {
+        setUploadError('Candidate email is required before adding to pipeline.')
+        return
+      }
       try {
         const jobId = selectedPositionForCandidates?.id || null;
         await candidateApi.bulkApply({ candidates: [cand], jobId, jobTitle: selectedPositionForCandidates?.title });
@@ -846,7 +977,6 @@ export default function RecruitmentDashboardPage() {
                   <Briefcase className="w-5 h-5" />
                   Candidates for: {selectedPositionForCandidates.title}
                 </h2>
-                <p className="text-sm text-indigo-600 dark:text-indigo-400 mt-1">Showing candidate pipeline specifically for this role.</p>
               </div>
               <div className="flex items-center gap-3">
                 {candidatePhase !== 'upload' && (
@@ -1309,7 +1439,70 @@ export default function RecruitmentDashboardPage() {
             </div>
           )}
 
-          {candidatePhase === 'processing' && (
+          {candidatePhase === 'uploaded' && (
+            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="border-b border-slate-100 bg-gradient-to-r from-emerald-50 via-white to-indigo-50 px-6 py-5 dark:border-slate-800 dark:from-emerald-500/10 dark:via-slate-900 dark:to-indigo-500/10">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600 shadow-sm dark:bg-slate-950 dark:text-emerald-300">
+                      <CheckCircle2 className="h-3.5 w-3.5" /> File Uploaded
+                    </div>
+                    <h2 className="text-xl font-black text-slate-950 dark:text-white">Candidate data is ready to analyze</h2>
+                    <p className="mt-1 text-sm font-medium text-slate-500">
+                      {parsedCandidates.length} candidate{parsedCandidates.length !== 1 ? 's' : ''} loaded from {uploadFileName || 'uploaded file'}.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    <button onClick={() => setCandidatePhase('upload')} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
+                      Upload Another
+                    </button>
+                    <button onClick={handleAnalyzeUploadedCandidates} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-700">
+                      <Sparkles className="h-4 w-4" /> Analyze Candidates
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 p-6 lg:grid-cols-3">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/40">
+                  <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Target Position</p>
+                  <p className="mt-1 text-lg font-black text-slate-900 dark:text-white">{selectedPositionForCandidates?.title || 'No position selected'}</p>
+                  <p className="text-sm font-medium text-slate-500">{selectedPositionForCandidates?.department || 'Department not set'}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/40">
+                  <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Matching Signals</p>
+                  <p className="mt-1 text-sm font-bold text-slate-700 dark:text-slate-200">
+                    Role title, skills, experience, department, and profile completeness.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/40">
+                  <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Next Step</p>
+                  <p className="mt-1 text-sm font-bold text-slate-700 dark:text-slate-200">
+                    Analyze first, then add best candidates to Applied pipeline.
+                  </p>
+                </div>
+              </div>
+
+              {analysisError && (
+                <div className="mx-6 mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
+                  {analysisError}
+                </div>
+              )}
+
+              <div className="border-t border-slate-100 px-6 py-4 dark:border-slate-800">
+                <div className="flex flex-wrap gap-2">
+                  {parsedCandidates.slice(0, 8).map((candidate) => (
+                    <span key={candidate.id || candidate.email} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                      {candidate.name || candidate.email}
+                    </span>
+                  ))}
+                  {parsedCandidates.length > 8 && <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-black text-indigo-600">+{parsedCandidates.length - 8} more</span>}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {(candidatePhase === 'processing' || candidatePhase === 'analyzing') && (
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-12 text-center shadow-sm flex flex-col items-center justify-center min-h-[400px]">
               <div className="relative w-24 h-24 mb-6">
                 <div className="absolute inset-0 border-4 border-indigo-100 dark:border-indigo-900/50 rounded-full"></div>
@@ -1319,10 +1512,12 @@ export default function RecruitmentDashboardPage() {
                 </div>
               </div>
               <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
-                {uploadFileName?.match(/\.(pdf|docx|doc)$/i) ? 'Parsing Resume...' : 'Processing Candidate Data...'}
+                {candidatePhase === 'analyzing' ? 'Analyzing Candidate Match...' : uploadFileName?.match(/\.(pdf|docx|doc)$/i) ? 'Parsing Resume...' : 'Processing Candidate Data...'}
               </h2>
               <p className="text-slate-500 dark:text-slate-400 max-w-md mx-auto mb-4">
-                {uploadFileName?.match(/\.(pdf|docx|doc)$/i) 
+                {candidatePhase === 'analyzing'
+                  ? `Matching uploaded candidates against ${selectedPositionForCandidates?.title || 'the selected role'} and ranking the best fit.`
+                  : uploadFileName?.match(/\.(pdf|docx|doc)$/i) 
                   ? 'Our AI is extracting candidate details, skills, experience and education from the resume.'
                   : `Reading and validating ${uploadFileName || 'your file'}...`
                 }
@@ -1338,10 +1533,10 @@ export default function RecruitmentDashboardPage() {
               <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-indigo-50/50 to-purple-50/50 dark:from-indigo-500/5 dark:to-purple-500/5">
                 <div>
                   <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-indigo-500" /> {parsedCandidates[0]?.source === 'RESUME' ? 'Parsed Resume Results' : 'Imported Candidates'}
+                    <Sparkles className="w-5 h-5 text-indigo-500" /> Best Candidate Matches
                   </h2>
                   <p className="text-sm font-medium text-slate-500 mt-1">
-                    {parsedCandidates.length} candidate{parsedCandidates.length !== 1 ? 's' : ''} found from {uploadFileName || 'uploaded file'}
+                    {parsedCandidates.length} analyzed candidate{parsedCandidates.length !== 1 ? 's' : ''} ranked from {uploadFileName || 'uploaded file'}
                     {selectedPositionForCandidates ? ` for "${selectedPositionForCandidates.title}"` : ''}
                   </p>
                 </div>
@@ -1362,9 +1557,12 @@ export default function RecruitmentDashboardPage() {
                 <table className="w-full text-left text-sm">
                   <thead className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-xs">
                     <tr>
+                      <th className="px-6 py-4">Rank</th>
                       <th className="px-6 py-4">Candidate</th>
+                      <th className="px-6 py-4">Match</th>
                       <th className="px-6 py-4">Experience</th>
                       <th className="px-6 py-4">Details</th>
+                      <th className="px-6 py-4">Analysis</th>
                       <th className="px-6 py-4 text-right">Action</th>
                     </tr>
                   </thead>
@@ -1374,9 +1572,34 @@ export default function RecruitmentDashboardPage() {
                       return (
                       <tr key={cand.id || i} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                         <td className="px-6 py-4">
+                          <div className={`flex h-9 w-9 items-center justify-center rounded-xl text-sm font-black ${
+                            i === 0 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
+                            : i === 1 ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300'
+                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                          }`}>
+                            #{i + 1}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
                           <div className="font-bold text-slate-900 dark:text-white">{cand.name}</div>
                           <div className="text-xs text-slate-500">{cand.email}</div>
                           {cand.phone && <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-1"><Phone className="w-3 h-3" /> {cand.phone}</div>}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="min-w-32">
+                            <div className="mb-1 flex items-center justify-between gap-2">
+                              <span className="text-lg font-black text-slate-900 dark:text-white">{cand.score || 0}%</span>
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
+                                cand.score >= 85 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
+                                : cand.score >= 70 ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300'
+                                : cand.score >= 50 ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
+                                : 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300'
+                              }`}>{cand.matchLabel || 'Not analyzed'}</span>
+                            </div>
+                            <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800">
+                              <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-emerald-500" style={{ width: `${Math.min(100, cand.score || 0)}%` }} />
+                            </div>
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <div>{cand.exp || '—'}</div>
@@ -1398,6 +1621,20 @@ export default function RecruitmentDashboardPage() {
                             <span className="text-xs text-slate-400">—</span>
                           )}
                         </td>
+                        <td className="px-6 py-4">
+                          <div className="max-w-xs space-y-1">
+                            {(cand.strengths || []).slice(0, 2).map((item, idx) => (
+                              <div key={idx} className="flex items-start gap-1.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-300">
+                                <Check className="mt-0.5 h-3 w-3 shrink-0" /> {item}
+                              </div>
+                            ))}
+                            {(cand.concerns || []).slice(0, 2).map((item, idx) => (
+                              <div key={idx} className="flex items-start gap-1.5 text-[11px] font-bold text-amber-600 dark:text-amber-300">
+                                <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" /> {item}
+                              </div>
+                            ))}
+                          </div>
+                        </td>
                         <td className="px-6 py-4 text-right">
                           {localStatus === 'Pipeline' ? (
                             <span className="inline-flex items-center gap-1 text-sm font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 px-4 py-2 rounded-xl">
@@ -1417,7 +1654,8 @@ export default function RecruitmentDashboardPage() {
                               </button>
                               <button 
                                 onClick={() => handleCandidateStatusChange(cand, 'Pipeline')}
-                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-sm transition-colors"
+                                disabled={!cand.email}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-sm transition-colors disabled:cursor-not-allowed disabled:bg-slate-300"
                               >
                                 Add to Pipeline
                               </button>

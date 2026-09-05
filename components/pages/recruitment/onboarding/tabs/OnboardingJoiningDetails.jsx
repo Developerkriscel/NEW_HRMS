@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react'
 import { Building, Briefcase, CreditCard, Clock, Save, Edit3, X, Sparkles } from 'lucide-react'
 import { branchApi, departmentApi, shiftApi } from '@/services/departmentApi'
 import { preboardingApi } from '@/services/preboardingApi'
-import { useOnboardingStore } from '@/store/onboardingStore'
+import { employeeApi } from '@/services/employeeApi'
 
 function SectionCard({ icon: Icon, title, description, children, tone = 'blue' }) {
   const tones = {
@@ -64,8 +64,7 @@ function formatDays(days = []) {
   return days.join(', ')
 }
 
-export function OnboardingJoiningDetails({ record }) {
-  const updateJoiningConfig = useOnboardingStore((s) => s.updateJoiningConfig)
+export function OnboardingJoiningDetails({ record, onRefresh }) {
   const recordShift = normalizeShift(record.shift || record.offer?.shift)
   const recordBranch = record.branch || null
   const [isEditing, setIsEditing] = useState(false)
@@ -75,6 +74,7 @@ export function OnboardingJoiningDetails({ record }) {
   const [departments, setDepartments] = useState([])
   const [shifts, setShifts] = useState([])
   const [branches, setBranches] = useState([])
+  const [managers, setManagers] = useState([])
   const [departmentError, setDepartmentError] = useState(false)
   const [shiftError, setShiftError] = useState(false)
   const [branchError, setBranchError] = useState(false)
@@ -105,15 +105,21 @@ export function OnboardingJoiningDetails({ record }) {
     leavePolicy: 'Standard Probation',
     weeklyOff: formatDays(recordShift?.weeklyOff || ['Saturday', 'Sunday']),
     holidayCalendar: 'India - Karnataka',
-    ctc: '',
-    salaryStructure: 'Standard Bracket',
-    pfEligible: 'Yes',
-    ptEligible: 'Yes',
-    insuranceGroup: 'Tier 2'
+    ctc: record.ctc || record.offer?.ctc || '',
+    salaryStructure: record.salaryStructure || record.offer?.salaryStructure || 'Standard Bracket',
+    pfEligible: record.pfEligible === false || record.offer?.pfEligible === false ? 'No' : 'Yes',
+    esiEligible: record.esiEligible === false || record.offer?.esiEligible === false ? 'No' : 'Yes',
+    ptEligible: record.ptEligible === false || record.offer?.ptEligible === false ? 'No' : 'Yes',
+    insuranceGroup: record.insuranceGroup || record.offer?.insuranceGroup || 'Tier 2'
   })
 
   useEffect(() => {
-    Promise.allSettled([departmentApi.getAll(), branchApi.getAll(), shiftApi.getAll()]).then(([departmentResult, branchResult, shiftResult]) => {
+    Promise.allSettled([
+      departmentApi.getAll(),
+      branchApi.getAll(),
+      shiftApi.getAll(),
+      employeeApi.getAll({ size: 1000 })
+    ]).then(([departmentResult, branchResult, shiftResult, employeeResult]) => {
       if (departmentResult.status === 'fulfilled') {
         setDepartments((departmentResult.value.data.data || []).filter((department) => department.active !== false))
         setDepartmentError(false)
@@ -136,6 +142,14 @@ export function OnboardingJoiningDetails({ record }) {
       } else {
         setShifts([])
         setShiftError(true)
+      }
+
+      if (employeeResult.status === 'fulfilled') {
+        const emps = employeeResult.value.data?.data?.content || employeeResult.value.data?.data || []
+        const eligible = emps.filter(e => ['COMPANY_ADMIN', 'HR_MANAGER', 'MANAGER'].includes(e.role))
+        setManagers(eligible)
+      } else {
+        setManagers([])
       }
     })
   }, [])
@@ -201,33 +215,33 @@ export function OnboardingJoiningDetails({ record }) {
   }
 
   const handleSave = async () => {
+    const requiredKeys = ['department', 'designation', 'employmentType', 'workLocation', 'joiningDate', 'reportingManager']
+    for (const key of requiredKeys) {
+      if (!formData[key] || !String(formData[key]).trim()) {
+        const el = document.getElementById(`field-${key}`)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          el.querySelector('input, select, textarea')?.focus()
+          el.classList.add('border-red-500', 'ring-4', 'ring-red-500/20')
+          setTimeout(() => el.classList.remove('border-red-500', 'ring-4', 'ring-red-500/20'), 2000)
+        }
+        return
+      }
+    }
+
     setSaving(true)
     setSaveError('')
     setSaveMessage('')
     try {
-      updateJoiningConfig(record.id, {
-        department: departments.find((department) => department._id === formData.department)?.name || record.department,
-        departmentId: formData.department,
-        designation: formData.designation,
-        role: formData.role,
-        employmentType: formData.employmentType,
-        workMode: formData.workMode,
-        workLocation: formData.workLocation,
-        reportingManager: formData.reportingManager,
-        joiningDate: formData.joiningDate,
-        branch: branches.find((branch) => branch._id === formData.branch) || formData.branch,
-        shift: shifts.find((shift) => shift._id === formData.shift) || formData.shift,
-      })
-
-      if (/^[a-f\d]{24}$/i.test(record.id)) {
-        await preboardingApi.updateJoiningConfig(record.id, formData)
-      }
+      if (!/^[a-f\d]{24}$/i.test(record.id)) throw new Error('This onboarding profile is not connected to database')
+      await preboardingApi.updateJoiningConfig(record.id, formData)
 
       setIsEditing(false)
       setSaveMessage('Joining configuration saved')
+      await onRefresh?.()
       window.setTimeout(() => setSaveMessage(''), 3000)
     } catch (err) {
-      setSaveError(err.response?.data?.message || 'Failed to save joining configuration')
+      setSaveError(err.response?.data?.message || err.message || 'Failed to save joining configuration')
     } finally {
       setSaving(false)
     }
@@ -254,7 +268,7 @@ export function OnboardingJoiningDetails({ record }) {
     const isDerived = DERIVED_FIELDS.has(key)
 
     return (
-      <div className="rounded-2xl border border-slate-200/70 bg-white/85 p-4 shadow-sm transition-all focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-500/10 dark:border-slate-800 dark:bg-slate-950/40">
+      <div id={`field-${key}`} className="rounded-2xl border border-slate-200/70 bg-white/85 p-4 shadow-sm transition-all focus-within:border-violet-300 focus-within:ring-4 focus-within:ring-violet-500/10 dark:border-slate-800 dark:bg-slate-950/40">
         <div className="mb-2 flex items-center justify-between gap-2">
           <label className="block text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{label}</label>
           {isDerived && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-extrabold text-blue-600 dark:bg-blue-500/10 dark:text-blue-300">Auto</span>}
@@ -276,6 +290,8 @@ export function OnboardingJoiningDetails({ record }) {
       </div>
     )
   }
+
+  const managerOptions = managers.map(m => ({ value: m._id, label: `${m.firstName} ${m.lastName}` }))
 
   return (
     <div className="animate-in fade-in p-5 pb-24 duration-300 md:p-8">
@@ -322,7 +338,7 @@ export function OnboardingJoiningDetails({ record }) {
             {renderField('Authority / Role', 'role', 'text', ['EMPLOYEE', 'MANAGER', 'HR_MANAGER', 'FINANCE', 'IT_ADMIN'])}
             {renderField('Employment Type', 'employmentType', 'text', ['Full Time', 'Part Time', 'Contract', 'Intern'])}
             {renderField('Joining Date', 'joiningDate', 'date')}
-            {renderField('Reporting Manager', 'reportingManager')}
+            {renderField('Reporting Manager', 'reportingManager', 'text', managerOptions)}
             {renderField('Probation Period', 'probationPeriod')}
           </div>
         </SectionCard>
@@ -369,10 +385,11 @@ export function OnboardingJoiningDetails({ record }) {
         <SectionCard icon={CreditCard} title="Payroll & Benefits" description="Salary, statutory benefits, and insurance grouping." tone="emerald">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {renderField('Annual CTC', 'ctc', 'number')}
-            {renderField('Salary Structure', 'salaryStructure')}
+            {renderField('Salary Structure', 'salaryStructure', 'text', ['Standard Bracket', 'No PF Bracket', 'Executive Bracket', 'Custom'])}
             {renderField('PF Eligible', 'pfEligible', 'text', ['Yes', 'No'])}
+            {renderField('ESI Eligible', 'esiEligible', 'text', ['Yes', 'No'])}
             {renderField('PT Eligible', 'ptEligible', 'text', ['Yes', 'No'])}
-            {renderField('Insurance Group', 'insuranceGroup')}
+            {renderField('Insurance Group', 'insuranceGroup', 'text', ['Not Applicable', 'Tier 1', 'Tier 2', 'Tier 3'])}
           </div>
         </SectionCard>
 

@@ -12,6 +12,12 @@ function isObjectId(value) {
   return typeof value === 'string' && /^[a-f\d]{24}$/i.test(value)
 }
 
+function toBool(value, fallback = true) {
+  if (value === undefined || value === null || value === '') return fallback
+  if (typeof value === 'boolean') return value
+  return String(value).toLowerCase() === 'yes' || String(value).toLowerCase() === 'true'
+}
+
 export const GET = withApi(async (req, { params }) => {
   const session = await requireAuth()
   await requireRole(session, PREBOARDING_SENSITIVE_VIEW_ROLES)
@@ -40,6 +46,12 @@ export const PUT = withApi(async (req, { params }) => {
   if (body.employmentType !== undefined) patch.employmentType = body.employmentType
   if (body.workMode !== undefined) patch.workMode = body.workMode
   if (body.probationPeriod !== undefined) patch.probationPeriod = body.probationPeriod
+  if (body.ctc !== undefined && body.ctc !== '') patch.ctc = Number(body.ctc)
+  if (body.salaryStructure !== undefined) patch.salaryStructure = body.salaryStructure
+  if (body.pfEligible !== undefined) patch.pfEligible = toBool(body.pfEligible)
+  if (body.esiEligible !== undefined) patch.esiEligible = toBool(body.esiEligible)
+  if (body.ptEligible !== undefined) patch.ptEligible = toBool(body.ptEligible)
+  if (body.insuranceGroup !== undefined) patch.insuranceGroup = body.insuranceGroup
   if (body.joiningDate) patch.joiningDate = new Date(body.joiningDate)
 
   const version = await OfferVersion.findOneAndUpdate(

@@ -37,7 +37,7 @@ export const PATCH = withApi(async (req) => {
   }
 
   const result = await Payslip.updateMany(
-    { tenantId, month, year, status: { $in: allowedPreviousStatuses } },
+    { tenantId, month, year, deleted: false, status: { $in: allowedPreviousStatuses } },
     { $set: update }
   )
 

@@ -18,12 +18,20 @@ function startOfToday() {
   return new Date(new Date().toDateString())
 }
 
+function todayRange() {
+  const start = startOfToday()
+  const end = new Date(start)
+  end.setDate(start.getDate() + 1)
+  return { start, end }
+}
+
 export const POST = withApi(async (req) => {
   const session = await requireAuth()
   const tenantId = requireTenantId(session)
   const body = await req.json().catch(() => ({}))
 
   const today = startOfToday()
+  const { start, end } = todayRange()
   const now = new Date()
 
   let source = (body.source || 'WEB').toUpperCase()
@@ -31,7 +39,7 @@ export const POST = withApi(async (req) => {
     return fail('Invalid check-in source', 400)
   }
 
-  let attendance = await Attendance.findOne({ employee: session.userId, date: today, tenantId })
+  let attendance = await Attendance.findOne({ employee: session.userId, date: { $gte: start, $lt: end }, tenantId })
   if (attendance?.checkInTime) {
     return fail('You have already checked in today', 400)
   }

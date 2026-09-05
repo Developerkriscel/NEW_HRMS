@@ -1,22 +1,54 @@
 import React, { useState } from 'react'
-import { Plus, Check, MoreVertical, X, Calendar as CalendarIcon, User as UserIcon } from 'lucide-react'
-import { useOnboardingStore } from '@/store/onboardingStore'
+import { Plus, Check, Trash2, X, Calendar as CalendarIcon } from 'lucide-react'
 import { Portal } from '@/components/common/Portal'
+import { preboardingApi } from '@/services/preboardingApi'
 
-export function OnboardingTasks({ record }) {
-  const { updateTask, addTask } = useOnboardingStore()
+export function OnboardingTasks({ record, onRefresh }) {
   const [isAdding, setIsAdding] = useState(false)
   const [newTask, setNewTask] = useState({ name: '', assignedTo: '', dueDate: '', priority: 'Medium', required: true })
+  const [saving, setSaving] = useState('')
+  const [error, setError] = useState('')
 
-  const handleToggleStatus = (taskId, currentStatus) => {
-    updateTask(record.id, taskId, { status: currentStatus === 'COMPLETED' ? 'PENDING' : 'COMPLETED' })
+  const handleToggleStatus = async (taskId, currentStatus) => {
+    setSaving(taskId)
+    setError('')
+    try {
+      await preboardingApi.updateTask(record.id, taskId, { status: currentStatus === 'COMPLETED' ? 'PENDING' : 'COMPLETED' })
+      await onRefresh?.()
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to update task')
+    } finally {
+      setSaving('')
+    }
   }
 
-  const handleAddTask = () => {
+  const handleAddTask = async () => {
     if (newTask.name && newTask.assignedTo) {
-      addTask(record.id, newTask)
-      setIsAdding(false)
-      setNewTask({ name: '', assignedTo: '', dueDate: '', priority: 'Medium', required: true })
+      setSaving('new')
+      setError('')
+      try {
+        await preboardingApi.addTask(record.id, newTask)
+        setIsAdding(false)
+        setNewTask({ name: '', assignedTo: '', dueDate: '', priority: 'Medium', required: true })
+        await onRefresh?.()
+      } catch (err) {
+        setError(err.response?.data?.message || 'Failed to add task')
+      } finally {
+        setSaving('')
+      }
+    }
+  }
+
+  const handleDeleteTask = async (taskId) => {
+    setSaving(taskId)
+    setError('')
+    try {
+      await preboardingApi.deleteTask(record.id, taskId)
+      await onRefresh?.()
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to delete task')
+    } finally {
+      setSaving('')
     }
   }
 
@@ -40,6 +72,11 @@ export function OnboardingTasks({ record }) {
           <Plus className="w-4 h-4" /> Add Task
         </button>
       </div>
+      {error && (
+        <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">
+          {error}
+        </div>
+      )}
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden mb-6 flex-1">
         <table className="w-full text-left border-collapse">
@@ -61,6 +98,7 @@ export function OnboardingTasks({ record }) {
                   <td className="py-4 px-6 text-center">
                     <button 
                       onClick={() => handleToggleStatus(task.id, task.status)}
+                      disabled={saving === task.id}
                       className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isCompleted ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 dark:border-slate-600 hover:border-blue-500'}`}
                     >
                       {isCompleted && <Check className="w-4 h-4" />}
@@ -90,8 +128,13 @@ export function OnboardingTasks({ record }) {
                     </span>
                   </td>
                   <td className="py-4 px-6 text-right">
-                    <button className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700">
-                      <MoreVertical className="w-4 h-4" />
+                    <button
+                      onClick={() => handleDeleteTask(task.id)}
+                      disabled={saving === task.id}
+                      className="p-2 text-slate-400 hover:text-red-600 dark:hover:text-red-400 bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 disabled:opacity-50"
+                      title="Delete task"
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </td>
                 </tr>
@@ -137,7 +180,9 @@ export function OnboardingTasks({ record }) {
               </label>
               <div className="pt-4 flex gap-3">
                 <button onClick={() => setIsAdding(false)} className="btn-secondary flex-1 justify-center">Cancel</button>
-                <button onClick={handleAddTask} disabled={!newTask.name || !newTask.assignedTo} className="btn-primary flex-1 justify-center">Add Task</button>
+                <button onClick={handleAddTask} disabled={!newTask.name || !newTask.assignedTo || saving === 'new'} className="btn-primary flex-1 justify-center">
+                  {saving === 'new' ? 'Saving...' : 'Add Task'}
+                </button>
               </div>
             </div>
           </div>

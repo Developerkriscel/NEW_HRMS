@@ -7,6 +7,7 @@ const PayslipSchema = new mongoose.Schema(
     month: { type: Number, required: true },
     year: { type: Number, required: true },
     workingDays: { type: Number, default: 0 },
+    paidDays: { type: Number, default: 0 },
     presentDays: { type: Number, default: 0 },
     leaveDays: { type: Number, default: 0 },
     absentDays: { type: Number, default: 0 },

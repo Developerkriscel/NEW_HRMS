@@ -22,14 +22,14 @@ export const POST = withApi(async (req) => {
     return fail('Valid month and year are required', 400)
   }
 
-  const lockedQuery = { tenantId, month, year, status: { $in: ['APPROVED', 'FINALIZED', 'PAID'] } }
+  const protectedQuery = { tenantId, month, year, status: { $in: ['PROCESSING', 'REVIEW', 'APPROVED', 'FINALIZED', 'PAID'] } }
   if (selectedEmployeeIds.length > 0) {
-    lockedQuery.employee = { $in: selectedEmployeeIds }
+    protectedQuery.employee = { $in: selectedEmployeeIds }
   }
 
-  const alreadyLocked = await Payslip.findOne(lockedQuery)
-  if (alreadyLocked) {
-    return fail('One or more payslips for this period are already approved/finalized/paid and cannot be re-run.', 400)
+  const alreadyProcessed = await Payslip.findOne(protectedQuery).select('status').lean()
+  if (alreadyProcessed) {
+    return fail(`A payslip for this period is already in ${alreadyProcessed.status} and cannot be re-run. Cancel it or process a new period.`, 400)
   }
 
   const query = { tenantId, deleted: false, status: { $in: ['ACTIVE', 'PROBATION', 'NOTICE_PERIOD'] } }
@@ -38,6 +38,7 @@ export const POST = withApi(async (req) => {
   }
 
   const employees = await Employee.find(query).limit(1000)
+  if (!employees.length) return fail('No active employees found for this payroll period.', 400)
 
   let succeeded = 0
   let failed = 0

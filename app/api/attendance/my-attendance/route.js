@@ -14,11 +14,12 @@ export const GET = withApi(async (req) => {
   const defaultFrom = new Date(now.getFullYear(), now.getMonth(), 1)
   const from = searchParams.get('from') ? new Date(searchParams.get('from')) : defaultFrom
   const to = searchParams.get('to') ? new Date(searchParams.get('to')) : now
+  if (searchParams.get('to')) to.setDate(to.getDate() + 1)
 
   const records = await Attendance.find({
     employee: session.userId,
     tenantId,
-    date: { $gte: from, $lte: to },
+    date: { $gte: from, $lt: to },
   }).sort({ date: -1 })
 
   return ok(records)

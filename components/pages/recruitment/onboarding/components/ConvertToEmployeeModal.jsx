@@ -1,25 +1,39 @@
 import React, { useState } from 'react'
-import { X, CheckCircle2, AlertTriangle, ArrowRight } from 'lucide-react'
-import { useOnboardingStore } from '@/store/onboardingStore'
+import { X, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { Portal } from '@/components/common/Portal'
+import { preboardingApi } from '@/services/preboardingApi'
 
 export function ConvertToEmployeeModal({ isOpen, onClose, record }) {
   const router = useRouter()
-  const { convertToEmployee } = useOnboardingStore()
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [error, setError] = useState('')
+  const [conversionResult, setConversionResult] = useState(null)
 
   if (!isOpen || !record) return null
 
-  const handleConvert = () => {
+  const handleConvert = async () => {
     setLoading(true)
-    // Simulate API call
-    setTimeout(() => {
-      convertToEmployee(record.id)
+    setError('')
+    setConversionResult(null)
+    try {
+      if (record.rawStatus === 'READY_TO_JOIN') {
+        await preboardingApi.markJoined(record.id)
+      }
+      const res = await preboardingApi.convertToEmployee(record.id)
+      const result = res.data.data
+      setConversionResult(result)
       setLoading(false)
       setSuccess(true)
-    }, 1000)
+    } catch (err) {
+      const message = err.response?.data?.message || 'Failed to create employee from onboarding.'
+      const missing = err.response?.data?.data?.missingRequired || []
+      setError(missing.length
+        ? `${message}: ${missing.map((item) => item.label || item.key).join(', ')}`
+        : message)
+      setLoading(false)
+    }
   }
 
   return (
@@ -34,30 +48,30 @@ export function ConvertToEmployeeModal({ isOpen, onClose, record }) {
               </div>
               <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Employee Created Successfully</h2>
               <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-                An automated email has been sent to the employee with these login details.
+                Employee master has been created in MongoDB and will now appear in All Employees.
               </p>
 
               <div className="space-y-3 text-left mb-8">
                 <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl p-3 flex justify-between items-center">
                   <span className="text-xs font-semibold text-slate-500 uppercase">Employee ID</span>
-                  <span className="font-mono text-sm font-bold text-slate-900 dark:text-white">NEXA-{Math.floor(1000 + Math.random() * 9000)}</span>
+                  <span className="font-mono text-sm font-bold text-slate-900 dark:text-white">{conversionResult?.employee?.employeeCode || '-'}</span>
                 </div>
                 <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl p-3 flex justify-between items-center">
                   <span className="text-xs font-semibold text-slate-500 uppercase">Login Email</span>
-                  <span className="text-sm font-medium text-slate-900 dark:text-white">{record.candidate.email}</span>
+                  <span className="text-sm font-medium text-slate-900 dark:text-white">{conversionResult?.employee?.email || record.candidate.email}</span>
                 </div>
                 <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl p-3 flex justify-between items-center">
                   <span className="text-xs font-semibold text-slate-500 uppercase">Password</span>
-                  <span className="font-mono text-sm font-bold text-slate-900 dark:text-white">Start@{Math.floor(1000 + Math.random() * 9000)}</span>
+                  <span className="font-mono text-sm font-bold text-slate-900 dark:text-white">{conversionResult?.tempPassword || (conversionResult?.alreadyCompleted ? 'Already created' : '-')}</span>
                 </div>
               </div>
 
               <div className="flex gap-3">
                 <button onClick={() => {
                   onClose()
-                  router.push('/hr/onboarding')
+                  router.push('/hr/employees')
                 }} className="btn-primary w-full justify-center">
-                  Done (Back to Onboarding)
+                  View in Employees
                 </button>
               </div>
             </div>
@@ -73,6 +87,11 @@ export function ConvertToEmployeeModal({ isOpen, onClose, record }) {
               </div>
 
               <div className="p-6">
+                {error && (
+                  <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
+                    {error}
+                  </div>
+                )}
                 <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30 rounded-2xl p-4 mb-6 flex gap-4 text-amber-800 dark:text-amber-400">
                   <AlertTriangle className="w-5 h-5 shrink-0" />
                   <div className="text-sm">

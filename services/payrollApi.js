@@ -11,4 +11,6 @@ export const payrollApi = {
   downloadPayslipPdf: (payslipId) => api.get(`/payroll/payslip/${payslipId}/pdf`, { responseType: 'blob' }),
   getReports: (params) => api.get('/payroll/reports', { params }),
   getSalaryStructure: (employeeId) => api.get(`/payroll/salary-structure/${employeeId}`),
+  listSalaryStructures: (params) => api.get('/payroll/salary-structures', { params }),
+  saveSalaryStructure: (employeeId, payload) => api.put(`/payroll/salary-structure/${employeeId}`, payload),
 }

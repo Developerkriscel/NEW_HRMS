@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { ok, fail } from '@/lib/apiResponse'
 import { ApiError, blacklistToken, clearAuthCookies, decodeJwt, revokePlatformSession, ACCESS_COOKIE, REFRESH_COOKIE } from '@/lib/auth'
+import { revokeAccountSession } from '@/lib/accountSessions'
 
 export async function POST() {
   try {
@@ -18,6 +19,9 @@ export async function POST() {
       if (refreshToken) await blacklistToken(refreshToken)
       if (decoded?.isSuperAdmin && decoded?.sessionId) {
         await revokePlatformSession(decoded.sessionId, { revokedBy: decoded.userId, reason: 'Operator logout' })
+      }
+      if (decoded?.accountSessionId) {
+        await revokeAccountSession(decoded.accountSessionId, { revokedBy: decoded.userId, reason: 'User logout' })
       }
     }
 

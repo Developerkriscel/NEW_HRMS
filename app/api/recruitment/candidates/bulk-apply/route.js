@@ -12,6 +12,8 @@ import Candidate from '@/models/Candidate'
 import Application from '@/models/Application'
 import Job from '@/models/Job'
 import JobPipelineStage from '@/models/JobPipelineStage'
+import CandidateJobMatch from '@/models/CandidateJobMatch'
+import { MATCHING_MODEL_VERSION, MATCHING_RULES_VERSION, getMatchLabel } from '@/lib/matchingConstants'
 
 function normalizeBulkSource(source) {
   const normalized = String(source || '').trim().toUpperCase()
@@ -130,6 +132,41 @@ export const POST = withApi(async (req) => {
           description: `Application ${applicationDoc.applicationCode} created via bulk import`, 
           req 
         })
+      }
+
+      const analyzedScore = Number(cand.score ?? cand.matchScore)
+      if (Number.isFinite(analyzedScore) && analyzedScore > 0) {
+        await CandidateJobMatch.findOneAndUpdate(
+          { tenantId, applicationId: applicationDoc._id },
+          {
+            $set: {
+              candidateId: candidateDoc._id,
+              applicationId: applicationDoc._id,
+              jobId: activeJobId,
+              overallScore: Math.round(Math.max(0, Math.min(100, analyzedScore))),
+              skillsScore: Math.round(Math.max(0, Math.min(100, analyzedScore))),
+              experienceScore: Math.round(Math.max(0, Math.min(100, analyzedScore))),
+              educationScore: 50,
+              locationScore: cand.location ? 70 : 50,
+              ctcScore: 50,
+              noticeScore: 50,
+              screeningScore: Math.round(Math.max(0, Math.min(100, analyzedScore))),
+              matchLabel: getMatchLabel(Math.round(Math.max(0, Math.min(100, analyzedScore)))),
+              matchedSkills: { required: cand.matchedSkills || [], preferred: [] },
+              missingSkills: { required: cand.missingSkills || [], preferred: [] },
+              strengths: cand.strengths || [],
+              concerns: (cand.concerns || []).map((text) => ({ severity: 'MODERATE', text })),
+              summary: cand.analysisSummary || `Imported candidate analyzed at ${Math.round(analyzedScore)}% match.`,
+              modelVersion: MATCHING_MODEL_VERSION,
+              rulesVersion: MATCHING_RULES_VERSION,
+              generatedAt: new Date(),
+              tenantId,
+              updatedBy: session.sub,
+            },
+            $setOnInsert: { createdBy: session.sub },
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        )
       }
 
       results.push(applicationDoc)

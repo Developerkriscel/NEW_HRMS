@@ -20,7 +20,7 @@ export const POST = withApi(async (req) => {
   }
 
   const result = await Payslip.updateMany(
-    { tenantId, month, year, status: 'REVIEW' },
+    { tenantId, month, year, deleted: false, status: 'REVIEW' },
     { $set: { status: 'APPROVED', updatedBy: session.sub } }
   )
 

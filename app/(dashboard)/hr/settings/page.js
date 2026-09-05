@@ -1,15 +1,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { authApi } from '@/services/authApi'
 import { companyApi } from '@/services/companyApi'
 import { useAuthStore } from '@/store/authStore'
 import { HolidaysSection } from '@/components/pages/HolidaysSection'
 import { DepartmentsSection } from '@/components/pages/DepartmentsSection'
 import { BranchesSection } from '@/components/pages/BranchesSection'
 import { ShiftsSection } from '@/components/pages/ShiftsSection'
+import { SecuritySettingsSection } from '@/components/pages/SecuritySettingsSection'
 import { PageLoader } from '@/components/common/LoadingSpinner'
-import { Building, Clock, Layers, MapPin, Clock3, CalendarDays, Settings, Lock, CheckCircle2, CreditCard } from 'lucide-react'
+import { Building, Clock, Layers, MapPin, Clock3, CalendarDays, Lock, CheckCircle2 } from 'lucide-react'
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
@@ -37,10 +37,6 @@ export default function HRSettingsPage() {
 
   const [hrMessage, setHrMessage] = useState('')
   const [hrSaving, setHrSaving] = useState(false)
-
-  const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '' })
-  const [pwMessage, setPwMessage] = useState('')
-  const [pwSaving, setPwSaving] = useState(false)
 
   useEffect(() => {
     companyApi.getProfile()
@@ -82,21 +78,6 @@ export default function HRSettingsPage() {
       setTimeout(() => setHrMessage(''), 3000)
     } finally {
       setHrSaving(false)
-    }
-  }
-
-  async function handlePasswordChange(e) {
-    e.preventDefault()
-    setPwSaving(true)
-    setPwMessage('')
-    try {
-      await authApi.changePassword(pwForm.currentPassword, pwForm.newPassword)
-      setPwMessage('Password changed successfully')
-      setPwForm({ currentPassword: '', newPassword: '' })
-    } catch (err) {
-      setPwMessage(err.response?.data?.message || 'Failed to change password')
-    } finally {
-      setPwSaving(false)
     }
   }
 
@@ -346,25 +327,7 @@ export default function HRSettingsPage() {
 
 
           {activeTab === 'security' && (
-            <form onSubmit={handlePasswordChange} className="glass-panel rounded-3xl p-8 max-w-xl animate-in fade-in slide-in-from-bottom-4 duration-500 border border-white/40 dark:border-slate-700/50 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-red-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-              <div className="relative z-10">
-                <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-3">
-                  <div className="p-2.5 bg-red-50 dark:bg-red-500/10 rounded-xl text-red-600 dark:text-red-400">
-                    <Lock className="w-6 h-6" />
-                  </div>
-                  Change Password
-                </h3>
-                {pwMessage && <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium mb-4">{pwMessage}</p>}
-                <div className="space-y-4">
-                  <input required type="password" placeholder="Current password" className="input-field" value={pwForm.currentPassword} onChange={(e) => setPwForm({ ...pwForm, currentPassword: e.target.value })} />
-                  <input required type="password" placeholder="New password" className="input-field" value={pwForm.newPassword} onChange={(e) => setPwForm({ ...pwForm, newPassword: e.target.value })} />
-                  <button type="submit" disabled={pwSaving} className="btn-primary w-full justify-center mt-2">
-                    {pwSaving ? 'Saving...' : 'Change Password'}
-                  </button>
-                </div>
-              </div>
-            </form>
+            <SecuritySettingsSection />
           )}
         </div>
       </div>

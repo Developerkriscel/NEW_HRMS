@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, X, CheckCircle2, Layers, Eye, Edit2, Trash2, Play, Pause, Server, Users, Code, Puzzle } from 'lucide-react'
+import { Plus, X, CheckCircle2, Layers, Eye, Edit2, Play, Pause, Server, Users, Code, Puzzle } from 'lucide-react'
 import { PermissionDenied } from '@/components/common/PermissionDenied'
 import { formatCurrency, cn } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
@@ -20,6 +20,7 @@ export default function PlansPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
+  const [actionLoading, setActionLoading] = useState('')
   const [error, setError] = useState('')
 
   async function load() {
@@ -66,6 +67,28 @@ export default function PlansPage() {
     }
   }
 
+  async function handlePlanActiveToggle(plan) {
+    const nextActive = plan.active === false
+    const label = nextActive ? 'resume' : 'pause'
+    if (!window.confirm(`Are you sure you want to ${label} ${plan.name}?`)) return
+
+    setActionLoading(plan._id)
+    setError('')
+    try {
+      const tenantApi = await getTenantApi()
+      if (nextActive) {
+        await tenantApi.updatePlan(plan._id, { active: true })
+      } else {
+        await tenantApi.deletePlan(plan._id)
+      }
+      await load()
+    } catch (err) {
+      setError(err.response?.data?.message || `Failed to ${label} plan`)
+    } finally {
+      setActionLoading('')
+    }
+  }
+
   if (forbidden) return <PermissionDenied requiredPermission="plan.view" message="You don't have permission to view plans." />
 
   return (
@@ -85,6 +108,8 @@ export default function PlansPage() {
       {loading ? (
         <div className="flex justify-center py-20"><p className="text-slate-400 text-sm font-semibold">Loading plans...</p></div>
       ) : (
+        <>
+        {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">{error}</div>}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           {plans.map((plan) => (
             <div key={plan._id} className="bg-white dark:bg-slate-900 rounded-[28px] p-5 border border-slate-200/80 dark:border-slate-800 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)] flex flex-col hover:border-blue-500/30 transition-all duration-300">
@@ -171,17 +196,21 @@ export default function PlansPage() {
                 <button onClick={() => router.push(`/super-admin/plans/${plan._id}`)} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700/80 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 transition-colors">
                   <Edit2 className="w-3.5 h-3.5" /> Edit
                 </button>
-                <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-orange-200 dark:border-orange-900/40 hover:bg-orange-50 dark:hover:bg-orange-900/20 text-xs font-bold text-orange-600 dark:text-orange-400 transition-colors">
-                  {plan.active !== false ? <><Pause className="w-3.5 h-3.5" /> Pause</> : <><Play className="w-3.5 h-3.5" /> Resume</>}
-                </button>
-                <button className="w-10 h-10 flex shrink-0 items-center justify-center rounded-xl border border-red-200 dark:border-red-900/40 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 dark:text-red-400 transition-colors">
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {hasPermission('plan.archive') && (
+                  <button
+                    disabled={actionLoading === plan._id}
+                    onClick={() => handlePlanActiveToggle(plan)}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-orange-200 dark:border-orange-900/40 hover:bg-orange-50 dark:hover:bg-orange-900/20 text-xs font-bold text-orange-600 dark:text-orange-400 transition-colors disabled:opacity-60"
+                  >
+                    {plan.active !== false ? <><Pause className="w-3.5 h-3.5" /> Pause</> : <><Play className="w-3.5 h-3.5" /> Resume</>}
+                  </button>
+                )}
               </div>
 
             </div>
           ))}
         </div>
+        </>
       )}
 
       {showCreate && (

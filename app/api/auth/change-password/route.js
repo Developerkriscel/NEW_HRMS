@@ -6,6 +6,7 @@ import { requireAuth, comparePassword, hashPassword, validatePasswordStrength } 
 import { findUserByEmail } from '@/lib/userLookup'
 import PlatformOperator from '@/models/PlatformOperator'
 import Employee from '@/models/Employee'
+import { revokeOtherAccountSessions } from '@/lib/accountSessions'
 
 export const POST = withApi(async (req) => {
   const session = await requireAuth()
@@ -34,5 +35,7 @@ export const POST = withApi(async (req) => {
     await Employee.updateOne({ _id: found.doc._id }, { password: hash })
   }
 
-  return ok(null, 'Password changed successfully')
+  const revokedSessions = await revokeOtherAccountSessions(session)
+
+  return ok({ revokedSessions }, 'Password changed successfully')
 })

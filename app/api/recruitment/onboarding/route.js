@@ -1,11 +1,17 @@
 export const dynamic = 'force-dynamic'
 
 import { withApi } from '@/lib/handler'
-import { ok, paged } from '@/lib/apiResponse'
-import { requireAuth, requireRole, requireTenantId } from '@/lib/auth'
-import { PREBOARDING_VIEW_ROLES, PREBOARDING_STATUS, PREBOARDING_STATUS_LIST, FORM_STATUS_LABELS } from '@/lib/preboardingConstants'
+import { ok, paged, fail } from '@/lib/apiResponse'
+import { requireAuth, requireRole, requireTenantId, ApiError } from '@/lib/auth'
+import { PREBOARDING_VIEW_ROLES, PREBOARDING_STATUS, PREBOARDING_STATUS_LIST, FORM_STATUS_LABELS, canManagePreboarding } from '@/lib/preboardingConstants'
+import { OFFER_STATUS } from '@/lib/offerConstants'
+import { createPreboardingRecord } from '@/lib/offerHelpers'
 import Preboarding from '@/models/Preboarding'
 import CandidateDocument from '@/models/CandidateDocument'
+import PreboardingTask from '@/models/PreboardingTask'
+import Offer from '@/models/Offer'
+import OfferVersion from '@/models/OfferVersion'
+import Application from '@/models/Application'
 
 // GET ?status=<tab> — item 1's Preboarding Dashboard: 8 tabs, 6 summary
 // cards, and the candidate table (item 3: "Show preboarding progress and
@@ -55,12 +61,21 @@ export const GET = withApi(async (req) => {
   const totalElements = filtered.length
   const pageRows = filtered.slice(page * size, page * size + size)
   const ids = pageRows.map((p) => p._id)
-  const docs = await CandidateDocument.find({ tenantId, preboardingId: { $in: ids } }).select('preboardingId isRequired status').lean()
+  const [docs, tasks] = await Promise.all([
+    CandidateDocument.find({ tenantId, preboardingId: { $in: ids }, deleted: false }).select('preboardingId isRequired status').lean(),
+    PreboardingTask.find({ tenantId, preboardingId: { $in: ids }, deleted: false }).select('preboardingId name assignedTo dueDate priority required status').lean(),
+  ])
   const docsByPreboarding = new Map()
   for (const d of docs) {
     const key = String(d.preboardingId)
     if (!docsByPreboarding.has(key)) docsByPreboarding.set(key, [])
     docsByPreboarding.get(key).push(d)
+  }
+  const tasksByPreboarding = new Map()
+  for (const task of tasks) {
+    const key = String(task.preboardingId)
+    if (!tasksByPreboarding.has(key)) tasksByPreboarding.set(key, [])
+    tasksByPreboarding.get(key).push(task)
   }
 
   const rows = pageRows.map((p) => {
@@ -78,9 +93,36 @@ export const GET = withApi(async (req) => {
       documentsPercent: pDocs.length ? Math.round((uploaded / pDocs.length) * 100) : null,
       verificationStatus: p.verificationStatus,
       verified, documentsRequired: pDocs.length,
+      tasks: tasksByPreboarding.get(String(p._id)) || [],
       status: p.status,
     }
   })
 
   return ok({ ...paged(rows, page, size, totalElements), cards, tabCounts })
+})
+
+export const POST = withApi(async (req) => {
+  const session = await requireAuth()
+  await requireRole(session, PREBOARDING_VIEW_ROLES)
+  const tenantId = requireTenantId(session)
+  if (!canManagePreboarding(session)) return fail('You do not have permission to start onboarding', 403, 'FORBIDDEN')
+
+  const body = await req.json()
+  if (!body.offerId) return fail('Offer is required to start onboarding', 400, 'VALIDATION_ERROR')
+
+  const offer = await Offer.findOne({ _id: body.offerId, tenantId, deleted: false })
+  if (!offer) throw new ApiError(404, 'Offer not found', 'NOT_FOUND')
+  if (offer.status !== OFFER_STATUS.ACCEPTED) return fail('Only accepted offers can move to onboarding', 400, 'INVALID_STATE')
+
+  const [version, application] = await Promise.all([
+    offer.currentVersionId
+      ? OfferVersion.findOne({ _id: offer.currentVersionId, tenantId, deleted: false })
+      : OfferVersion.findOne({ offerId: offer._id, tenantId, deleted: false }).sort({ version: -1 }),
+    Application.findOne({ _id: offer.applicationId, tenantId, deleted: false }),
+  ])
+  if (!version) throw new ApiError(404, 'Offer version not found', 'NOT_FOUND')
+  if (!application) throw new ApiError(404, 'Application not found', 'NOT_FOUND')
+
+  const preboarding = await createPreboardingRecord(tenantId, { application, offer, version })
+  return ok(preboarding, 'Onboarding profile ready', 201)
 })

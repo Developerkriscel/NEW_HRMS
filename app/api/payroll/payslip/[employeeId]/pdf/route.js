@@ -11,7 +11,7 @@ export const GET = withApi(async (req, { params }) => {
   const session = await requireAuth()
   const tenantId = requireTenantId(session)
   
-  const payslip = await Payslip.findOne({ _id: params.employeeId, tenantId }).populate('employee', 'firstName lastName employeeCode')
+  const payslip = await Payslip.findOne({ _id: params.employeeId, tenantId, deleted: false }).populate('employee', 'firstName lastName employeeCode')
   if (!payslip) return fail('Payslip not found', 404)
 
   if (session.role === 'EMPLOYEE' && String(payslip.employee._id) !== session.userId) {

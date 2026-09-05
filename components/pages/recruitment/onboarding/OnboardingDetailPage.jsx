@@ -1,11 +1,9 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, User, ListTodo, FileText, Settings, Activity, Building, Briefcase, Mail, Phone, Calendar, Clock, CheckCircle2, ChevronRight, PauseCircle, AlertTriangle } from 'lucide-react'
-import { useOnboardingStore } from '@/store/onboardingStore'
 import { OnboardingStatusBadge } from './components/OnboardingStatusBadge'
-import { OnboardingProgress } from './components/OnboardingProgress'
 import { ConvertToEmployeeModal } from './components/ConvertToEmployeeModal'
 import { OnboardingOverview } from './tabs/OnboardingOverview'
 import { OnboardingEmployeeDetails } from './tabs/OnboardingEmployeeDetails'
@@ -13,6 +11,8 @@ import { OnboardingTasks } from './tabs/OnboardingTasks'
 import { OnboardingDocuments } from './tabs/OnboardingDocuments'
 import { OnboardingJoiningDetails } from './tabs/OnboardingJoiningDetails'
 import { OnboardingActivity } from './tabs/OnboardingActivity'
+import { preboardingApi } from '@/services/preboardingApi'
+import { adaptPreboardingRecord } from './onboardingRecordAdapter'
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: User },
@@ -25,16 +25,38 @@ const TABS = [
 
 export function OnboardingDetailPage({ id }) {
   const router = useRouter()
-  const { getRecord } = useOnboardingStore()
-  const record = getRecord(id)
-
+  const [record, setRecord] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [activeTab, setActiveTab] = useState('overview')
   const [isConvertModalOpen, setIsConvertModalOpen] = useState(false)
+
+  const loadRecord = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await preboardingApi.get(id)
+      setRecord(adaptPreboardingRecord(res.data?.data))
+    } catch (err) {
+      setError(err.response?.data?.message || 'Record not found')
+      setRecord(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [id])
+
+  useEffect(() => {
+    loadRecord()
+  }, [loadRecord])
+
+  if (loading) {
+    return <div className="p-12 text-center text-sm font-semibold text-slate-500">Loading onboarding profile from database...</div>
+  }
 
   if (!record) {
     return (
       <div className="p-12 text-center">
-        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Record Not Found</h2>
+        <h2 className="text-xl font-bold text-slate-900 dark:text-white">{error || 'Record Not Found'}</h2>
         <button onClick={() => router.push('/hr/onboarding')} className="mt-4 text-blue-600 hover:underline">Back to Dashboard</button>
       </div>
     )
@@ -138,9 +160,9 @@ export function OnboardingDetailPage({ id }) {
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden min-h-[500px]">
             {activeTab === 'overview' && <OnboardingOverview record={record} />}
             {activeTab === 'employee_details' && <OnboardingEmployeeDetails record={record} />}
-            {activeTab === 'tasks' && <OnboardingTasks record={record} />}
-            {activeTab === 'documents' && <OnboardingDocuments record={record} />}
-            {activeTab === 'joining' && <OnboardingJoiningDetails record={record} />}
+            {activeTab === 'tasks' && <OnboardingTasks record={record} onRefresh={loadRecord} />}
+            {activeTab === 'documents' && <OnboardingDocuments record={record} onRefresh={loadRecord} />}
+            {activeTab === 'joining' && <OnboardingJoiningDetails record={record} onRefresh={loadRecord} />}
             {activeTab === 'activity' && <OnboardingActivity record={record} />}
           </div>
         </div>
@@ -220,7 +242,10 @@ export function OnboardingDetailPage({ id }) {
         </div>
       </div>
 
-      <ConvertToEmployeeModal isOpen={isConvertModalOpen} onClose={() => setIsConvertModalOpen(false)} record={record} />
+      <ConvertToEmployeeModal isOpen={isConvertModalOpen} onClose={() => {
+        setIsConvertModalOpen(false)
+        loadRecord()
+      }} record={record} />
     </div>
   )
 }

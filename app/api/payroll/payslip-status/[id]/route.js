@@ -31,7 +31,7 @@ export const PATCH = withApi(async (req, { params }) => {
     return fail('Invalid target status', 400)
   }
 
-  const payslip = await Payslip.findOne({ _id: id, tenantId })
+  const payslip = await Payslip.findOne({ _id: id, tenantId, deleted: false })
   if (!payslip) {
     return fail('Payslip not found', 404)
   }

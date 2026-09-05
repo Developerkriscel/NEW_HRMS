@@ -13,7 +13,7 @@ export const GET = withApi(async (_req, { params }) => {
   const session = await requireAuth()
   requirePlatformPermission(session, 'subscription.view')
 
-  const subscription = await Subscription.findById(params.id).populate('tenant').populate('plan')
+  const subscription = await Subscription.findOne({ _id: params.id, deleted: false }).populate('tenant').populate('plan')
   if (!subscription) return fail('Subscription not found', 404)
 
   const [history, credits, invoices] = await Promise.all([

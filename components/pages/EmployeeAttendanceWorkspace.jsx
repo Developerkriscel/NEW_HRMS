@@ -217,6 +217,15 @@ export function EmployeeAttendanceWorkspace() {
         </div>
       </div>
 
+      <CameraVerificationModal
+        isOpen={isCameraModalOpen}
+        onClose={() => setIsCameraModalOpen(false)}
+        onConfirm={handleCameraConfirm}
+        locationRequired={true}
+        title={cameraAction === 'check-in' ? 'Check In Verification' : 'Check Out Verification'}
+        variant="inline"
+      />
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
           { label: 'Present Days', value: records.filter(r => r.status === 'PRESENT').length, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
@@ -248,13 +257,6 @@ export function EmployeeAttendanceWorkspace() {
         </div>
       </div>
 
-      <CameraVerificationModal
-        isOpen={isCameraModalOpen}
-        onClose={() => setIsCameraModalOpen(false)}
-        onConfirm={handleCameraConfirm}
-        locationRequired={true}
-        title={cameraAction === 'check-in' ? 'Check In Verification' : 'Check Out Verification'}
-      />
       <AttendanceDetailsDrawer
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}

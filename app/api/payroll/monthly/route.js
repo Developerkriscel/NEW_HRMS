@@ -5,6 +5,7 @@ import { withApi } from '@/lib/handler'
 import { ok, paged } from '@/lib/apiResponse'
 import { requireAuth, requireRole, requireTenantId } from '@/lib/auth'
 import Payslip from '@/models/Payslip'
+import Employee from '@/models/Employee'
 
 export const GET = withApi(async (req) => {
   const session = await requireAuth()
@@ -24,26 +25,19 @@ export const GET = withApi(async (req) => {
   const departmentId = searchParams.get('department')
   const search = searchParams.get('search')
 
-  const query = { tenantId, month, year, deleted: false }
-  if (status && status !== 'ALL') {
-    query.status = status
+  const empQuery = { tenantId, deleted: false, status: { $in: ['ACTIVE', 'PROBATION', 'NOTICE_PERIOD'] } }
+  if (departmentId && departmentId !== 'ALL') empQuery.department = departmentId
+  if (search) {
+    empQuery.$or = [
+      { firstName: { $regex: search, $options: 'i' } },
+      { lastName: { $regex: search, $options: 'i' } },
+      { employeeCode: { $regex: search, $options: 'i' } }
+    ]
   }
-  
-  let employeeIds = null
-  if (search || departmentId) {
-    const empQuery = { tenantId, deleted: false }
-    if (departmentId && departmentId !== 'ALL') empQuery.department = departmentId
-    if (search) {
-      empQuery.$or = [
-        { firstName: { $regex: search, $options: 'i' } },
-        { lastName: { $regex: search, $options: 'i' } },
-        { employeeCode: { $regex: search, $options: 'i' } }
-      ]
-    }
-    const emps = await mongoose.model('Employee').find(empQuery).select('_id')
-    employeeIds = emps.map(e => e._id)
-    query.employee = { $in: employeeIds }
-  }
+  const emps = await Employee.find(empQuery).select('_id').lean()
+  const employeeIds = emps.map(e => e._id)
+  const query = { tenantId, month, year, deleted: false, employee: { $in: employeeIds } }
+  if (status && status !== 'ALL') query.status = status
 
   const totalElements = await Payslip.countDocuments(query)
   const content = await Payslip.find(query)

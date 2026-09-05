@@ -33,7 +33,10 @@ export const GET = withApi(async (req) => {
   const structures = await SalaryStructure.find({
     employee: { $in: employeeIds },
     tenantId,
-    isActive: true
+    isActive: true,
+    ctc: { $gt: 0 },
+    approvalStatus: 'APPROVED',
+    deleted: false,
   })
   const structuredEmpIds = new Set(structures.map(s => s.employee.toString()))
   

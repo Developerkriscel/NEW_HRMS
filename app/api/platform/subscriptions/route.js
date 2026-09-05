@@ -16,7 +16,7 @@ export const GET = withApi(async (req) => {
   const status = searchParams.get('status')
   const tenant = searchParams.get('tenant')
 
-  const query = {}
+  const query = { deleted: false }
   if (status) query.status = status
   if (tenant) query.tenant = tenant
 

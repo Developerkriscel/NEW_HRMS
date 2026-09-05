@@ -1,21 +1,42 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Users, Calendar, Clock, FileText, CheckCircle2, ListTodo, Search, Filter, MoreVertical, Plus, ChevronDown, Download, Eye, PauseCircle, XCircle } from 'lucide-react'
-import { useOnboardingStore } from '@/store/onboardingStore'
+import { Users, Calendar, Clock, FileText, CheckCircle2, ListTodo, Search, Filter, MoreVertical, Plus, Download, Eye } from 'lucide-react'
 import { OnboardingStatusBadge } from './components/OnboardingStatusBadge'
 import { OnboardingProgress } from './components/OnboardingProgress'
 import { EmptyState } from './components/EmptyState'
 import { StartOnboardingModal } from './StartOnboardingModal'
+import { preboardingApi } from '@/services/preboardingApi'
+import { adaptPreboardingRecord } from './onboardingRecordAdapter'
 
 export function OnboardingDashboardPage() {
   const router = useRouter()
-  const { records } = useOnboardingStore()
-  
+  const [records, setRecords] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [isStartModalOpen, setIsStartModalOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
+
+  const loadRecords = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await preboardingApi.list({ size: 200 })
+      const rows = res.data?.data?.content || res.data?.data?.items || []
+      setRecords(rows.map(adaptPreboardingRecord))
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to load onboarding records from database')
+      setRecords([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadRecords()
+  }, [loadRecords])
 
   // Derived metrics
   const total = records.length
@@ -28,7 +49,8 @@ export function OnboardingDashboardPage() {
 
   // Filtering
   const filteredRecords = records.filter(r => {
-    const matchesSearch = r.candidate.name.toLowerCase().includes(search.toLowerCase()) || r.candidate.id.toLowerCase().includes(search.toLowerCase()) || r.position.toLowerCase().includes(search.toLowerCase())
+    const term = search.toLowerCase()
+    const matchesSearch = r.candidate.name.toLowerCase().includes(term) || r.candidate.id.toLowerCase().includes(term) || r.position.toLowerCase().includes(term)
     const matchesStatus = statusFilter === 'All' ? true : statusFilter === 'Completed' ? r.status === 'COMPLETED' : statusFilter === 'In Progress' ? r.status === 'IN_PROGRESS' : r.status === 'NOT_STARTED'
     return matchesSearch && matchesStatus
   })
@@ -107,11 +129,18 @@ export function OnboardingDashboardPage() {
 
       {/* Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden">
-        {filteredRecords.length === 0 ? (
+        {loading ? (
+          <div className="p-12 text-center text-sm font-semibold text-slate-500">Loading onboarding records from database...</div>
+        ) : error ? (
+          <div className="p-12 text-center">
+            <p className="text-sm font-bold text-red-600">{error}</p>
+            <button onClick={loadRecords} className="btn-secondary mt-4">Retry</button>
+          </div>
+        ) : filteredRecords.length === 0 ? (
           <EmptyState 
             icon={Users}
             title="No onboarding records found"
-            description="Start onboarding a hired candidate to begin the joining process."
+            description="Accepted offers will appear here automatically for employee onboarding."
             action={
               <button onClick={() => setIsStartModalOpen(true)} className="btn-primary">
                 <Plus className="w-4 h-4" /> Start Onboarding
@@ -183,7 +212,10 @@ export function OnboardingDashboardPage() {
         )}
       </div>
 
-      <StartOnboardingModal isOpen={isStartModalOpen} onClose={() => setIsStartModalOpen(false)} />
+      <StartOnboardingModal isOpen={isStartModalOpen} onClose={() => {
+        setIsStartModalOpen(false)
+        loadRecords()
+      }} />
     </div>
   )
 }

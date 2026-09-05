@@ -26,10 +26,31 @@ function CompanyAttendanceTab({ headerAction }) {
   const [selectedEmployee, setSelectedEmployee] = useState('all')
   const [employeesList, setEmployeesList] = useState([])
 
+  function formatAttendanceDate(value) {
+    if (!value) return '-'
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return '-'
+    return date.toLocaleDateString([], { day: '2-digit', month: 'short', year: 'numeric' })
+  }
+
+  function formatWorkDuration(row) {
+    if (row.workDurationLabel) return row.workDurationLabel
+    if (Number(row.workingMinutes || 0) > 0) {
+      const minutes = Math.round(Number(row.workingMinutes))
+      return `${Math.floor(minutes / 60)}h ${minutes % 60}m`
+    }
+    if (!row.checkInTime || !row.checkOutTime) return row.checkInTime ? 'In progress' : '0h 0m'
+    const start = new Date(row.checkInTime)
+    const end = new Date(row.checkOutTime)
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) return '0h 0m'
+    const minutes = Math.max(0, Math.round((end - start) / 60000) - Number(row.breakMinutes || 0))
+    return `${Math.floor(minutes / 60)}h ${minutes % 60}m`
+  }
+
   function loadData() {
     setLoading(true)
     Promise.all([
-      attendanceApi.getAll({ date: selectedDate }), 
+      attendanceApi.getAll({ date: selectedDate, employeeId: selectedEmployee }), 
       attendanceApi.getPendingRegularizations()
     ])
       .then(([attRes, pendRes]) => {
@@ -49,7 +70,7 @@ function CompanyAttendanceTab({ headerAction }) {
   
   useEffect(() => {
     loadData()
-  }, [selectedDate]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedDate, selectedEmployee]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     employeeApi.getAll({ size: 1000 }).then(empRes => {
@@ -60,20 +81,16 @@ function CompanyAttendanceTab({ headerAction }) {
   }, [])
 
   useEffect(() => {
-    if (selectedEmployee && selectedEmployee !== 'all') {
-      setFilteredRecords(records.filter(r => r.employee?._id === selectedEmployee))
-    } else {
-      setFilteredRecords(records)
-    }
+    setFilteredRecords(records)
   }, [selectedEmployee, records])
 
   async function approve(id) {
     await attendanceApi.approveRegularization(id)
-    load()
+    loadData()
   }
   async function reject(id) {
     await attendanceApi.rejectRegularization(id, 'Rejected by HR')
-    load()
+    loadData()
   }
 
   const columns = [
@@ -82,12 +99,21 @@ function CompanyAttendanceTab({ headerAction }) {
       return (
         <div className="flex items-center gap-3">
           <Avatar name={name} size="sm" />
-          <span className="font-medium text-slate-800 dark:text-slate-100">{name}</span>
+          <div>
+            <span className="font-medium text-slate-800 dark:text-slate-100">{name}</span>
+            <div className="text-xs text-slate-400">{v?.employeeCode || row.employeeCode || '-'}</div>
+          </div>
         </div>
       )
     } },
+    { header: 'Date', accessor: 'attendanceDate', render: (v, row) => <span className="font-medium text-slate-700 dark:text-slate-300">{formatAttendanceDate(v || row.date)}</span> },
     { header: 'Check In', accessor: 'checkInTime', render: (v) => v ? <span className="font-medium text-slate-700 dark:text-slate-300">{new Date(v).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span> : <span className="text-slate-400">—</span> },
     { header: 'Check Out', accessor: 'checkOutTime', render: (v) => v ? <span className="font-medium text-slate-700 dark:text-slate-300">{new Date(v).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span> : <span className="text-slate-400">—</span> },
+    { header: 'Duration', accessor: 'workDurationMinutes', render: (_, row) => (
+      <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${row.checkInTime && !row.checkOutTime ? 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+        {formatWorkDuration(row)}
+      </span>
+    ) },
     { header: 'Status', accessor: 'status', render: (v) => <Badge variant={v === 'PRESENT' ? 'success' : v === 'ABSENT' ? 'danger' : 'warning'}>{v}</Badge> },
   ]
 

@@ -4,6 +4,7 @@ import { withApi } from '@/lib/handler'
 import { ok } from '@/lib/apiResponse'
 import { requireAuth, requireRole, requireTenantId } from '@/lib/auth'
 import Payslip from '@/models/Payslip'
+import Employee from '@/models/Employee'
 
 export const GET = withApi(async (req) => {
   const session = await requireAuth()
@@ -24,7 +25,14 @@ export const GET = withApi(async (req) => {
     })
   }
 
-  const payslips = await Payslip.find({ tenantId, month, year, deleted: false })
+  const employees = await Employee.find({
+    tenantId,
+    deleted: false,
+    status: { $in: ['ACTIVE', 'PROBATION', 'NOTICE_PERIOD'] },
+  }).select('_id').lean()
+  const employeeIds = employees.map((employee) => employee._id)
+
+  const payslips = await Payslip.find({ tenantId, month, year, deleted: false, employee: { $in: employeeIds } })
     .populate({
       path: 'employee',
       select: 'department',

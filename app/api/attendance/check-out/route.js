@@ -11,15 +11,22 @@ function startOfToday() {
   return new Date(new Date().toDateString())
 }
 
+function todayRange() {
+  const start = startOfToday()
+  const end = new Date(start)
+  end.setDate(start.getDate() + 1)
+  return { start, end }
+}
+
 export const POST = withApi(async (req) => {
   const session = await requireAuth()
   const tenantId = requireTenantId(session)
   const body = await req.json().catch(() => ({}))
 
-  const today = startOfToday()
+  const { start, end } = todayRange()
   const now = new Date()
 
-  const attendance = await Attendance.findOne({ employee: session.userId, date: today, tenantId })
+  const attendance = await Attendance.findOne({ employee: session.userId, date: { $gte: start, $lt: end }, tenantId })
   if (!attendance || !attendance.checkInTime) {
     return fail('No check-in found for today', 400)
   }

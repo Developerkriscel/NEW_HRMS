@@ -4,7 +4,7 @@ import { payrollApi } from '@/services/payrollApi'
 import { formatCurrency } from '@/lib/utils'
 import { Portal } from '@/components/common/Portal'
 
-export function RunPayrollModal({ isOpen, onClose, month, year, onComplete }) {
+export function RunPayrollModal({ isOpen, onClose, month, year, onComplete, onOpenSalarySetup }) {
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [eligibility, setEligibility] = useState(null)
@@ -165,9 +165,21 @@ export function RunPayrollModal({ isOpen, onClose, month, year, onComplete }) {
 
                   {eligibility.missingSalary.length > 0 && (
                     <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-2xl p-4">
-                      <h4 className="font-bold text-amber-800 dark:text-amber-400 flex items-center gap-2 mb-2">
-                        <AlertTriangle className="w-4 h-4" /> Missing Salary Structures ({eligibility.missingSalary.length})
-                      </h4>
+                      <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <h4 className="font-bold text-amber-800 dark:text-amber-400 flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4" /> Missing Salary Structures ({eligibility.missingSalary.length})
+                        </h4>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onClose()
+                            onOpenSalarySetup?.()
+                          }}
+                          className="rounded-xl bg-amber-600 px-3 py-2 text-xs font-black text-white shadow-sm hover:bg-amber-700"
+                        >
+                          Fix Salary Setup
+                        </button>
+                      </div>
                       <p className="text-sm text-amber-700 dark:text-amber-500 mb-3">
                         These employees have no Salary Structure and no employee CTC. Add salary first or they will be skipped.
                       </p>
@@ -183,9 +195,17 @@ export function RunPayrollModal({ isOpen, onClose, month, year, onComplete }) {
 
                   {eligibility.missingAttendance.length > 0 && (
                     <div className="bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 rounded-2xl p-4">
-                      <h4 className="font-bold text-orange-800 dark:text-orange-400 flex items-center gap-2 mb-2">
-                        <AlertTriangle className="w-4 h-4" /> Missing Attendance ({eligibility.missingAttendance.length})
-                      </h4>
+                      <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <h4 className="font-bold text-orange-800 dark:text-orange-400 flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4" /> Missing Attendance ({eligibility.missingAttendance.length})
+                        </h4>
+                        <a
+                          href="/hr/attendance"
+                          className="rounded-xl bg-orange-600 px-3 py-2 text-center text-xs font-black text-white shadow-sm hover:bg-orange-700"
+                        >
+                          Open Attendance
+                        </a>
+                      </div>
                       <p className="text-sm text-orange-700 dark:text-orange-500 mb-3">
                         These employees have 0 attendance records for the month. LOP will be heavily applied.
                       </p>

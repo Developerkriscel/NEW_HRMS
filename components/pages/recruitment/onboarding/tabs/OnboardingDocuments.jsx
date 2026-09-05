@@ -1,22 +1,52 @@
 import React, { useState } from 'react'
 import { FileText, CheckCircle2, Upload, AlertCircle, Eye, ShieldCheck, ShieldAlert, Clock } from 'lucide-react'
-import { useOnboardingStore } from '@/store/onboardingStore'
 import { Portal } from '@/components/common/Portal'
+import { preboardingApi } from '@/services/preboardingApi'
 
-export function OnboardingDocuments({ record }) {
-  const { updateDocument } = useOnboardingStore()
+export function OnboardingDocuments({ record, onRefresh }) {
+  const [saving, setSaving] = useState('')
+  const [error, setError] = useState('')
 
-  const handleVerify = (docId) => {
-    updateDocument(record.id, docId, { status: 'VERIFIED', verifiedBy: 'Current HR User', uploadedAt: new Date().toISOString() })
+  const handleVerify = async (docId) => {
+    setSaving(docId)
+    setError('')
+    try {
+      await preboardingApi.verifyDocument(record.id, docId)
+      await onRefresh?.()
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to verify document')
+    } finally {
+      setSaving('')
+    }
   }
 
-  const handleReject = (docId) => {
-    updateDocument(record.id, docId, { status: 'REJECTED' })
+  const handleReject = async (docId) => {
+    setSaving(docId)
+    setError('')
+    try {
+      await preboardingApi.rejectDocument(record.id, docId, 'Other')
+      await onRefresh?.()
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to reject document')
+    } finally {
+      setSaving('')
+    }
   }
 
-  const handleUpload = (docId) => {
-    // Mock upload that immediately sends it to pending verification
-    updateDocument(record.id, docId, { status: 'PENDING_VERIFICATION', uploadedAt: new Date().toISOString() })
+  const handleUpload = async (docId, file) => {
+    if (!file) return
+    setSaving(docId)
+    setError('')
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      await preboardingApi.uploadDocument(record.id, docId, formData)
+      await onRefresh?.()
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to upload document')
+    } finally {
+      setSaving('')
+    }
   }
 
   const getStatusIcon = (status) => {
@@ -32,14 +62,36 @@ export function OnboardingDocuments({ record }) {
   const [newDocName, setNewDocName] = useState('')
   const [newDocRequired, setNewDocRequired] = useState(true)
 
-  const handleAddDocument = () => {
+  const handleAddDocument = async () => {
     if (newDocName.trim()) {
-      useOnboardingStore.getState().addDocument(record.id, {
-        name: newDocName,
-        required: newDocRequired
-      })
-      setNewDocName('')
-      setIsAdding(false)
+      setSaving('new')
+      setError('')
+      try {
+        await preboardingApi.addDocument(record.id, {
+          name: newDocName,
+          required: newDocRequired
+        })
+        setNewDocName('')
+        setIsAdding(false)
+        await onRefresh?.()
+      } catch (err) {
+        setError(err.response?.data?.message || 'Failed to request document')
+      } finally {
+        setSaving('')
+      }
+    }
+  }
+
+  const handleRemoveDocument = async (docId) => {
+    setSaving(docId)
+    setError('')
+    try {
+      await preboardingApi.deleteDocument(record.id, docId)
+      await onRefresh?.()
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to remove document')
+    } finally {
+      setSaving('')
     }
   }
 
@@ -59,6 +111,11 @@ export function OnboardingDocuments({ record }) {
           </button>
         </div>
       </div>
+      {error && (
+        <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">
+          {error}
+        </div>
+      )}
 
       {isAdding && (
         <Portal>
@@ -101,8 +158,8 @@ export function OnboardingDocuments({ record }) {
               
               <div className="p-6 pt-0 flex gap-3">
                 <button onClick={() => setIsAdding(false)} className="btn-secondary flex-1 justify-center">Cancel</button>
-                <button onClick={handleAddDocument} disabled={!newDocName.trim()} className="btn-primary flex-1 justify-center disabled:opacity-50 disabled:cursor-not-allowed">
-                  Add Document
+                <button onClick={handleAddDocument} disabled={!newDocName.trim() || saving === 'new'} className="btn-primary flex-1 justify-center disabled:opacity-50 disabled:cursor-not-allowed">
+                  {saving === 'new' ? 'Saving...' : 'Add Document'}
                 </button>
               </div>
             </div>
@@ -132,8 +189,9 @@ export function OnboardingDocuments({ record }) {
                 {getStatusIcon(doc.status)}
                 {doc.status === 'NOT_SUBMITTED' && (
                   <button 
-                    onClick={() => useOnboardingStore.getState().removeDocument(record.id, doc.id)}
-                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                    onClick={() => handleRemoveDocument(doc.id)}
+                    disabled={saving === doc.id}
+                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50"
                     title="Remove Document Request"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
@@ -154,7 +212,11 @@ export function OnboardingDocuments({ record }) {
             </div>
 
             <div className="flex items-center gap-2 mt-auto pt-4 border-t border-slate-100 dark:border-slate-700">
-              <button disabled={doc.status === 'NOT_SUBMITTED'} className="flex-1 btn-secondary text-xs justify-center py-2 h-auto disabled:opacity-50 disabled:cursor-not-allowed">
+              <button
+                onClick={() => doc.fileUrl && window.open(doc.fileUrl, '_blank', 'noopener,noreferrer')}
+                disabled={!doc.fileUrl}
+                className="flex-1 btn-secondary text-xs justify-center py-2 h-auto disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 <Eye className="w-4 h-4" /> View
               </button>
               
@@ -166,7 +228,7 @@ export function OnboardingDocuments({ record }) {
                     className="hidden"
                     onChange={(e) => {
                       if (e.target.files && e.target.files.length > 0) {
-                        handleUpload(doc.id)
+                        handleUpload(doc.id, e.target.files[0])
                       }
                     }}
                   />
@@ -179,10 +241,10 @@ export function OnboardingDocuments({ record }) {
                 </div>
               ) : doc.status === 'PENDING_VERIFICATION' ? (
                 <>
-                  <button onClick={() => handleVerify(doc.id)} className="flex-1 btn-primary text-xs justify-center py-2 h-auto bg-emerald-600 hover:bg-emerald-700">
-                    Approve
+                  <button onClick={() => handleVerify(doc.id)} disabled={saving === doc.id} className="flex-1 btn-primary text-xs justify-center py-2 h-auto bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50">
+                    {saving === doc.id ? 'Saving...' : 'Approve'}
                   </button>
-                  <button onClick={() => handleReject(doc.id)} className="flex-1 btn-secondary text-xs justify-center py-2 h-auto text-red-600 hover:text-red-700">
+                  <button onClick={() => handleReject(doc.id)} disabled={saving === doc.id} className="flex-1 btn-secondary text-xs justify-center py-2 h-auto text-red-600 hover:text-red-700 disabled:opacity-50">
                     Reject
                   </button>
                 </>
