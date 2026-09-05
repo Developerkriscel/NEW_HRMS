@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: false,
+  output: 'standalone',
   // pdf-parse (via pdfjs-dist) and mammoth (Step 6 resume parsing, see
   // lib/resumeParser.js) are Node-only libraries with conditional exports
   // that webpack's RSC bundling can't resolve correctly — left external so

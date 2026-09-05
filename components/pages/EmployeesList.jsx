@@ -2,19 +2,17 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Briefcase, Building2, Edit, Eye, GraduationCap, Plus, ShieldCheck, Trash2, UserRound, Users } from 'lucide-react'
+import { Briefcase, Edit, Eye, GraduationCap, Plus, ShieldCheck, Trash2, UserRound, Users } from 'lucide-react'
 import { DataTable } from '@/components/tables/DataTable'
 import { ConfirmDialog } from '@/components/common/ConfirmDialog'
 import { Avatar } from '@/components/common/Avatar'
 import { Badge } from '@/components/common/Badge'
 import { AddEmployeePage } from './AddEmployeePage'
 import { employeeApi } from '@/services/employeeApi'
-import { departmentApi } from '@/services/departmentApi'
 import { formatDate } from '@/lib/utils'
 
 const DIRECTORY_TABS = [
   { id: 'all', label: 'All', icon: Users },
-  { id: 'departments', label: 'Departments', icon: Building2 },
   { id: 'hr', label: 'HR', icon: ShieldCheck },
   { id: 'managers', label: 'Managers', icon: Briefcase },
   { id: 'employees', label: 'Employees', icon: UserRound },
@@ -25,10 +23,6 @@ function fullName(employee) {
   return `${employee.firstName || ''} ${employee.lastName || ''}`.trim()
 }
 
-function departmentId(employee) {
-  return employee.department?._id || employee.department || null
-}
-
 function roleLabel(role) {
   return String(role || 'EMPLOYEE').replace(/_/g, ' ')
 }
@@ -37,10 +31,7 @@ function isIntern(employee) {
   return String(employee.employmentType || '').toLowerCase().includes('intern')
 }
 
-function filterByTab(employee, tab, selectedDepartment) {
-  if (tab === 'departments') {
-    return selectedDepartment === 'all' || String(departmentId(employee)) === String(selectedDepartment)
-  }
+function filterByTab(employee, tab) {
   if (tab === 'hr') return employee.role === 'HR_MANAGER'
   if (tab === 'managers') return employee.role === 'MANAGER'
   if (tab === 'employees') return employee.role === 'EMPLOYEE' && !isIntern(employee)
@@ -49,16 +40,13 @@ function filterByTab(employee, tab, selectedDepartment) {
 }
 
 function countForTab(employees, tab) {
-  if (tab === 'departments') return new Set(employees.map(departmentId).filter(Boolean)).size
-  return employees.filter((employee) => filterByTab(employee, tab, 'all')).length
+  return employees.filter((employee) => filterByTab(employee, tab)).length
 }
 
 export function EmployeesList({ basePath, hideHeader }) {
   const router = useRouter()
   const [employees, setEmployees] = useState([])
-  const [departments, setDepartments] = useState([])
   const [activeDirectoryTab, setActiveDirectoryTab] = useState('all')
-  const [selectedDepartment, setSelectedDepartment] = useState('all')
   const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [employeeToDelete, setEmployeeToDelete] = useState(null)
@@ -72,20 +60,14 @@ export function EmployeesList({ basePath, hideHeader }) {
   }
 
   useEffect(() => {
-    departmentApi.getAll()
-      .then((res) => setDepartments(res.data.data || []))
-      .catch(() => setDepartments([]))
     load()
   }, [])
 
   const filteredEmployees = useMemo(() => (
-    employees.filter((employee) => filterByTab(employee, activeDirectoryTab, selectedDepartment))
-  ), [employees, activeDirectoryTab, selectedDepartment])
+    employees.filter((employee) => filterByTab(employee, activeDirectoryTab))
+  ), [employees, activeDirectoryTab])
 
-  const activeDepartment = departments.find((dept) => String(dept._id) === String(selectedDepartment))
-  const pageTitle = activeDirectoryTab === 'departments'
-    ? selectedDepartment === 'all' ? 'Department Directory' : `${activeDepartment?.name || 'Department'} Team`
-    : `${DIRECTORY_TABS.find((tab) => tab.id === activeDirectoryTab)?.label || 'All'} Directory`
+  const pageTitle = `${DIRECTORY_TABS.find((tab) => tab.id === activeDirectoryTab)?.label || 'All'} Directory`
 
   async function handleDelete() {
     if (!employeeToDelete) return
@@ -160,7 +142,7 @@ export function EmployeesList({ basePath, hideHeader }) {
         <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-2xl font-black tracking-tight text-slate-950 dark:text-white">{pageTitle}</h2>
-            <p className="mt-1 text-sm font-medium text-slate-500">Grouped by department, HR, managers, employees, and interns for faster access.</p>
+            <p className="mt-1 text-sm font-medium text-slate-500">Grouped by HR, managers, employees, and interns for faster access.</p>
           </div>
           {hideHeader && (
             <button className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white shadow-lg shadow-slate-900/10 transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100" onClick={() => setShowAddModal(true)}>
@@ -169,7 +151,7 @@ export function EmployeesList({ basePath, hideHeader }) {
           )}
         </div>
 
-        <div className="relative mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <div className="relative mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
           {DIRECTORY_TABS.map((tab) => {
             const Icon = tab.icon
             const active = activeDirectoryTab === tab.id
@@ -195,28 +177,6 @@ export function EmployeesList({ basePath, hideHeader }) {
             )
           })}
         </div>
-
-        {activeDirectoryTab === 'departments' && (
-          <div className="relative mt-5 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setSelectedDepartment('all')}
-              className={`rounded-2xl border px-4 py-2 text-xs font-black transition ${selectedDepartment === 'all' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}
-            >
-              All Departments
-            </button>
-            {departments.map((dept) => (
-              <button
-                key={dept._id}
-                type="button"
-                onClick={() => setSelectedDepartment(dept._id)}
-                className={`rounded-2xl border px-4 py-2 text-xs font-black transition ${selectedDepartment === dept._id ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}
-              >
-                {dept.name}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       <DataTable
