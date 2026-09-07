@@ -48,11 +48,30 @@ export async function GET() {
       })
     }
 
-    const [{ requireAuth }, { findUserByEmail, buildUserInfo }] = await Promise.all([
+    const [{ getSession }, { findUserByEmail, buildUserInfo }] = await Promise.all([
       import('@/lib/auth'),
       import('@/lib/userLookup'),
     ])
-    const session = await requireAuth()
+    const session = await getSession()
+    if (!session) return fail('Authentication required', 401, 'UNAUTHENTICATED')
+
+    if (session.name) {
+      prewarmDatabaseConnection()
+      return ok({
+        id: session.userId,
+        name: session.name,
+        email: session.sub,
+        role: session.role,
+        tenantId: session.tenantId || null,
+        companyName: session.companyName || null,
+        companySlug: session.companySlug || null,
+        permissions: session.permissions || [],
+        moduleAccess: session.moduleAccess || [],
+        platformPermissions: session.platformPermissions || [],
+        platformRoles: session.platformRoles || [],
+        devLogin: !!session.devLogin,
+      })
+    }
 
     const found = await findUserByEmail(session.sub, { tenantId: session.tenantId })
     if (!found) return fail('User not found', 404)

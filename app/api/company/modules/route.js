@@ -37,6 +37,10 @@ const DESCRIPTIONS = {
   ai_assistant: 'AI-powered assistance and automated analysis features.',
 }
 
+const MODULES_CACHE_TTL_MS = Number(process.env.COMPANY_MODULES_CACHE_TTL_MS || 60000)
+const companyModulesCache = global.__nexahrCompanyModulesCache || new Map()
+if (!global.__nexahrCompanyModulesCache) global.__nexahrCompanyModulesCache = companyModulesCache
+
 function humanize(key) {
   return LABELS[key] || String(key || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
@@ -64,6 +68,11 @@ export const GET = withApi(async () => {
   const session = await requireAuth()
   await requireRole(session, ['COMPANY_ADMIN', 'HR_MANAGER', 'SUPER_ADMIN'])
   const tenantId = requireTenantId(session)
+  const cacheKey = String(tenantId)
+  const cached = companyModulesCache.get(cacheKey)
+  if (cached && cached.expiresAt > Date.now()) {
+    return ok(cached.data)
+  }
 
   const tenant = await Tenant.findOne({ _id: tenantId, deleted: false }).populate('plan')
   if (!tenant) return fail('Company profile not found', 404)
@@ -124,7 +133,7 @@ export const GET = withApi(async () => {
     return a.name.localeCompare(b.name)
   })
 
-  return ok({
+  const response = {
     currentPlan: currentPlan ? {
       _id: currentPlan._id,
       name: currentPlan.name,
@@ -138,5 +147,12 @@ export const GET = withApi(async () => {
       upgradeRequired: modules.filter((module_) => !module_.enabled && module_.planAvailability === 'UNAVAILABLE').length,
     },
     modules,
+  }
+
+  companyModulesCache.set(cacheKey, {
+    expiresAt: Date.now() + MODULES_CACHE_TTL_MS,
+    data: response,
   })
+
+  return ok(response)
 })
