@@ -50,8 +50,11 @@ export function ManagerDashboardWorkspace({ headerAction }) {
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div className="flex-1">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <h1 className="text-3xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
-              {greeting()}, {user?.name?.split(' ')[0]} 👋
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-emerald-500 after:to-transparent after:rounded-full flex items-center gap-2">
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-emerald-400 dark:from-emerald-400 dark:to-emerald-300">
+                {greeting()}, {user?.name?.split(' ')[0]}
+              </span>
+              <span className="inline-block text-black drop-shadow-sm filter-none" style={{ WebkitTextFillColor: 'initial' }}>👋</span>
             </h1>
             {headerAction && <div>{headerAction}</div>}
           </div>

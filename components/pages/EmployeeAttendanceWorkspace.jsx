@@ -9,7 +9,7 @@ import { Clock, CheckCircle, Coffee, Calendar, Camera, ChevronRight, Activity } 
 import { CameraVerificationModal } from '@/components/attendance/CameraVerificationModal'
 import { AttendanceDetailsDrawer } from '@/components/attendance/AttendanceDetailsDrawer'
 
-export function EmployeeAttendanceWorkspace() {
+export function EmployeeAttendanceWorkspace({ headerAction }) {
   const [records, setRecords] = useState([])
   const [todayRecord, setTodayRecord] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -19,13 +19,49 @@ export function EmployeeAttendanceWorkspace() {
   const [cameraAction, setCameraAction] = useState(null)
   const [selectedRecord, setSelectedRecord] = useState(null)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [dateRange, setDateRange] = useState('This Month')
+  const [customStart, setCustomStart] = useState('')
+  const [customEnd, setCustomEnd] = useState('')
 
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
+      const params = {}
+      const now = new Date()
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      
+      if (dateRange === 'Today') {
+        params.from = today.toISOString()
+        params.to = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString()
+      } else if (dateRange === 'This Week') {
+        const firstDay = new Date(today.setDate(today.getDate() - today.getDay()))
+        params.from = firstDay.toISOString()
+      } else if (dateRange === 'Last Week') {
+        const firstDay = new Date(new Date().setDate(today.getDate() - today.getDay() - 7))
+        const lastDay = new Date(new Date().setDate(today.getDate() - today.getDay() - 1))
+        params.from = firstDay.toISOString()
+        params.to = new Date(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate() + 1).toISOString()
+      } else if (dateRange === 'This Month') {
+        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
+        params.from = firstDay.toISOString()
+      } else if (dateRange === 'Last Month') {
+        const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+        const lastDay = new Date(now.getFullYear(), now.getMonth(), 0)
+        params.from = firstDay.toISOString()
+        params.to = new Date(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate() + 1).toISOString()
+      } else if (dateRange === 'All History') {
+        params.from = new Date(2000, 0, 1).toISOString()
+      } else if (dateRange === 'Custom') {
+        if (customStart) params.from = new Date(customStart).toISOString()
+        if (customEnd) {
+          const end = new Date(customEnd)
+          params.to = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1).toISOString()
+        }
+      }
+
       const [todayRes, historyRes] = await Promise.all([
         attendanceApi.getTodayStatus(),
-        attendanceApi.getMyAttendance()
+        attendanceApi.getMyAttendance(params)
       ])
       setTodayRecord(todayRes.data.data)
       setRecords(historyRes.data.data || [])
@@ -34,7 +70,7 @@ export function EmployeeAttendanceWorkspace() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [dateRange, customStart, customEnd])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -132,19 +168,22 @@ export function EmployeeAttendanceWorkspace() {
   ]
 
   return (
-    <div className="animate-fade-in space-y-8 w-full pb-12">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+    <div className="animate-fade-in space-y-4 w-full pb-12">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
         <div className="flex-1">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-800 dark:text-white">Attendance Dashboard</h1>
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full">Attendance Dashboard</h1>
+            {headerAction && <div>{headerAction}</div>}
           </div>
         </div>
       </div>
 
-      <div className="relative rounded-2xl overflow-hidden bg-slate-900 shadow-lg border border-slate-800/60 p-2.5 sm:px-4 sm:py-3.5 isolation-auto">
-        <div className="absolute top-0 right-0 -mr-20 -mt-20 w-48 h-48 rounded-full bg-indigo-500/20 blur-3xl pointer-events-none animate-pulse"></div>
-        <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-48 h-48 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none"></div>
-        <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-20 brightness-100 contrast-150 mix-blend-overlay pointer-events-none"></div>
+      <div className="relative rounded-2xl overflow-hidden bg-slate-950 bg-gradient-to-br from-slate-900 via-indigo-950/60 to-slate-900 shadow-xl shadow-indigo-900/20 border border-indigo-500/30 p-2 sm:px-4 sm:py-2 isolation-auto">
+        <div className="absolute top-0 right-0 -mr-20 -mt-20 w-72 h-72 rounded-full bg-indigo-500/40 blur-3xl pointer-events-none animate-pulse"></div>
+          <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-72 h-72 rounded-full bg-emerald-500/30 blur-3xl pointer-events-none"></div>
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full bg-blue-500/20 blur-3xl pointer-events-none"></div>
+          <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none"></div>
+          <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-30 brightness-100 contrast-150 mix-blend-overlay pointer-events-none"></div>
         <div className="relative z-10 flex flex-col lg:flex-row gap-3 lg:gap-4 items-center justify-between">
           <div className="flex-1 w-full flex flex-col items-start">
             <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/5 border border-white/10 backdrop-blur-md mb-1.5">
@@ -162,7 +201,7 @@ export function EmployeeAttendanceWorkspace() {
               {now.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
           </div>
-          <div className="flex-[1.2] w-full max-w-lg bg-black/40 backdrop-blur-xl border border-white/10 rounded-xl p-2 sm:p-2.5 shadow-lg relative">
+          <div className="flex-[1.2] w-full max-w-lg bg-black/40 backdrop-blur-xl border border-white/10 rounded-xl p-1.5 sm:p-2 shadow-lg relative">
             <div className="grid grid-cols-2 gap-2 mb-2">
               <div className="bg-white/5 rounded-lg p-1.5 sm:p-2 border border-white/5">
                 <div className="flex items-center gap-1.5 text-emerald-400 mb-0.5">
@@ -244,14 +283,55 @@ export function EmployeeAttendanceWorkspace() {
       </div>
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/20">
-          <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
-            <div className="p-1.5 bg-indigo-100 dark:bg-indigo-500/20 rounded-lg text-indigo-600 dark:text-indigo-400">
-              <Calendar className="w-4 h-4" />
+        <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 bg-slate-50/50 dark:bg-slate-800/20">
+            <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+              <div className="p-1.5 bg-indigo-100 dark:bg-indigo-500/20 rounded-lg text-indigo-600 dark:text-indigo-400">
+                <Calendar className="w-4 h-4" />
+              </div>
+              Attendance History
+            </h2>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-col">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Date Range</label>
+                <select 
+                  value={dateRange}
+                  onChange={(e) => setDateRange(e.target.value)}
+                  className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 min-w-[140px]"
+                >
+                  <option value="Today">Today</option>
+                  <option value="This Week">This Week</option>
+                  <option value="Last Week">Last Week</option>
+                  <option value="This Month">This Month</option>
+                  <option value="Last Month">Last Month</option>
+                  <option value="All History">All History</option>
+                  <option value="Custom">Custom</option>
+                </select>
+              </div>
+              
+              {dateRange === 'Custom' && (
+                <>
+                  <div className="flex flex-col">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Start Date</label>
+                    <input 
+                      type="date"
+                      value={customStart}
+                      onChange={(e) => setCustomStart(e.target.value)}
+                      className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                    />
+                  </div>
+                  <div className="flex flex-col">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">End Date</label>
+                    <input 
+                      type="date"
+                      value={customEnd}
+                      onChange={(e) => setCustomEnd(e.target.value)}
+                      className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                    />
+                  </div>
+                </>
+              )}
             </div>
-            Attendance History
-          </h2>
-        </div>
+          </div>
         <div className="p-1">
           <DataTable columns={columns} data={records} isLoading={loading} searchable={false} emptyMessage="No attendance records found for this period." />
         </div>

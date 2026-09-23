@@ -7,6 +7,42 @@ import { logAction } from '@/lib/audit'
 import { calculatePayslip } from '@/lib/payrollCalc'
 import Payslip from '@/models/Payslip'
 import Employee from '@/models/Employee'
+import SalaryStructure from '@/models/SalaryStructure'
+
+const LOCKED_PAYSLIP_STATUSES = ['PROCESSING', 'REVIEW', 'APPROVED', 'FINALIZED', 'PAID']
+
+function getPayrollWindow(month, year) {
+  const periodStart = new Date(year, month - 1, 1)
+  const monthEnd = new Date(year, month, 0)
+  const today = new Date()
+  const periodEnd = today.getFullYear() === year && today.getMonth() === month - 1
+    ? new Date(year, month - 1, today.getDate())
+    : monthEnd
+  periodEnd.setHours(23, 59, 59, 999)
+  return { periodStart, periodEnd }
+}
+
+function employeeActiveDuringPeriodQuery(periodStart, periodEnd) {
+  return {
+    status: { $in: ['ACTIVE', 'PROBATION', 'NOTICE_PERIOD'] },
+    $and: [
+      {
+        $or: [
+          { joiningDate: { $lte: periodEnd } },
+          { joiningDate: null },
+          { joiningDate: { $exists: false } },
+        ],
+      },
+      {
+        $or: [
+          { lastWorkingDate: { $gte: periodStart } },
+          { lastWorkingDate: null },
+          { lastWorkingDate: { $exists: false } },
+        ],
+      },
+    ],
+  }
+}
 
 export const POST = withApi(async (req) => {
   const session = await requireAuth()
@@ -22,35 +58,75 @@ export const POST = withApi(async (req) => {
     return fail('Valid month and year are required', 400)
   }
 
-  const protectedQuery = { tenantId, month, year, status: { $in: ['PROCESSING', 'REVIEW', 'APPROVED', 'FINALIZED', 'PAID'] } }
+  const protectedQuery = { tenantId, month, year, status: { $in: LOCKED_PAYSLIP_STATUSES }, deleted: false }
   if (selectedEmployeeIds.length > 0) {
     protectedQuery.employee = { $in: selectedEmployeeIds }
   }
 
-  const alreadyProcessed = await Payslip.findOne(protectedQuery).select('status').lean()
-  if (alreadyProcessed) {
-    return fail(`A payslip for this period is already in ${alreadyProcessed.status} and cannot be re-run. Cancel it or process a new period.`, 400)
-  }
+  const lockedPayslips = await Payslip.find(protectedQuery).select('employee status').lean()
+  const lockedEmployeeIds = new Set(lockedPayslips.map((payslip) => payslip.employee.toString()))
 
-  const query = { tenantId, deleted: false, status: { $in: ['ACTIVE', 'PROBATION', 'NOTICE_PERIOD'] } }
+  const { periodStart, periodEnd } = getPayrollWindow(month, year)
+  const query = { tenantId, deleted: false, ...employeeActiveDuringPeriodQuery(periodStart, periodEnd) }
   if (selectedEmployeeIds.length > 0) {
     query._id = { $in: selectedEmployeeIds }
   }
+  if (lockedEmployeeIds.size > 0) {
+    query._id = query._id || {}
+    query._id.$nin = Array.from(lockedEmployeeIds)
+  }
 
-  const employees = await Employee.find(query).limit(1000)
-  if (!employees.length) return fail('No active employees found for this payroll period.', 400)
+  const employees = await Employee.find(query).select('firstName lastName employeeCode ctc joiningDate lastWorkingDate').limit(1000)
+  if (!employees.length) {
+    const lockedStatuses = [...new Set(lockedPayslips.map((payslip) => payslip.status))].join(', ')
+    return fail(
+      lockedPayslips.length
+        ? `No employees can be processed. Existing payslips are locked in ${lockedStatuses}. Cancel eligible draft/review payslips or process a new period.`
+        : 'No active employees found for this payroll period.',
+      400,
+      'NO_PROCESSABLE_EMPLOYEES'
+    )
+  }
 
   let succeeded = 0
   let failed = 0
+  let skipped = lockedPayslips.length
   const errors = []
 
+  const salaryStructures = await SalaryStructure.find({
+    tenantId,
+    employee: { $in: employees.map((employee) => employee._id) },
+    isActive: true,
+    ctc: { $gt: 0 },
+    approvalStatus: 'APPROVED',
+    deleted: false,
+  }).select('employee').lean()
+  const salaryReadyEmployeeIds = new Set(salaryStructures.map((structure) => structure.employee.toString()))
+  const processableEmployees = []
   for (const employee of employees) {
+    if (salaryReadyEmployeeIds.has(employee._id.toString()) || Number(employee.ctc || 0) > 0) {
+      processableEmployees.push(employee)
+    } else {
+      skipped++
+      errors.push({
+        employeeId: employee._id,
+        employeeCode: employee.employeeCode,
+        message: `${employee.firstName} ${employee.lastName}: Salary/CTC is missing. Add salary structure or employee CTC before running payroll.`,
+      })
+    }
+  }
+
+  if (!processableEmployees.length) {
+    return fail('No employees can be processed. Add salary structures/employee CTC or choose a period without locked payslips.', 400, 'NO_PROCESSABLE_EMPLOYEES')
+  }
+
+  for (const employee of processableEmployees) {
     try {
       const calc = await calculatePayslip({ employeeId: employee._id, tenantId, month, year })
       await Payslip.findOneAndUpdate(
         { employee: employee._id, month, year, tenantId },
         {
-          $set: { ...calc, status: 'DRAFT', updatedBy: session.sub, tenantId, employee: employee._id, month, year },
+          $set: { ...calc, status: 'DRAFT', deleted: false, updatedBy: session.sub, tenantId, employee: employee._id, month, year },
           $setOnInsert: { createdBy: session.sub },
         },
         { upsert: true, new: true, setDefaultsOnInsert: true }
@@ -58,7 +134,11 @@ export const POST = withApi(async (req) => {
       succeeded++
     } catch (err) {
       failed++
-      errors.push({ employeeId: employee._id, message: err.message })
+      errors.push({
+        employeeId: employee._id,
+        employeeCode: employee.employeeCode,
+        message: `${employee.firstName} ${employee.lastName}: ${err.message}`,
+      })
     }
   }
 
@@ -68,5 +148,5 @@ export const POST = withApi(async (req) => {
     description: `Payroll run for ${month}/${year}`,
   })
 
-  return ok({ succeeded, failed, errors }, 'Payroll run completed')
+  return ok({ succeeded, failed, skipped, errors }, 'Payroll run completed')
 })

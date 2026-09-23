@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { AlertTriangle, Laptop, Send, Plus, X, AlertOctagon, Check, Trash2, Edit2, RotateCcw, Package, Settings, Wrench, Search, Users } from 'lucide-react'
+import { AlertTriangle, Laptop, Send, Plus, X, AlertOctagon, Check, Trash2, Edit2, RotateCcw, Package, Settings, Wrench, Search, Users, Eye, Calendar, User, FileText, Activity } from 'lucide-react'
 import { Badge } from '@/components/common/Badge'
 import { DataTable } from '@/components/tables/DataTable'
 import { assetApi } from '@/services/assetApi'
@@ -20,6 +20,7 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
   const [message, setMessage] = useState('')
 
   // Modals state
+  const [viewAsset, setViewAsset] = useState(null)
   const [requestForm, setRequestForm] = useState({ assetName: '', type: 'NEW', reason: '' })
   const [showRequestForm, setShowRequestForm] = useState(false)
   
@@ -28,7 +29,11 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
   const [reportNote, setReportNote] = useState('')
 
   const [showAddForm, setShowAddForm] = useState(false)
-  const [addForm, setAddForm] = useState({ assetTag: '', name: '', category: 'Laptop', condition: 'Good' })
+  const [addForm, setAddForm] = useState({ 
+    assetTag: '', name: '', category: 'Laptop', condition: '', details: '', imageUrl: '',
+    serialNumber: '', purchaseDate: '', cost: '', warrantyExpiry: '' 
+  })
+  const [uploadingImage, setUploadingImage] = useState(false)
 
   const [showAssignForm, setShowAssignForm] = useState(false)
   const [assignAssetId, setAssignAssetId] = useState('')
@@ -44,7 +49,7 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
     Promise.all([
       assetApi.list(),
       assetApi.listRequests({ size: 100 }),
-      reviewMode ? employeeApi.getAll({ size: 1000 }).catch(() => ({ data: { data: { content: [] } } })) : Promise.resolve({ data: { data: { content: [] } } })
+      reviewMode ? employeeApi.getAll({ size: 50 }).catch(() => ({ data: { data: { content: [] } } })) : Promise.resolve({ data: { data: { content: [] } } })
     ])
       .then(([assetRes, requestRes, empRes]) => {
         setAssets(assetRes.data.data || [])
@@ -108,13 +113,27 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
     setMessage('')
     try {
       await assetApi.create(addForm)
-      setAddForm({ assetTag: '', name: '', category: 'Laptop', condition: 'Good' })
+      setAddForm({ assetTag: '', name: '', category: 'Laptop', condition: 'Good', details: '', imageUrl: '' })
       setShowAddForm(false)
       load()
     } catch (err) {
       setMessage(err.response?.data?.message || 'Failed to add asset')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleImageSelect(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingImage(true)
+    try {
+      const res = await assetApi.uploadImage(file)
+      setAddForm(prev => ({ ...prev, imageUrl: res.data.data.url }))
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to upload image')
+    } finally {
+      setUploadingImage(false)
     }
   }
 
@@ -184,15 +203,20 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
   const assetColumns = [
     { header: 'Asset Details', accessor: 'name', render: (_, row) => (
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-          <Laptop className="w-5 h-5 text-slate-500" />
-        </div>
+        {row.imageUrl ? (
+          <img src={row.imageUrl} alt={row.name} className="w-10 h-10 rounded-xl object-cover border border-slate-200 dark:border-slate-700 shadow-sm" />
+        ) : (
+          <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+            <Laptop className="w-5 h-5 text-slate-500" />
+          </div>
+        )}
         <div>
           <p className="font-medium text-slate-800 dark:text-slate-100">{row.name}</p>
-          <p className="text-xs text-slate-400">{row.assetTag} · {row.category || 'Hardware'}</p>
+          <p className="text-xs text-slate-400">{row.assetTag} • {row.category || 'Hardware'}</p>
         </div>
       </div>
     ) },
+    { header: 'Added On', accessor: 'createdAt', render: (v) => <span className="text-sm font-medium text-slate-600 dark:text-slate-300">{v ? formatDate(v) : '-'}</span> },
     { header: 'Condition', accessor: 'condition', render: (v) => <span className="text-sm font-medium text-slate-600 dark:text-slate-300">{v || 'Good'}</span> },
     { header: 'Status', accessor: 'status', render: (v) => <Badge>{v}</Badge> },
     { header: 'Assignment', accessor: 'assignedTo', render: (v, row) => (
@@ -204,6 +228,15 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
       ) : (
         <span className="text-sm text-slate-400 italic">Unassigned</span>
       )
+    ) },
+    { header: 'View', key: 'viewAction', sortable: false, render: (_, row) => (
+      <button 
+        className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-500/10"
+        onClick={(e) => { e.stopPropagation(); setViewAsset(row); }}
+        title="View Details"
+      >
+        <Eye className="w-4 h-4" />
+      </button>
     ) },
   ]
 
@@ -285,7 +318,7 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 relative z-10">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-800 dark:text-white">
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full">
             {title}
           </h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
@@ -422,6 +455,46 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
                 <input className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all" placeholder="e.g. Brand New, Good" value={addForm.condition} onChange={(e) => setAddForm({ ...addForm, condition: e.target.value })} />
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase text-slate-500 ml-1">Serial Number</label>
+                  <input className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all" placeholder="e.g. SN-12345" value={addForm.serialNumber} onChange={(e) => setAddForm({ ...addForm, serialNumber: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase text-slate-500 ml-1">Cost (₹)</label>
+                  <input type="number" className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all" placeholder="e.g. 50000" value={addForm.cost} onChange={(e) => setAddForm({ ...addForm, cost: e.target.value })} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase text-slate-500 ml-1">Purchase Date</label>
+                  <input type="date" className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all" value={addForm.purchaseDate} onChange={(e) => setAddForm({ ...addForm, purchaseDate: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase text-slate-500 ml-1">Warranty Expiry</label>
+                  <input type="date" className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all" value={addForm.warrantyExpiry} onChange={(e) => setAddForm({ ...addForm, warrantyExpiry: e.target.value })} />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase text-slate-500 ml-1">Asset Image (Optional)</label>
+                {addForm.imageUrl ? (
+                  <div className="flex items-center gap-4">
+                    <img src={addForm.imageUrl} alt="Asset preview" className="h-16 w-16 rounded-xl object-cover border border-slate-200 dark:border-slate-700" />
+                    <button type="button" onClick={() => setAddForm(prev => ({ ...prev, imageUrl: '' }))} className="text-xs font-bold text-rose-600 hover:text-rose-700">Remove Image</button>
+                  </div>
+                ) : (
+                  <input type="file" accept="image/*" onChange={handleImageSelect} disabled={uploadingImage} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all file:mr-4 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" />
+                )}
+                {uploadingImage && <p className="text-xs text-indigo-600 font-bold ml-1">Uploading...</p>}
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase text-slate-500 ml-1">Details (Optional)</label>
+                <textarea rows={3} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all resize-none" placeholder="Enter configuration, serial numbers, or other notes..." value={addForm.details} onChange={(e) => setAddForm({ ...addForm, details: e.target.value })} />
+              </div>
+
               <div className="pt-4 flex justify-end gap-3">
                 <button type="button" onClick={() => setShowAddForm(false)} className="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Cancel</button>
                 <button type="submit" disabled={saving} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition-all shadow-md flex items-center gap-2">
@@ -523,6 +596,123 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
       )}
 
       {/* Keep Employee Modals for Report/Request to maintain compatibility */}
+      {/* 3.5 View Asset Details (Drawer) */}
+      {viewAsset && (
+        <Portal>
+          <div className="fixed inset-0 z-50 flex justify-end">
+            <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm transition-opacity" onClick={() => setViewAsset(null)} />
+            <div className="relative w-full max-w-md bg-white dark:bg-slate-950 h-full shadow-2xl flex flex-col animate-slide-in-right border-l border-slate-200 dark:border-slate-800">
+              
+              {/* Drawer Header */}
+              <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex-shrink-0">
+                <div className="flex items-center gap-4">
+                  {viewAsset.imageUrl ? (
+                    <img src={viewAsset.imageUrl} alt={viewAsset.name} className="w-12 h-12 rounded-2xl object-cover shadow-sm border border-slate-200 dark:border-slate-700" />
+                  ) : (
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center shadow-inner">
+                      <Laptop className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+                    </div>
+                  )}
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900 dark:text-white">Asset Details</h2>
+                    <p className="text-sm font-medium text-slate-500 mt-0.5">{viewAsset.assetTag}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setViewAsset(null)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Drawer Body */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-8">
+                
+                {/* Asset Overview */}
+                <section>
+                  {viewAsset.imageUrl && (
+                    <div className="mb-6 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex justify-center max-h-64 shadow-sm">
+                      <img src={viewAsset.imageUrl} alt={viewAsset.name} className="object-contain w-full h-full" />
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-bold text-slate-900 dark:text-white text-lg">{viewAsset.name}</h3>
+                    <Badge>{viewAsset.status}</Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Category</span>
+                      <p className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-200">{viewAsset.category}</p>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Condition</span>
+                      <p className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-200">{viewAsset.condition || 'Good'}</p>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Added On</span>
+                      <p className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-200">{formatDate(viewAsset.createdAt)}</p>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Current Assignment */}
+                <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <h3 className="mb-4 flex items-center gap-2 text-sm font-extrabold text-slate-900 dark:text-white">
+                    <User className="h-4 w-4 text-indigo-600" /> Current Assignment
+                  </h3>
+                  {viewAsset.assignedTo ? (
+                    <div className="space-y-3">
+                      <div className="flex justify-between gap-4">
+                        <span className="font-semibold text-slate-500 text-sm">Assigned To</span>
+                        <span className="font-bold text-slate-900 dark:text-white text-sm">{viewAsset.assignedTo.firstName} {viewAsset.assignedTo.lastName}</span>
+                      </div>
+                      <div className="flex justify-between gap-4">
+                        <span className="font-semibold text-slate-500 text-sm">Assigned Date</span>
+                        <span className="font-bold text-slate-900 dark:text-white text-sm">{formatDate(viewAsset.assignedDate)}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm font-medium text-slate-500 italic">Currently not assigned to anyone.</p>
+                  )}
+                </section>
+
+                {/* Assignment History */}
+                <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <h3 className="mb-4 flex items-center gap-2 text-sm font-extrabold text-slate-900 dark:text-white">
+                    <Activity className="h-4 w-4 text-emerald-600" /> Assignment History
+                  </h3>
+                  
+                  {viewAsset.assignmentHistory && viewAsset.assignmentHistory.length > 0 ? (
+                    <div className="relative border-l-2 border-slate-100 dark:border-slate-800 ml-3 space-y-6">
+                      {viewAsset.assignmentHistory.map((history, idx) => (
+                        <div key={idx} className="relative pl-6">
+                          <div className="absolute -left-[9px] top-1 h-4 w-4 rounded-full border-4 border-white dark:border-slate-950 bg-emerald-500" />
+                          <div className="flex flex-col gap-1">
+                            <span className="font-bold text-slate-900 dark:text-white text-sm">
+                              {history.employeeId ? `${history.employeeId.firstName} ${history.employeeId.lastName}` : 'Unknown Employee'}
+                            </span>
+                            <span className="text-xs font-semibold text-slate-500">
+                              {formatDate(history.assignedDate)} — {formatDate(history.recoveredDate)}
+                            </span>
+                            {history.conditionOnRecovery && (
+                              <span className="text-xs text-slate-400 mt-1">Returned as: {history.conditionOnRecovery}</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm font-medium text-slate-500 italic">No previous assignment history.</p>
+                  )}
+                </section>
+                
+              </div>
+            </div>
+          </div>
+        </Portal>
+      )}
+
       {/* 4. Employee Request Asset */}
       {showRequestForm && (
         <Portal><div className="fixed inset-0 z-50 flex items-center justify-center p-4">

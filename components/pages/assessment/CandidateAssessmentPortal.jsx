@@ -156,7 +156,7 @@ export function CandidateAssessmentPortal({ token }) {
           <div className="w-14 h-14 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center mx-auto mb-4">
             <CheckCircle2 className="w-7 h-7 text-emerald-500" />
           </div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Assessment Submitted</h1>
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full mb-2">Assessment Submitted</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm">Thank you for completing {data?.assessmentName || 'the assessment'}.</p>
           {showResult && result?.percentage != null && (
             <div className="mt-4 px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 inline-block">
@@ -182,7 +182,7 @@ export function CandidateAssessmentPortal({ token }) {
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 py-8 px-4">
         <div className="max-w-2xl mx-auto space-y-5">
           <div className="sticky top-0 z-10 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm px-5 py-3 flex items-center justify-between">
-            <h1 className="font-semibold text-slate-800 dark:text-slate-100">{data.assessmentName}</h1>
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full">{data.assessmentName}</h1>
             <span className={cn('inline-flex items-center gap-1.5 text-sm font-mono font-medium', remainingMs < 60000 ? 'text-red-500' : 'text-slate-600 dark:text-slate-300')}>
               <Clock className="w-4 h-4" /> {formatCountdown(remainingMs)}
             </span>
@@ -217,7 +217,7 @@ export function CandidateAssessmentPortal({ token }) {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center px-4 py-10">
       <div className="max-h-[90dvh] overflow-y-auto max-w-md w-full bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm p-8">
         <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">{data.candidateName}</p>
-        <h1 className="text-xl font-bold text-slate-900 dark:text-white mt-1">{data.assessmentName}</h1>
+        <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full mt-1">{data.assessmentName}</h1>
         {error && <div className="mt-3 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">{error}</div>}
 
         <div className="mt-4 grid grid-cols-2 gap-3 text-sm">

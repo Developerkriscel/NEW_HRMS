@@ -217,10 +217,10 @@ export function Navbar({ onMobileMenuToggle }) {
   }
 
   return (
-    <header className="sticky top-0 z-30 px-4 pt-3 pb-1 lg:px-6 bg-slate-50/90 dark:bg-slate-950/90 backdrop-blur-md pointer-events-none">
+    <header className="sticky top-0 z-50 px-4 pt-3 pb-1 lg:px-6 bg-slate-50/90 dark:bg-slate-950/90 backdrop-blur-md pointer-events-none">
       {/* Fixed Desktop Logo Removed to prevent overlap with greeting */}
 
-      <div className="max-w-[1400px] mx-auto pointer-events-auto">
+      <div className="w-full pointer-events-auto">
         {/* Transparent toolbar with mobile brand/menu on the left and actions on the right. */}
         <div className="flex min-h-10 items-center justify-between gap-3">
 
@@ -232,20 +232,10 @@ export function Navbar({ onMobileMenuToggle }) {
             >
               <Menu className="w-5 h-5 text-slate-600 dark:text-slate-400" />
             </button>
-            <div className="hidden lg:flex items-center gap-2">
-              <span className="font-black text-slate-900 dark:text-white text-xl tracking-tight">
-                NexaHR
-              </span>
-            </div>
-            <div className="flex items-center gap-2.5 px-1 py-1 lg:hidden">
-              <span className="font-bold text-slate-900 dark:text-white text-sm tracking-tight hidden sm:inline">
-                NexaHR
-              </span>
-            </div>
           </div>
 
           {/* Right: Search + Actions */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 ml-auto">
             {/* Expanded Search Bar */}
             <div className="hidden md:flex relative w-80 shadow-[inset_0_2px_4px_rgba(0,0,0,0.02),0_4px_12px_rgba(0,0,0,0.03)] rounded-xl bg-white dark:bg-slate-900" ref={searchBoxRef}>
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -287,11 +277,6 @@ export function Navbar({ onMobileMenuToggle }) {
                 </div>
               )}
             </div>
-
-            {/* Help Icon */}
-            <button className="hidden sm:flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-slate-800 shadow-[4px_4px_10px_rgba(0,0,0,0.05),-4px_-4px_10px_rgba(255,255,255,0.8)] dark:shadow-[4px_4px_10px_rgba(0,0,0,0.3),-4px_-4px_10px_rgba(255,255,255,0.02)] transition-all hover:-translate-y-0.5 text-slate-700 dark:text-slate-300">
-              <HelpCircle className="w-4 h-4" strokeWidth={2.5} />
-            </button>
 
             {/* Notification */}
             <div className="relative">

@@ -8,7 +8,6 @@ import { leaveApi } from '@/services/leaveApi'
 import { teamRequestApi } from '@/services/teamRequestApi'
 import { formatDate } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
-import { Check } from 'lucide-react'
 import { Portal } from '@/components/common/Portal'
 
 const REQUEST_TYPES = ['SHIFT_CHANGE', 'OVERTIME', 'WORK_FROM_HOME', 'TRAVEL', 'DOCUMENT']
@@ -137,7 +136,7 @@ export function EmployeeLeaveWorkspace({ headerAction }) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div className="flex-1">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-800 dark:text-white">Leave & Requests</h1>
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full">Leave & Requests</h1>
           </div>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Manage your time-off and submit team requests</p>
         </div>
@@ -207,11 +206,11 @@ export function EmployeeLeaveWorkspace({ headerAction }) {
                         </button>
                         {canSelfApprove && (
                           <>
-                            <button onClick={() => handleApproveLeave(l._id)} className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20" title="Approve">
-                              <Check className="w-4 h-4" />
+                            <button onClick={() => handleApproveLeave(l._id)} className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-extrabold text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20">
+                              Accept
                             </button>
-                            <button onClick={() => handleRejectLeave(l._id)} className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20" title="Reject">
-                              <X className="w-4 h-4" />
+                            <button onClick={() => handleRejectLeave(l._id)} className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-extrabold text-red-700 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">
+                              Reject
                             </button>
                           </>
                         )}
@@ -263,11 +262,11 @@ export function EmployeeLeaveWorkspace({ headerAction }) {
                     </Badge>
                     {r.status === 'PENDING' && canSelfApprove && (
                       <div className="flex items-center gap-1.5 opacity-100">
-                        <button onClick={() => handleApproveRequestDirect(r._id)} className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20" title="Approve">
-                          <Check className="w-4 h-4" />
+                        <button onClick={() => handleApproveRequestDirect(r._id)} className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-extrabold text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20">
+                          Accept
                         </button>
-                        <button onClick={() => handleRejectRequestDirect(r._id)} className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20" title="Reject">
-                          <X className="w-4 h-4" />
+                        <button onClick={() => handleRejectRequestDirect(r._id)} className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-extrabold text-red-700 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">
+                          Reject
                         </button>
                       </div>
                     )}

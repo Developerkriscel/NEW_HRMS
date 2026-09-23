@@ -1,14 +1,12 @@
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import path from 'path'
-import { readFile } from 'fs/promises'
 import { withApi } from '@/lib/handler'
 import { fail } from '@/lib/apiResponse'
 import { requireAuth, requireRole, requireTenantId } from '@/lib/auth'
 import { CANDIDATE_VIEW_ROLES } from '@/lib/candidateConstants'
+import { readResumeFile } from '@/lib/resumeStorage'
 
-const STORAGE_ROOT = path.join(process.cwd(), 'output', 'resumes')
 const CONTENT_TYPES = { pdf: 'application/pdf', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }
 
 // Authenticated only — resumes are candidate PII and were deliberately
@@ -26,14 +24,8 @@ export const GET = withApi(async (req, { params }) => {
   const filename = segments[1]
   if (!/^[a-zA-Z0-9_-]+\.(pdf|doc|docx)$/.test(filename)) return fail('Not found', 404, 'NOT_FOUND')
 
-  const absolutePath = path.join(STORAGE_ROOT, tenantId, filename)
-  let buffer
-  try {
-    buffer = await readFile(absolutePath)
-  } catch (err) {
-    if (err?.code === 'ENOENT') return fail('Resume not found', 404, 'NOT_FOUND')
-    throw err
-  }
+  const buffer = await readResumeFile(tenantId, filename)
+  if (!buffer) return fail('Resume not found', 404, 'NOT_FOUND')
 
   const ext = filename.split('.').pop()
   return new NextResponse(buffer, {

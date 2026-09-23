@@ -130,6 +130,8 @@ export function HelpdeskWorkspace({ title, subtitle, canRaise = false, canManage
     { header: 'Raised By', accessor: 'raisedBy', render: (v) => v ? `${v.firstName} ${v.lastName}` : 'Me' },
     { header: 'Status', accessor: 'status', render: (v) => <Badge>{v}</Badge> },
     { header: 'Created', accessor: 'createdAt', render: (v) => formatDate(v) },
+    { header: 'Due By', accessor: 'slaDueAt', render: (v) => v ? formatDate(v) : '-' },
+    { header: 'Last Updated', accessor: 'updatedAt', render: (v) => v ? formatDate(v) : '-' },
     { header: 'Action', key: 'action', sortable: false, render: (_, row) => (
       <button 
         className="px-3 py-1.5 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 font-medium text-xs rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
@@ -151,7 +153,7 @@ export function HelpdeskWorkspace({ title, subtitle, canRaise = false, canManage
     <div className="animate-fade-in space-y-6 pb-12">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 relative z-10">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-800 dark:text-white">
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full">
             {title}
           </h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">

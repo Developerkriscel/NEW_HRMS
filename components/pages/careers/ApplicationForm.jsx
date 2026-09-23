@@ -156,7 +156,7 @@ export function ApplicationForm({ companySlug, jobSlug, source, ref: refCode }) 
           <div className="w-14 h-14 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center mx-auto mb-4">
             <CheckCircle2 className="w-7 h-7 text-emerald-500" />
           </div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Application Submitted Successfully</h1>
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full mb-2">Application Submitted Successfully</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm">Thank you for applying for:</p>
           <p className="text-slate-800 dark:text-slate-100 font-semibold mt-1">{success.jobTitle}</p>
           <div className="mt-4 px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 inline-block">
@@ -189,7 +189,7 @@ export function ApplicationForm({ companySlug, jobSlug, source, ref: refCode }) 
 
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Apply for {job.title}</h1>
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full">Apply for {job.title}</h1>
             <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">{job.companyName}{job.department ? ` · ${job.department}` : ''}</p>
           </div>
           {DEV_TOOLS_ENABLED && (

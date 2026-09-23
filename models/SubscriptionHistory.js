@@ -17,7 +17,7 @@ const SubscriptionHistorySchema = new mongoose.Schema(
     fromValue: { type: String, default: null },
     toValue: { type: String, default: null },
     reason: { type: String, required: true },
-    performedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'PlatformOperator', required: true },
+    performedBy: { type: String, required: true },
     performedByEmail: { type: String, required: true },
   },
   { timestamps: { createdAt: true, updatedAt: false } }

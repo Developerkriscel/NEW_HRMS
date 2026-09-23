@@ -34,6 +34,8 @@ export const POST = withApi(async (req, { params }) => {
   try {
     const result = await convertCandidateToEmployee(tenantId, params.id, session, {
       overrideDuplicate: !!body.overrideDuplicate,
+      loginEmail: body.loginEmail,
+      initialPassword: body.initialPassword,
     })
 
     await logAction(session, {

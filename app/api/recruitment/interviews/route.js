@@ -10,11 +10,15 @@ import {
 import { ACTIVITY_ENTRY_TYPE, APPLICATION_STATUS } from '@/lib/candidateConstants'
 import { checkAvailability } from '@/lib/interviewHelpers'
 import { getActorName } from '@/lib/candidateHelpers'
+import { assertTenantMailReady } from '@/lib/tenantMail'
+import { buildInterviewEmailDraft, sendInterviewInviteEmail } from '@/lib/interviewEmailDelivery'
 import Interview from '@/models/Interview'
 import InterviewPanelMember from '@/models/InterviewPanelMember'
 import InterviewScheduleHistory from '@/models/InterviewScheduleHistory'
 import Application from '@/models/Application'
 import Employee from '@/models/Employee'
+import '@/models/Candidate'
+import '@/models/Job'
 
 // GET — list, with the Interview page's tabs computed server-side from a
 // `tab` query param rather than duplicating the same logic client-side.
@@ -106,10 +110,15 @@ export const POST = withApi(async (req) => {
   }
   const requestedInterviewers = Array.isArray(body.interviewers) ? body.interviewers : []
 
-  const application = await Application.findOne({ _id: body.applicationId, tenantId, deleted: false })
+  const application = await Application.findOne({ _id: body.applicationId, tenantId, deleted: false }).populate('candidateId').populate('jobId')
   if (!application) return fail('Application not found', 404, 'NOT_FOUND')
   if ([APPLICATION_STATUS.REJECTED, APPLICATION_STATUS.WITHDRAWN].includes(application.status)) {
     return fail(`Cannot schedule an interview for a ${application.status.toLowerCase()} application`, 400, 'INVALID_STATE')
+  }
+  const shouldSendCandidateEmail = body.sendCandidateEmail !== false
+  if (shouldSendCandidateEmail) {
+    if (!application.candidateId?.email && !body.candidateEmail) return fail('Candidate email is missing. Add candidate email before sending interview invite.', 400, 'VALIDATION_ERROR')
+    await assertTenantMailReady(tenantId)
   }
 
   const employeeIds = requestedInterviewers.map((i) => i.employeeId).filter(Boolean)
@@ -119,16 +128,45 @@ export const POST = withApi(async (req) => {
   const actorName = await getActorName(session)
   const interview = await Interview.create({
     tenantId,
-    applicationId: application._id, candidateId: application.candidateId, jobId: application.jobId,
+    applicationId: application._id, candidateId: application.candidateId._id || application.candidateId, jobId: application.jobId._id || application.jobId,
     pipelineStageId: body.pipelineStageId || application.currentStage || null,
     roundName: body.roundName, type: body.type,
     date: new Date(body.date), startTime: body.startTime, endTime: body.endTime, timezone: body.timezone || 'Asia/Kolkata',
     mode: body.mode, meetingProvider: body.meetingProvider || null, meetingUrl: body.meetingUrl || null, location: body.location || null,
-    candidateInstructions: body.candidateInstructions || null, internalNotes: body.internalNotes || null,
+    candidateInstructions: body.candidateInstructions || body.candidateEmailBody || null, internalNotes: body.internalNotes || null,
     scorecardTemplateId: body.scorecardTemplateId || null,
     status: INTERVIEW_STATUS.SCHEDULED,
     scheduledBy: session.userId, scheduledByName: actorName, scheduledAt: new Date(),
   })
+
+  if (shouldSendCandidateEmail) {
+    const draft = buildInterviewEmailDraft({
+      candidate: application.candidateId,
+      job: application.jobId,
+      interview,
+      body,
+    })
+    interview.candidateInviteSubject = draft.subject
+    interview.candidateInstructions = draft.body
+    try {
+      await sendInterviewInviteEmail({
+        tenantId,
+        candidate: application.candidateId,
+        job: application.jobId,
+        interview,
+        body: { ...body, candidateEmailSubject: draft.subject, candidateEmailBody: draft.body },
+      })
+      interview.candidateInviteStatus = 'SENT'
+      interview.candidateInviteSentAt = new Date()
+      interview.candidateInviteError = null
+      await interview.save()
+    } catch (err) {
+      interview.candidateInviteStatus = 'FAILED'
+      interview.candidateInviteError = err.message || 'Interview invite email failed'
+      await interview.save()
+      return fail(interview.candidateInviteError, 400, 'INTERVIEW_INVITE_EMAIL_FAILED', { interview })
+    }
+  }
 
   if (employeeIds.length) {
     const employees = await Employee.find({ _id: { $in: employeeIds }, tenantId }).select('firstName lastName')

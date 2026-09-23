@@ -17,18 +17,21 @@ const ROLE_DASHBOARDS = {
 }
 
 const QUICK_LOGINS = [
-  { label: 'Super Admin', email: 'admin@nexahr.io', password: 'Password@123', icon: Shield, color: 'from-blue-600 to-indigo-600 text-blue-700 bg-blue-50/80 border-blue-200' },
-  { label: 'Company Admin', email: 'admin@acme.com', password: 'Password@123', icon: Building2, color: 'from-emerald-600 to-teal-600 text-emerald-700 bg-emerald-50/80 border-emerald-200' },
-  { label: 'HR Manager', email: 'hr@acme.com', password: 'Password@123', icon: UserCheck, color: 'from-purple-600 to-pink-600 text-purple-700 bg-purple-50/80 border-purple-200' },
-  { label: 'Manager', email: 'manager@acme.com', password: 'Password@123', icon: Users, color: 'from-amber-600 to-orange-600 text-amber-700 bg-amber-50/80 border-amber-200' },
-  { label: 'Employee', email: 'employee@acme.com', password: 'Password@123', icon: Briefcase, color: 'from-sky-600 to-cyan-600 text-sky-700 bg-sky-50/80 border-sky-200' },
-  { label: 'Finance', email: 'finance@acme.com', password: 'Password@123', icon: DollarSign, color: 'from-rose-600 to-red-600 text-rose-700 bg-rose-50/80 border-rose-200' },
-  { label: 'IT Admin', email: 'itadmin@acme.com', password: 'Password@123', icon: Terminal, color: 'from-slate-700 to-slate-900 text-slate-700 bg-slate-100 border-slate-300' },
+  { label: 'Super Admin', role: 'SUPER_ADMIN', email: 'admin@nexahr.io', password: 'Password@123', icon: Shield, color: 'from-blue-600 to-indigo-600 text-blue-700 bg-blue-50/80 border-blue-200' },
+  { label: 'Company Admin', role: 'COMPANY_ADMIN', email: 'admin@acme.com', password: 'Password@123', icon: Building2, color: 'from-emerald-600 to-teal-600 text-emerald-700 bg-emerald-50/80 border-emerald-200' },
+  { label: 'HR Manager', role: 'HR_MANAGER', email: 'hr@acme.com', password: 'Password@123', icon: UserCheck, color: 'from-purple-600 to-pink-600 text-purple-700 bg-purple-50/80 border-purple-200' },
+  { label: 'Manager', role: 'MANAGER', email: 'manager@acme.com', password: 'Password@123', icon: Users, color: 'from-amber-600 to-orange-600 text-amber-700 bg-amber-50/80 border-amber-200' },
+  { label: 'Employee', role: 'EMPLOYEE', email: 'employee@acme.com', password: 'Password@123', icon: Briefcase, color: 'from-sky-600 to-cyan-600 text-sky-700 bg-sky-50/80 border-sky-200' },
+  { label: 'Finance', role: 'FINANCE', email: 'finance@acme.com', password: 'Password@123', icon: DollarSign, color: 'from-rose-600 to-red-600 text-rose-700 bg-rose-50/80 border-rose-200' },
+  { label: 'IT Admin', role: 'IT_ADMIN', email: 'itadmin@acme.com', password: 'Password@123', icon: Terminal, color: 'from-slate-700 to-slate-900 text-slate-700 bg-slate-100 border-slate-300' },
 ]
 
 function loginErrorMessage(err, fallback) {
-  if (err.message) return err.message
   if (err.response?.data?.message) return err.response.data.message
+  if (err.errorCode === 'DATABASE_UNAVAILABLE') {
+    return 'MongoDB is unreachable. Add your current IP in MongoDB Atlas Network Access, or use Dev Mode for local testing.'
+  }
+  if (err.message) return err.message
   if (!err.response) return 'Could not reach the server — check your connection and try again'
   return fallback
 }
@@ -42,7 +45,10 @@ async function postAuth(path, body) {
   })
   const data = await response.json().catch(() => ({}))
   if (!response.ok) {
-    throw new Error(data.message || 'Invalid email or password')
+    const error = new Error(data.message || 'Invalid email or password')
+    error.status = response.status
+    error.errorCode = data.errorCode
+    throw error
   }
   return data
 }
@@ -71,6 +77,22 @@ export default function LoginPage() {
       router.push(ROLE_DASHBOARDS[user.role] || '/login')
     } catch (err) {
       setError(loginErrorMessage(err, 'Invalid email or password'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function loginWithDevSession(role = 'SUPER_ADMIN') {
+    setError('')
+    setLoading(true)
+    try {
+      const data = await postAuth('dev-login', { role })
+      const user = data.data.user
+      const { useAuthStore } = await import('@/store/authStore')
+      useAuthStore.getState().setAuth(user)
+      router.push(ROLE_DASHBOARDS[user.role] || '/login')
+    } catch (err) {
+      setError(loginErrorMessage(err, 'Dev login is not available'))
     } finally {
       setLoading(false)
     }
@@ -205,9 +227,17 @@ export default function LoginPage() {
             {/* Quick Login Section */}
             {process.env.NODE_ENV !== 'production' && (
               <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => loginWithDevSession('COMPANY_ADMIN')}
+                  className="mb-4 w-full rounded-xl border border-dashed border-blue-300 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700 transition-all hover:border-blue-500 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300"
+                >
+                  Continue in Dev Mode
+                </button>
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Quick Sign In</span>
-                  <span className="text-[11px] text-slate-400">Click to fill & login</span>
+                  <span className="text-[11px] text-slate-400">Requires MongoDB</span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {QUICK_LOGINS.map((login) => {

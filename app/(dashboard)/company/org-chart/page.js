@@ -55,7 +55,7 @@ export default function OrgChartPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    employeeApi.getAll({ size: 500 })
+    employeeApi.getAll({ size: 50 })
       .then((res) => setEmployees(res.data.data.content || []))
       .finally(() => setLoading(false))
   }, [])
@@ -84,7 +84,10 @@ export default function OrgChartPage() {
     <div className="animate-fade-in space-y-6">
       <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Org Chart</h1>
+          <div className="relative z-10 group w-fit mb-2">
+  <h1 className="text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-900 via-indigo-700 to-blue-600 dark:from-indigo-200 dark:via-indigo-400 dark:to-blue-400 drop-shadow-sm transition-all duration-500 group-hover:scale-[1.02] origin-left">Org Chart</h1>
+  <div className="h-1 w-12 rounded-full bg-gradient-to-r from-indigo-600 to-blue-500 mt-2 transition-all duration-500 group-hover:w-full opacity-70"></div>
+</div>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Built from employee reporting manager relationships</p>
         </div>
       </div>

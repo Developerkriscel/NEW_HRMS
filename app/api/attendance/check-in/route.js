@@ -6,6 +6,7 @@ import { requireAuth, requireTenantId } from '@/lib/auth'
 import Attendance from '@/models/Attendance'
 import Employee from '@/models/Employee'
 import Tenant from '@/models/Tenant'
+import { normalizeAttendanceLocation, validateAttendanceLocationPolicy } from '@/lib/attendanceLocationPolicy'
 
 const CHECK_IN_SOURCES = ['WEB', 'MOBILE', 'GPS', 'BIOMETRIC', 'QR_CODE', 'FACE_RECOGNITION', 'MANUAL', 'WFH']
 const DEFAULT_LATE_GRACE_MINUTES = 15
@@ -44,10 +45,19 @@ export const POST = withApi(async (req) => {
     return fail('You have already checked in today', 400)
   }
 
-  // Geo-fence validation is intentionally a no-op — Branch.geoFenceRadius
-  // exists but no haversine-distance enforcement is implemented anywhere
-  // in this system, matching the original.
-  
+  const capturedLocation = normalizeAttendanceLocation(body)
+  const locationPolicy = await validateAttendanceLocationPolicy({ tenantId, location: capturedLocation })
+  if (!locationPolicy.ok) {
+    return fail(locationPolicy.message, 400, 'LOCATION_POLICY_VIOLATION', {
+      status: locationPolicy.status,
+      nearestLocation: locationPolicy.nearest ? {
+        name: locationPolicy.nearest.branch.name,
+        distanceMeters: locationPolicy.nearest.distance,
+        allowedRadiusMeters: locationPolicy.nearest.radius,
+      } : null,
+    })
+  }
+
   const [employee, tenantDoc] = await Promise.all([
     Employee.findOne({ _id: session.userId, tenantId, deleted: false }).populate('shift'),
     Tenant.findById(tenantId),
@@ -61,37 +71,41 @@ export const POST = withApi(async (req) => {
   const officeStartTime = assignedShift?.startTime || tenantDoc?.hrSettings?.officeStartTime || '09:00'
   const graceMinutes = assignedShift?.gracePeriodMinutes ?? DEFAULT_LATE_GRACE_MINUTES
   const [startHour, startMin] = officeStartTime.split(':').map(Number)
-  
+
   const expectedStartTime = new Date(now)
   expectedStartTime.setHours(startHour, startMin, 0, 0)
   const graceTime = new Date(expectedStartTime.getTime() + graceMinutes * 60000)
-  
+
   const isLate = now > graceTime
 
   if (!attendance) {
     attendance = new Attendance({ employee: session.userId, date: today, tenantId, createdBy: session.sub })
   }
   attendance.checkInTime = now
-  
-  if (body.location) {
-    attendance.checkInLatitude = body.location.lat
-    attendance.checkInLongitude = body.location.lng
-    attendance.checkInAccuracy = body.location.accuracy
-  } else {
-    attendance.checkInLatitude = body.latitude
-    attendance.checkInLongitude = body.longitude
+
+  if (capturedLocation) {
+    attendance.checkInLatitude = capturedLocation.latitude
+    attendance.checkInLongitude = capturedLocation.longitude
+    attendance.checkInAccuracy = capturedLocation.accuracy
   }
-  
+
+  if (locationPolicy.location) {
+    attendance.checkInBranch = locationPolicy.location.branchId
+    attendance.checkInLocationName = locationPolicy.location.branchName
+    attendance.checkInDistanceMeters = locationPolicy.location.distanceMeters
+    attendance.checkInAllowedRadiusMeters = locationPolicy.location.radiusMeters
+  }
+  attendance.locationPolicyStatus = locationPolicy.status
+
   if (body.photo) {
     attendance.checkInPhoto = body.photo
   }
 
-  // Determine verification status
-  if (attendance.checkInPhoto && attendance.checkInLatitude) {
+  if (attendance.checkInPhoto && attendance.checkInLatitude != null && attendance.checkInLongitude != null) {
     attendance.verificationStatus = 'VERIFIED'
   } else if (attendance.checkInPhoto) {
     attendance.verificationStatus = 'CAMERA_VERIFIED'
-  } else if (attendance.checkInLatitude) {
+  } else if (attendance.checkInLatitude != null && attendance.checkInLongitude != null) {
     attendance.verificationStatus = 'LOCATION_VERIFIED'
   }
 
@@ -106,6 +120,12 @@ export const POST = withApi(async (req) => {
     checkInTime: attendance.checkInTime,
     lateMark: attendance.lateMark,
     date: attendance.date,
+    locationPolicy: {
+      status: attendance.locationPolicyStatus,
+      locationName: attendance.checkInLocationName,
+      distanceMeters: attendance.checkInDistanceMeters,
+      allowedRadiusMeters: attendance.checkInAllowedRadiusMeters,
+    },
     message: isLate ? 'Checked in (Late)' : 'Checked in successfully',
   })
 })

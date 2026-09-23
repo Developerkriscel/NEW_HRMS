@@ -110,5 +110,7 @@ JobSchema.index({ tenantId: 1, status: 1 })
 JobSchema.index({ tenantId: 1, jobCode: 1 }, { unique: true })
 JobSchema.index({ tenantId: 1, requisitionId: 1 })
 JobSchema.index({ tenantId: 1, department: 1 })
+JobSchema.index({ tenantId: 1, deleted: 1, createdAt: -1 })
+JobSchema.index({ tenantId: 1, deleted: 1, status: 1, createdAt: -1 })
 
 export default model('Job', JobSchema)

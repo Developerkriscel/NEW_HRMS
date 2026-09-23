@@ -39,6 +39,7 @@ import {
   UserPlus,
   Users,
   X,
+  LifeBuoy
 } from 'lucide-react'
 
 // Kept in sync by hand with the literal Tailwind classes below.
@@ -47,9 +48,10 @@ export const SIDEBAR_COLLAPSED_WIDTH = 64
 const SUPER_ADMIN_NAV = [
   { label: 'Dashboard', icon: 'LayoutDashboard', path: '/super-admin/dashboard' },
   { label: 'Companies', icon: 'Building2', path: '/super-admin/tenants' },
-  { label: 'Plans', icon: 'CreditCard', path: '/super-admin/plans', permission: 'plan.view' },
+  { label: 'Admins', icon: 'KeyRound', path: '/super-admin/admins', permission: 'operator.view' },
   { label: 'Subscriptions', icon: 'Repeat', path: '/super-admin/subscriptions', permission: 'subscription.view' },
   { label: 'Billing', icon: 'Receipt', path: '/super-admin/billing' },
+  { label: 'Support Center', icon: 'LifeBuoy', path: '/super-admin/support' },
   { label: 'Audit Logs', icon: 'ScrollText', path: '/super-admin/audit-logs' },
   { label: 'Settings', icon: 'Settings', path: '/super-admin/settings' },
 ]
@@ -68,6 +70,7 @@ const COMPANY_ADMIN_NAV = [
   { label: 'Helpdesk', icon: 'Headphones', path: '/hr/helpdesk', moduleKey: MODULE_ACCESS.HELPDESK },
   { label: 'Training', icon: 'GraduationCap', path: '/hr/training', moduleKey: MODULE_ACCESS.TRAINING },
   { label: 'Reports', icon: 'BarChart2', path: '/company/reports', moduleKey: MODULE_ACCESS.REPORTS },
+  { label: 'Support Center', icon: 'LifeBuoy', path: '/company/support' },
   { label: 'Audit Logs', icon: 'ScrollText', path: '/company/audit-logs', moduleKey: MODULE_ACCESS.AUDIT_LOGS },
   { label: 'Settings', icon: 'Settings', path: '/company/settings', moduleKey: MODULE_ACCESS.SETTINGS },
 ]

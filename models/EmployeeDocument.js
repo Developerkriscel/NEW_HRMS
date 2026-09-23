@@ -7,7 +7,7 @@ const EmployeeDocumentSchema = new mongoose.Schema(
     title: { type: String, required: true },
     category: { type: String, default: 'GENERAL' },
     fileUrl: { type: String },
-    status: { type: String, enum: ['PENDING', 'SUBMITTED', 'VERIFIED', 'REJECTED'], default: 'SUBMITTED' },
+    status: { type: String, enum: ['PENDING', 'SUBMITTED', 'VERIFIED', 'REJECTED'], default: 'PENDING' },
     expiresAt: { type: Date, default: null },
     uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', default: null },
     notes: { type: String },

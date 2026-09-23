@@ -4,9 +4,8 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api'
 
 const api = axios.create({
   baseURL: BASE_URL,
-  // Keep the timeout generous for cold dev starts, but avoid refresh storms
-  // below so normal navigation is not delayed by duplicate auth retries.
-  timeout: 60000,
+  // Keep the timeout generous for AI and bulk tasks
+  timeout: Number(process.env.NEXT_PUBLIC_API_TIMEOUT_MS || 120000),
   headers: { 'Content-Type': 'application/json' },
   withCredentials: true,
 })

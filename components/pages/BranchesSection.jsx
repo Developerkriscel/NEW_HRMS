@@ -52,6 +52,7 @@ export function BranchesSection() {
   const [editingBranch, setEditingBranch] = useState(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [detectingLocation, setDetectingLocation] = useState(false)
 
   function load() {
     setLoading(true)
@@ -104,6 +105,9 @@ export function BranchesSection() {
     if ((form.latitude !== '' && latitude == null) || (form.longitude !== '' && longitude == null)) {
       return 'Latitude and longitude must be valid numbers.'
     }
+    if ((latitude == null && longitude != null) || (latitude != null && longitude == null)) {
+      return 'Latitude and longitude must be set together.'
+    }
     if (latitude != null && (latitude < -90 || latitude > 90)) return 'Latitude must be between -90 and 90.'
     if (longitude != null && (longitude < -180 || longitude > 180)) return 'Longitude must be between -180 and 180.'
 
@@ -125,6 +129,31 @@ export function BranchesSection() {
       longitude: normalizeNumber(form.longitude),
       geoFenceRadius: normalizeNumber(form.geoFenceRadius, 100),
     }
+  }
+
+  function fillCurrentLocation() {
+    if (!('geolocation' in navigator)) {
+      setError('Your browser does not support location detection.')
+      return
+    }
+
+    setDetectingLocation(true)
+    setError('')
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setForm((prev) => ({
+          ...prev,
+          latitude: Number(position.coords.latitude.toFixed(7)),
+          longitude: Number(position.coords.longitude.toFixed(7)),
+        }))
+        setDetectingLocation(false)
+      },
+      () => {
+        setError('Unable to detect current location. Please allow browser location permission or enter coordinates manually.')
+        setDetectingLocation(false)
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    )
   }
 
   async function handleSubmit(e) {
@@ -176,8 +205,10 @@ export function BranchesSection() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Branches</h3>
-          <p className="mt-1 text-sm font-medium text-slate-500">Manage office locations, geo-fence radius, branch contact details, and status.</p>
+          <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Branches & Attendance Locations</h3>
+          <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+            Active branches with latitude, longitude, and radius become allowed attendance areas.
+          </p>
         </div>
         <button
           type="button"
@@ -210,7 +241,7 @@ export function BranchesSection() {
             <MapPin className="h-8 w-8" />
           </div>
           <h3 className="mb-2 text-lg font-bold text-slate-900 dark:text-white">No branches added</h3>
-          <p className="mx-auto mb-6 max-w-sm text-sm text-slate-500 dark:text-slate-400">Create your first office branch so onboarding can auto-fill work location details.</p>
+          <p className="mx-auto mb-6 max-w-sm text-sm text-slate-500 dark:text-slate-400">Create your first branch and add geo-fence coordinates to enable location-based attendance.</p>
           <button onClick={openCreateModal} className="rounded-xl bg-indigo-50 px-6 py-2.5 text-sm font-bold text-indigo-600 transition-colors hover:bg-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-400">
             Create Branch
           </button>
@@ -261,8 +292,8 @@ export function BranchesSection() {
                     <Navigation className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
                     <span>
                       {branch.latitude != null && branch.longitude != null
-                        ? `${branch.latitude}, ${branch.longitude} (${branch.geoFenceRadius || 100}m radius)`
-                        : `Geo location not set (${branch.geoFenceRadius || 100}m radius)`}
+                        ? `${branch.latitude}, ${branch.longitude} (${branch.geoFenceRadius || 100}m attendance radius)`
+                        : 'Attendance geo-fence not configured'}
                     </span>
                   </div>
                 </div>
@@ -283,7 +314,7 @@ export function BranchesSection() {
                     {editingBranch ? <Edit3 className="h-5 w-5 text-indigo-500" /> : <Plus className="h-5 w-5 text-indigo-500" />}
                     {editingBranch ? 'Edit Branch' : 'Add Branch'}
                   </h3>
-                  <p className="mt-1 text-xs text-slate-500">Branch details will auto-fill work location fields in onboarding.</p>
+                  <p className="mt-1 text-xs text-slate-500">Geo-fenced attendance is enforced for active branches with coordinates.</p>
                 </div>
                 <button onClick={closeModal} className="rounded-xl p-2 text-slate-400 transition-colors hover:bg-white hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200">
                   <X className="h-5 w-5" />
@@ -334,7 +365,21 @@ export function BranchesSection() {
                 </div>
 
                 <div>
-                  <h4 className="mb-4 text-sm font-black uppercase tracking-wider text-slate-500">Geo Fence</h4>
+                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h4 className="text-sm font-black uppercase tracking-wider text-slate-500">Attendance Geo Fence</h4>
+                      <p className="mt-1 text-xs font-medium text-slate-500">Employees can mark attendance only inside this radius when at least one active branch has coordinates.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={fillCurrentLocation}
+                      disabled={detectingLocation}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-2 text-xs font-bold text-indigo-600 transition-colors hover:bg-indigo-100 disabled:opacity-60 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-300"
+                    >
+                      <Navigation className="h-4 w-4" />
+                      {detectingLocation ? 'Detecting...' : 'Use Current Location'}
+                    </button>
+                  </div>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                     <label className="block">
                       <span className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Latitude</span>

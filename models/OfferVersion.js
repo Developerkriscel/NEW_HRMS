@@ -47,6 +47,14 @@ const OfferVersionSchema = new mongoose.Schema(
     // never re-rendered even if the template is edited afterward.
     renderedContent: { type: String, default: null },
     pdfUrl: { type: String, default: null },
+    attachments: [{
+      fileName: { type: String, required: true },
+      originalFileName: { type: String, required: true },
+      url: { type: String, required: true },
+      contentType: { type: String, default: 'application/pdf' },
+      size: { type: Number, default: 0 },
+      uploadedAt: { type: Date, default: Date.now },
+    }],
 
     status: { type: String, enum: OFFER_VERSION_STATUS_LIST, default: OFFER_VERSION_STATUS.DRAFT },
 

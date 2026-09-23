@@ -106,7 +106,6 @@ export function SecuritySettingsSection({ onSignOut }) {
           </div>
           <div>
             <h3 className="text-2xl font-black tracking-tight text-slate-950 dark:text-white">Change Password</h3>
-            <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">Update your password and keep your account sessions under control.</p>
           </div>
         </div>
 
@@ -189,8 +188,7 @@ export function SecuritySettingsSection({ onSignOut }) {
             <div className="mb-3 inline-flex rounded-2xl bg-white p-3 text-blue-600 shadow-sm dark:bg-slate-800">
               <ShieldCheck className="h-6 w-6" />
             </div>
-            <h3 className="text-xl font-black text-slate-950 dark:text-white">Active Devices</h3>
-            <p className="mt-1 text-sm font-medium text-slate-500">Currently signed-in sessions for this account.</p>
+            <h3 className="text-2xl font-black tracking-tight text-slate-950 dark:text-white mt-12">Active Sessions</h3>
           </div>
           <button type="button" onClick={loadSessions} disabled={loadingSessions} className="rounded-2xl border border-slate-200 bg-white p-3 text-slate-500 shadow-sm hover:text-blue-600 disabled:opacity-60 dark:border-slate-800 dark:bg-slate-900">
             <RefreshCw className={`h-4 w-4 ${loadingSessions ? 'animate-spin' : ''}`} />

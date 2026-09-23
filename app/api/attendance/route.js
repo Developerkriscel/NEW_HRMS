@@ -5,6 +5,10 @@ import { ok } from '@/lib/apiResponse'
 import { requireAuth, requireRole, requireTenantId } from '@/lib/auth'
 import Attendance from '@/models/Attendance'
 import Employee from '@/models/Employee'
+import '@/models/Branch'
+import '@/models/Department'
+import '@/models/Shift'
+import { isDevAuthAllowed } from '@/lib/devLogin'
 
 function getLocalDayRange(dateParam) {
   let start
@@ -45,6 +49,7 @@ export const GET = withApi(async (req) => {
 
   const dateParam = searchParams.get('date')
   const employeeId = searchParams.get('employeeId')
+  const summaryOnly = searchParams.get('summaryOnly') === 'true'
   const { start, end } = getLocalDayRange(dateParam)
 
   const employeeQuery = {
@@ -53,6 +58,32 @@ export const GET = withApi(async (req) => {
     status: { $in: ['ACTIVE', 'PROBATION', 'NOTICE_PERIOD'] },
   }
   if (employeeId && employeeId !== 'all') employeeQuery._id = employeeId
+
+  if (session.devLogin && isDevAuthAllowed(req) && summaryOnly) {
+    return ok({
+      records: [],
+      summary: { present: 0, absent: 0, late: 0, total: 0 },
+    })
+  }
+
+  if (summaryOnly && (!employeeId || employeeId === 'all')) {
+    const [total, statusRows, late] = await Promise.all([
+      Employee.countDocuments(employeeQuery),
+      Attendance.aggregate([
+        { $match: { tenantId, date: { $gte: start, $lt: end } } },
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+      ]),
+      Attendance.countDocuments({ tenantId, date: { $gte: start, $lt: end }, lateMark: true }),
+    ])
+    const byStatus = Object.fromEntries(statusRows.map((row) => [row._id, row.count]))
+    const present = (byStatus.PRESENT || 0) + (byStatus.WFH || 0)
+    const explicitAbsent = byStatus.ABSENT || 0
+    const absent = Math.max(explicitAbsent, total - present)
+    return ok({
+      records: [],
+      summary: { present, absent, late, total },
+    })
+  }
 
   const [employees, attendanceRecords] = await Promise.all([
     Employee.find(employeeQuery)

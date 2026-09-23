@@ -1,7 +1,12 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
+import { PHASE_DEVELOPMENT_SERVER } from 'next/constants.js'
+
+/** @type {(phase: string) => import('next').NextConfig} */
+const isDevServer = (phase) => phase === PHASE_DEVELOPMENT_SERVER
+
+const nextConfig = (phase) => ({
+  distDir: isDevServer(phase) ? '.next-dev' : '.next',
   reactStrictMode: false,
-  output: 'standalone',
+  ...(isDevServer(phase) ? {} : { output: 'standalone' }),
   // pdf-parse (via pdfjs-dist) and mammoth (Step 6 resume parsing, see
   // lib/resumeParser.js) are Node-only libraries with conditional exports
   // that webpack's RSC bundling can't resolve correctly — left external so
@@ -16,6 +21,6 @@ const nextConfig = {
     serverComponentsExternalPackages: ['pdf-parse', 'pdfjs-dist', 'mammoth', 'pdfkit'],
     optimizePackageImports: ['lucide-react', 'recharts'],
   },
-}
+})
 
 export default nextConfig

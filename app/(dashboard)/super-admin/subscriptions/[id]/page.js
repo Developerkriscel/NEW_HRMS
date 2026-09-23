@@ -2,14 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Plus } from 'lucide-react'
+import { ArrowLeft, Check, Loader2 } from 'lucide-react'
 import { Badge } from '@/components/common/Badge'
 import { PageLoader } from '@/components/common/LoadingSpinner'
 import { PermissionDenied } from '@/components/common/PermissionDenied'
-import { ConfirmDialog } from '@/components/common/ConfirmDialog'
 import { platformApi } from '@/services/platformApi'
 import { tenantApi } from '@/services/tenantApi'
-import { formatDate, formatCurrency } from '@/lib/utils'
+import { formatCurrency } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
 
 export default function SubscriptionDetailPage() {
@@ -21,7 +20,6 @@ export default function SubscriptionDetailPage() {
   const [plans, setPlans] = useState([])
   const [loading, setLoading] = useState(true)
   const [forbidden, setForbidden] = useState(false)
-  const [dialog, setDialog] = useState(null)
   const [actionLoading, setActionLoading] = useState(false)
   const [actionError, setActionError] = useState('')
   const [fields, setFields] = useState({})
@@ -30,7 +28,12 @@ export default function SubscriptionDetailPage() {
     setLoading(true)
     setForbidden(false)
     platformApi.getSubscription(id)
-      .then((res) => setData(res.data.data))
+      .then((res) => {
+        setData(res.data.data)
+        if (res.data.data.subscription?.plan) {
+          setFields({ planId: res.data.data.subscription.plan._id })
+        }
+      })
       .catch((err) => { if (err.response?.status === 403) setForbidden(true) })
       .finally(() => setLoading(false))
   }
@@ -40,26 +43,15 @@ export default function SubscriptionDetailPage() {
     tenantApi.getPlans().then((res) => setPlans(res.data.data || [])).catch(() => setPlans([]))
   }, [])
 
-  function closeDialog() {
-    setDialog(null)
-    setActionError('')
-    setFields({})
-  }
-
-  async function runAction(reason) {
+  async function handlePlanChange() {
+    if (!fields.planId || !fields.reason?.trim()) return
     setActionLoading(true)
     setActionError('')
     try {
-      if (dialog === 'plan-change') await platformApi.changeSubscriptionPlan(id, { planId: fields.planId, reason })
-      if (dialog === 'trial-extension') await platformApi.extendTrial(id, { newTrialEndDate: fields.date, reason })
-      if (dialog === 'grace-enter') await platformApi.manageGrace(id, { action: 'ENTER', reason, graceDays: fields.graceDays ? Number(fields.graceDays) : undefined })
-      if (dialog === 'grace-exit') await platformApi.manageGrace(id, { action: 'EXIT', reason })
-      if (dialog === 'status') await platformApi.changeSubscriptionStatus(id, { toStatus: fields.status, reason })
-      if (dialog === 'credit') await platformApi.applyCredit(id, { amount: Number(fields.amount), currency: fields.currency || 'INR', reason })
-      closeDialog()
-      load()
+      await platformApi.changeSubscriptionPlan(id, { planId: fields.planId, reason: fields.reason })
+      router.push('/super-admin/subscriptions')
     } catch (err) {
-      setActionError(err.response?.data?.message || 'Action failed')
+      setActionError(err.response?.data?.message || 'Plan change failed')
     } finally {
       setActionLoading(false)
     }
@@ -69,225 +61,97 @@ export default function SubscriptionDetailPage() {
   if (loading) return <PageLoader />
   if (!data) return <div className="text-center text-slate-400 py-12">Subscription not found</div>
 
-  const { subscription, history, credits, invoices } = data
+  const { subscription } = data
   const canManage = hasPermission('subscription.update')
-  const canCredit = hasPermission('subscription.apply_credit')
-  const canBill = hasPermission('billing.invoice.manage')
 
   return (
-    <div className="animate-fade-in space-y-6">
-      <div className="page-header">
+    <div className="animate-fade-in space-y-6 pb-12">
+      <div className="page-header border-b border-slate-100 dark:border-slate-800 pb-6">
         <div>
-          <button onClick={() => router.push('/super-admin/subscriptions')} className="flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 mb-2">
-            <ArrowLeft className="w-4 h-4" /> Back to subscriptions
+          <button onClick={() => router.push('/super-admin/subscriptions')} className="flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 mb-4 transition-colors font-medium">
+            <ArrowLeft className="w-4 h-4" /> Back to Subscriptions
           </button>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{subscription.tenant?.companyName}</h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">{subscription.plan?.name || 'No plan'} · <Badge>{subscription.status}</Badge></p>
+          <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Change Plan for {subscription.tenant?.companyName}</h1>
+          <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
+            Current Plan: <strong className="text-slate-700 dark:text-slate-200">{subscription.plan?.name || 'None'}</strong>
+            <span className="mx-2">•</span>
+            Status: <Badge>{subscription.status}</Badge>
+          </p>
         </div>
       </div>
 
-      {canManage && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-4 flex flex-wrap gap-2">
-          <button className="btn-secondary" onClick={() => setDialog('plan-change')}>Change Plan</button>
-          <button className="btn-secondary" onClick={() => setDialog('trial-extension')}>Extend Trial</button>
-          {subscription.status === 'GRACE' ? (
-            <button className="btn-secondary" onClick={() => setDialog('grace-exit')}>Exit Grace</button>
-          ) : (
-            <button className="btn-secondary" onClick={() => setDialog('grace-enter')}>Enter Grace</button>
-          )}
-          <button className="btn-secondary" onClick={() => setDialog('status')}>Change Status</button>
-          {canCredit && <button className="btn-secondary" onClick={() => setDialog('credit')}>Apply Credit</button>}
+      <div className="max-w-6xl mx-auto mt-8">
+        <div className="mb-8">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Select a New Plan</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Choose a new plan to upgrade or downgrade this organization. Changes will be reflected immediately.</p>
         </div>
-      )}
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="stat-card"><p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Start Date</p><p className="text-sm font-medium text-slate-800 dark:text-slate-100">{formatDate(subscription.startDate)}</p></div>
-        <div className="stat-card"><p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Trial End</p><p className="text-sm font-medium text-slate-800 dark:text-slate-100">{formatDate(subscription.trialEndDate) || '-'}</p></div>
-        <div className="stat-card"><p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Grace Ends</p><p className="text-sm font-medium text-slate-800 dark:text-slate-100">{formatDate(subscription.graceEndsAt) || '-'}</p></div>
-        <div className="stat-card"><p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Auto Renew</p><p className="text-sm font-medium text-slate-800 dark:text-slate-100">{subscription.autoRenew ? 'Yes' : 'No'}</p></div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
-          <div className="p-4 border-b border-slate-100 dark:border-slate-800"><p className="text-sm font-semibold text-slate-800 dark:text-slate-100">History</p></div>
-          <div className="divide-y divide-slate-50 dark:divide-slate-800 max-h-96 overflow-y-auto">
-            {history.length === 0 ? <p className="p-6 text-center text-sm text-slate-400">No history yet</p> : history.map((h) => (
-              <div key={h._id} className="p-4 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-slate-700 dark:text-slate-300">{h.changeType.replace(/_/g, ' ')}</span>
-                  <span className="text-xs text-slate-400">{formatDate(h.createdAt)}</span>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-10">
+          {plans.map((plan) => {
+            const selected = fields.planId === plan._id || (!fields.planId && subscription.plan?._id === plan._id)
+            const isCurrent = subscription.plan?._id === plan._id
+            return (
+              <button
+                key={plan._id}
+                type="button"
+                className={`flex min-h-[300px] flex-col rounded-3xl border bg-white p-6 text-left shadow-sm transition-all dark:bg-slate-950 ${selected ? 'border-blue-500 bg-blue-50/70 ring-4 ring-blue-100 dark:border-blue-500 dark:bg-blue-900/20 dark:ring-blue-900/50 transform scale-[1.02]' : 'border-slate-200 hover:border-blue-200 dark:border-slate-800 hover:shadow-md'}`}
+                onClick={() => setFields({ ...fields, planId: plan._id })}
+                disabled={!canManage}
+              >
+                <div className="flex items-start justify-between gap-3 w-full">
+                  <div>
+                    <p className="text-xl font-black text-slate-900 dark:text-white">{plan.name}</p>
+                    <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">{plan.description || 'Subscription plan'}</p>
+                  </div>
+                  <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border ${selected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 text-slate-300 dark:border-slate-700'}`}>
+                    {selected ? <Check className="h-4 w-4" /> : null}
+                  </span>
                 </div>
-                {(h.fromValue || h.toValue) && <p className="text-xs text-slate-500 mt-0.5">{h.fromValue || '—'} → {h.toValue || '—'}</p>}
-                <p className="text-xs text-slate-400 mt-1">{h.reason}</p>
-              </div>
-            ))}
-          </div>
+                <div className="mt-6">
+                  <p className="text-3xl font-black text-slate-900 dark:text-white">{formatCurrency(plan.price, 'INR')}</p>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mt-1">Per {plan.billingCycle || 'MONTHLY'}</p>
+                </div>
+                <div className="mt-6 flex-1 space-y-3">
+                  <p className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> {plan.employeeLimit === -1 ? 'Unlimited' : plan.employeeLimit} users</p>
+                  <p className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> {plan.storageLimitMB === -1 ? 'Unlimited' : plan.storageLimitMB} MB storage</p>
+                  <p className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300"><Check className="h-4 w-4 text-emerald-500 shrink-0" /> {plan.features?.length > 0 ? `${plan.features.length} modules included` : 'Standard modules included'}</p>
+                </div>
+                <div className={`mt-6 text-center text-sm font-bold w-full py-2 rounded-xl ${selected ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}>
+                  {isCurrent ? 'Current Plan' : selected ? 'Selected for Upgrade' : 'Select Plan'}
+                </div>
+              </button>
+            )
+          })}
         </div>
 
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
-          <div className="p-4 border-b border-slate-100 dark:border-slate-800"><p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Credits</p></div>
-          <div className="divide-y divide-slate-50 dark:divide-slate-800 max-h-96 overflow-y-auto">
-            {credits.length === 0 ? <p className="p-6 text-center text-sm text-slate-400">No credits applied</p> : credits.map((c) => (
-              <div key={c._id} className="p-4 text-sm flex justify-between">
-                <div><p className="font-medium text-slate-700 dark:text-slate-300">{formatCurrency(c.amount)}</p><p className="text-xs text-slate-400">{c.reason}</p></div>
-                <span className="text-xs text-slate-400">{formatDate(c.createdAt)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <InvoicesPanel subscriptionId={id} invoices={invoices} canBill={canBill} onChanged={load} />
-
-      <ConfirmDialog open={dialog === 'plan-change'} title="Change plan" confirmLabel="Change Plan" variant="default" loading={actionLoading} error={actionError} onConfirm={runAction} onClose={closeDialog}>
-        <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">New Plan <span className="text-red-500">*</span></span>
-          <select className="input-field" value={fields.planId || ''} onChange={(e) => setFields({ ...fields, planId: e.target.value })}>
-            <option value="">Select a plan...</option>
-            {plans.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}
-          </select>
-        </label>
-      </ConfirmDialog>
-
-      <ConfirmDialog open={dialog === 'trial-extension'} title="Extend trial" confirmLabel="Extend Trial" variant="default" loading={actionLoading} error={actionError} onConfirm={runAction} onClose={closeDialog}>
-        <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">New Trial End Date <span className="text-red-500">*</span></span>
-          <input type="date" className="input-field" value={fields.date || ''} onChange={(e) => setFields({ ...fields, date: e.target.value })} />
-        </label>
-      </ConfirmDialog>
-
-      <ConfirmDialog open={dialog === 'grace-enter'} title="Move into grace period?" description="The tenant's status will also move to GRACE." confirmLabel="Enter Grace" variant="danger" loading={actionLoading} error={actionError} onConfirm={runAction} onClose={closeDialog}>
-        <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">Grace Days (optional, defaults to plan setting)</span>
-          <input type="number" className="input-field" value={fields.graceDays || ''} onChange={(e) => setFields({ ...fields, graceDays: e.target.value })} />
-        </label>
-      </ConfirmDialog>
-
-      <ConfirmDialog open={dialog === 'grace-exit'} title="Exit grace period?" description="The tenant's status will move back to ACTIVE." confirmLabel="Exit Grace" variant="default" loading={actionLoading} error={actionError} onConfirm={runAction} onClose={closeDialog} />
-
-      <ConfirmDialog open={dialog === 'status'} title="Change subscription status" confirmLabel="Change Status" variant="danger" loading={actionLoading} error={actionError} onConfirm={runAction} onClose={closeDialog}>
-        <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">New Status <span className="text-red-500">*</span></span>
-          <select className="input-field" value={fields.status || ''} onChange={(e) => setFields({ ...fields, status: e.target.value })}>
-            <option value="">Select...</option>
-            {['TRIAL', 'ACTIVE', 'EXPIRED', 'CANCELLED', 'SUSPENDED'].map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </label>
-      </ConfirmDialog>
-
-      <ConfirmDialog open={dialog === 'credit'} title="Apply a credit" description="Metadata only — this does not affect any real balance or payment." confirmLabel="Apply Credit" variant="default" loading={actionLoading} error={actionError} onConfirm={runAction} onClose={closeDialog}>
-        <label className="block mb-3">
-          <span className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">Amount <span className="text-red-500">*</span></span>
-          <input type="number" className="input-field" value={fields.amount || ''} onChange={(e) => setFields({ ...fields, amount: e.target.value })} />
-        </label>
-      </ConfirmDialog>
-    </div>
-  )
-}
-
-function InvoicesPanel({ subscriptionId, invoices, canBill, onChanged }) {
-  const [showCreate, setShowCreate] = useState(false)
-  const [form, setForm] = useState({ invoiceNumber: '', amount: '', currency: 'INR', dueAt: '' })
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-  const [payingInvoice, setPayingInvoice] = useState(null)
-  const [payment, setPayment] = useState({ amount: '', method: 'BANK_TRANSFER', reference: '', paidAt: '' })
-
-  async function createInvoice(e) {
-    e.preventDefault()
-    setSaving(true)
-    setError('')
-    try {
-      await platformApi.createInvoice(subscriptionId, { ...form, amount: Number(form.amount), status: 'ISSUED', issuedAt: new Date().toISOString() })
-      setShowCreate(false)
-      setForm({ invoiceNumber: '', amount: '', currency: 'INR', dueAt: '' })
-      onChanged()
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to record invoice')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function recordPayment(e) {
-    e.preventDefault()
-    setSaving(true)
-    setError('')
-    try {
-      await platformApi.recordPayment(payingInvoice._id, { ...payment, amount: Number(payment.amount), paidAt: payment.paidAt || new Date().toISOString() })
-      setPayingInvoice(null)
-      setPayment({ amount: '', method: 'BANK_TRANSFER', reference: '', paidAt: '' })
-      onChanged()
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to record payment')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
-      <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-        <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Invoices & Payments</p>
-        {canBill && <button className="btn-secondary" onClick={() => setShowCreate(true)}><Plus className="w-4 h-4" /> Record Invoice</button>}
-      </div>
-      <div className="divide-y divide-slate-50 dark:divide-slate-800">
-        {invoices.length === 0 ? <p className="p-6 text-center text-sm text-slate-400">No invoices recorded</p> : invoices.map((inv) => (
-          <div key={inv._id} className="p-4 flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{inv.invoiceNumber}</p>
-              <p className="text-xs text-slate-400">{formatCurrency(inv.amount)} {inv.currency} · due {formatDate(inv.dueAt) || '-'}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge>{inv.status}</Badge>
-              {canBill && inv.status !== 'PAID' && inv.status !== 'VOID' && (
-                <button className="btn-secondary text-xs py-1.5" onClick={() => setPayingInvoice(inv)}>Record Payment</button>
-              )}
+        {canManage && (
+          <div className="max-w-2xl bg-slate-50 dark:bg-slate-900/50 rounded-3xl p-6 border border-slate-200 dark:border-slate-800">
+            <label className="block mb-3 text-sm font-bold text-slate-900 dark:text-white">Reason for change <span className="text-red-500">*</span></label>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Please provide a brief reason for upgrading or downgrading this organization's subscription. This will be logged in their billing history.</p>
+            <textarea 
+              className="input-field min-h-[100px] w-full resize-none text-sm" 
+              placeholder="e.g., Requested upgrade to premium for more users..."
+              value={fields.reason || ''}
+              onChange={(e) => setFields({ ...fields, reason: e.target.value })}
+            />
+            
+            {actionError && <div className="mt-4 text-sm font-medium text-red-600 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/50 p-4 rounded-xl">{actionError}</div>}
+            
+            <div className="flex gap-3 mt-6 pt-6 border-t border-slate-200 dark:border-slate-800">
+              <button type="button" className="btn-secondary px-6 py-2.5 flex-1 justify-center text-sm" onClick={() => router.push('/super-admin/subscriptions')} disabled={actionLoading}>Cancel</button>
+              <button 
+                type="button" 
+                className="btn-primary px-6 py-2.5 flex-1 justify-center text-sm shadow-md shadow-blue-500/20" 
+                disabled={!fields.planId || !fields.reason?.trim() || actionLoading || fields.planId === subscription.plan?._id} 
+                onClick={handlePlanChange}
+              >
+                {actionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Confirm Plan Change
+              </button>
             </div>
           </div>
-        ))}
+        )}
       </div>
-
-      {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-sm p-6">
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Record Invoice</h2>
-            <form onSubmit={createInvoice} className="space-y-3">
-              {error && <div className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 rounded-lg p-3">{error}</div>}
-              <input required placeholder="Invoice Number" className="input-field" value={form.invoiceNumber} onChange={(e) => setForm({ ...form, invoiceNumber: e.target.value })} />
-              <input required type="number" placeholder="Amount" className="input-field" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
-              <input type="date" placeholder="Due Date" className="input-field" value={form.dueAt} onChange={(e) => setForm({ ...form, dueAt: e.target.value })} />
-              <div className="flex gap-3 justify-end pt-1">
-                <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>Cancel</button>
-                <button type="submit" disabled={saving} className="btn-primary">{saving ? 'Saving...' : 'Record'}</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {payingInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-sm p-6">
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Record Payment for {payingInvoice.invoiceNumber}</h2>
-            <form onSubmit={recordPayment} className="space-y-3">
-              {error && <div className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 rounded-lg p-3">{error}</div>}
-              <input required type="number" placeholder="Amount" className="input-field" value={payment.amount} onChange={(e) => setPayment({ ...payment, amount: e.target.value })} />
-              <select className="input-field" value={payment.method} onChange={(e) => setPayment({ ...payment, method: e.target.value })}>
-                <option value="BANK_TRANSFER">Bank Transfer</option>
-                <option value="CHEQUE">Cheque</option>
-                <option value="OTHER">Other</option>
-              </select>
-              <input placeholder="Reference" className="input-field" value={payment.reference} onChange={(e) => setPayment({ ...payment, reference: e.target.value })} />
-              <input type="date" className="input-field" value={payment.paidAt} onChange={(e) => setPayment({ ...payment, paidAt: e.target.value })} />
-              <div className="flex gap-3 justify-end pt-1">
-                <button type="button" className="btn-secondary" onClick={() => setPayingInvoice(null)}>Cancel</button>
-                <button type="submit" disabled={saving} className="btn-primary">{saving ? 'Saving...' : 'Record'}</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

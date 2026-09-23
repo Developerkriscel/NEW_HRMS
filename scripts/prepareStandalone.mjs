@@ -37,6 +37,14 @@ async function copyServerChunksForStandalone() {
 await fs.access(standaloneDir)
 await fs.mkdir(path.join(standaloneDir, '.next'), { recursive: true })
 
+await copyIfExists(path.join(root, '.next', 'server'), path.join(standaloneDir, '.next', 'server'))
 await copyIfExists(path.join(root, '.next', 'static'), path.join(standaloneDir, '.next', 'static'))
 await copyIfExists(path.join(root, 'public'), path.join(standaloneDir, 'public'))
+await copyIfExists(path.join(root, 'node_modules', 'sharp'), path.join(standaloneDir, 'node_modules', 'sharp'))
+await copyIfExists(path.join(root, 'node_modules', '@img'), path.join(standaloneDir, 'node_modules', '@img'))
 await copyServerChunksForStandalone()
+
+const envFiles = ['.env.production.local', '.env.local', '.env.production', '.env']
+for (const envFile of envFiles) {
+  await copyIfExists(path.join(root, envFile), path.join(standaloneDir, envFile))
+}

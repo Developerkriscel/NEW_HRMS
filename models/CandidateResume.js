@@ -28,6 +28,7 @@ const CandidateResumeSchema = new mongoose.Schema(
 
     parsingStatus: { type: String, enum: RESUME_PARSING_STATUS_LIST, default: RESUME_PARSING_STATUS.UPLOADED },
     parsedData: { type: mongoose.Schema.Types.Mixed, default: null }, // structured JSON + confidence, see lib/resumeParser.js
+    aiSummary: { type: String, default: null }, // LLM generated summary
     parserVersion: { type: String, default: null },
     errorMessage: { type: String, default: null },
 

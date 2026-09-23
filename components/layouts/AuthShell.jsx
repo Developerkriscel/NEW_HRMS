@@ -14,7 +14,7 @@ export function AuthShell({ children }) {
           <div className="w-14 h-14 rounded-2xl bg-gradient-primary mx-auto mb-4 flex items-center justify-center shadow-2xl shadow-blue-500/30">
             <span className="text-white font-black text-2xl">N</span>
           </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">NexaHR</h1>
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full">NexaHR</h1>
           <p className="text-slate-400 text-sm mt-1">Enterprise HRMS Platform</p>
         </div>
 

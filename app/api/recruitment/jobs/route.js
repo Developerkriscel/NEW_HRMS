@@ -53,17 +53,30 @@ export const GET = withApi(async (req) => {
     ]
   }
 
-  const totalElements = await Job.countDocuments(query)
-  const content = await populateJob(
-    Job.find(query).sort({ createdAt: -1 }).skip(page * size).limit(size)
-  )
+  const countBaseQuery = { tenantId, deleted: false }
+  const [totalElements, statusCounts, content] = await Promise.all([
+    Job.countDocuments(query),
+    Job.aggregate([
+      { $match: countBaseQuery },
+      { $group: { _id: '$status', count: { $sum: 1 } } },
+    ]),
+    populateJob(
+      Job.find(query)
+        .sort({ createdAt: -1 })
+        .skip(page * size)
+        .limit(size)
+        .lean()
+    ),
+  ])
   const withRemaining = content.map((j) => {
-    const obj = j.toObject()
+    const obj = j.toObject ? j.toObject() : j
     obj.remainingOpenings = computeRemainingOpenings(obj)
     return obj
   })
 
-  return ok(paged(withRemaining, page, size, totalElements))
+  const response = paged(withRemaining, page, size, totalElements)
+  response.statusCounts = Object.fromEntries(statusCounts.map((item) => [item._id, item.count]))
+  return ok(response)
 })
 
 // Direct creation — no requisition behind it. Creating from an approved

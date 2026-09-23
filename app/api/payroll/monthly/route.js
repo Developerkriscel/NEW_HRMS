@@ -6,6 +6,7 @@ import { ok, paged } from '@/lib/apiResponse'
 import { requireAuth, requireRole, requireTenantId } from '@/lib/auth'
 import Payslip from '@/models/Payslip'
 import Employee from '@/models/Employee'
+import '@/models/Department'
 
 export const GET = withApi(async (req) => {
   const session = await requireAuth()
@@ -25,7 +26,10 @@ export const GET = withApi(async (req) => {
   const departmentId = searchParams.get('department')
   const search = searchParams.get('search')
 
-  const empQuery = { tenantId, deleted: false, status: { $in: ['ACTIVE', 'PROBATION', 'NOTICE_PERIOD'] } }
+  const query = { tenantId, month, year, deleted: false }
+  if (status && status !== 'ALL') query.status = status
+
+  const empQuery = { tenantId, deleted: false }
   if (departmentId && departmentId !== 'ALL') empQuery.department = departmentId
   if (search) {
     empQuery.$or = [
@@ -34,10 +38,10 @@ export const GET = withApi(async (req) => {
       { employeeCode: { $regex: search, $options: 'i' } }
     ]
   }
-  const emps = await Employee.find(empQuery).select('_id').lean()
-  const employeeIds = emps.map(e => e._id)
-  const query = { tenantId, month, year, deleted: false, employee: { $in: employeeIds } }
-  if (status && status !== 'ALL') query.status = status
+  if ((departmentId && departmentId !== 'ALL') || search) {
+    const emps = await Employee.find(empQuery).select('_id').lean()
+    query.employee = { $in: emps.map(e => e._id) }
+  }
 
   const totalElements = await Payslip.countDocuments(query)
   const content = await Payslip.find(query)

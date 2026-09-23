@@ -10,8 +10,9 @@ import { ShiftsSection } from '@/components/pages/ShiftsSection'
 import { SubscriptionSection } from '@/components/pages/SubscriptionSection'
 import { SecuritySettingsSection } from '@/components/pages/SecuritySettingsSection'
 import { CompanyModulesSection } from '@/components/pages/CompanyModulesSection'
+import { IntegrationsSection } from '@/components/pages/IntegrationsSection'
 import { PageLoader } from '@/components/common/LoadingSpinner'
-import { Building, Clock, Layers, MapPin, Clock3, CalendarDays, Settings, Lock, CheckCircle2, CreditCard } from 'lucide-react'
+import { Building, Clock, Layers, MapPin, Clock3, CalendarDays, Settings, Lock, CheckCircle2, CreditCard, Mail, Sparkles } from 'lucide-react'
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
@@ -24,6 +25,7 @@ const MENU = [
   { id: 'holidays', label: 'Holidays', icon: CalendarDays },
   { id: 'modules', label: 'Modules & Features', icon: Settings },
   { id: 'security', label: 'Security', icon: Lock },
+  { id: 'integrations', label: 'Integrations', icon: Sparkles },
 ]
 
 export default function CompanySettingsPage() {
@@ -47,6 +49,9 @@ export default function CompanySettingsPage() {
       .then((res) => {
         setTenant(res.data.data)
         setHrSettings(res.data.data.hrSettings)
+      })
+      .catch((err) => {
+        console.error("Failed to load company profile:", err)
       })
       .finally(() => setLoading(false))
   }, [])
@@ -86,21 +91,22 @@ export default function CompanySettingsPage() {
   }
 
   if (loading) return <PageLoader />
+  if (!tenant) return <div className="p-8 text-center text-slate-500">Failed to load company settings. Please refresh the page.</div>
 
   const enabledModules = Object.entries(tenant?.features || {}).filter(([, enabled]) => enabled).map(([key]) => key)
 
   return (
-    <div className="animate-fade-in space-y-6">
-      <div className="page-header">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Settings</h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Manage company profile, organization structure, and preferences</p>
+    <div className="animate-fade-in space-y-4 pb-12">
+      <div className="relative overflow-hidden rounded-3xl bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl px-6 py-4 shadow-sm border border-slate-200/60 dark:border-slate-800/80">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-indigo-500/20 to-blue-500/20 dark:from-indigo-500/10 dark:to-blue-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+        <div className="relative z-10 group w-fit">
+          <h1 className="text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-900 via-indigo-700 to-blue-600 dark:from-indigo-200 dark:via-indigo-400 dark:to-blue-400 drop-shadow-sm transition-all duration-500 group-hover:scale-[1.02] origin-left">Settings & Preferences</h1>
+          <div className="h-1 w-12 rounded-full bg-gradient-to-r from-indigo-600 to-blue-500 mt-2 transition-all duration-500 group-hover:w-full opacity-70"></div>
         </div>
       </div>
 
       <div className="flex flex-col md:flex-row gap-6 items-start">
-        {/* Sidebar Menu */}
-        <div className="w-full md:w-72 flex-shrink-0 flex md:flex-col gap-2 overflow-x-auto pb-2 md:pb-0 hide-scrollbar relative">
+        <div className="w-full md:w-72 flex-shrink-0 flex md:flex-col gap-2 overflow-x-auto pb-2 md:pb-0 hide-scrollbar relative md:sticky md:top-24 z-10">
           {MENU.map((item) => {
             const Icon = item.icon
             const isActive = activeTab === item.id
@@ -108,14 +114,14 @@ export default function CompanySettingsPage() {
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl text-sm font-semibold transition-all duration-300 whitespace-nowrap relative overflow-hidden group ${
+                className={`flex items-center gap-3 px-5 py-4 rounded-2xl text-sm font-bold transition-all duration-300 whitespace-nowrap relative overflow-hidden group ${
                   isActive 
-                    ? 'bg-blue-600 text-white shadow-[0_8px_20px_rgba(37,99,235,0.25)]'
-                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-100'
+                    ? 'bg-gradient-to-r from-indigo-600 via-indigo-500 to-blue-600 text-white shadow-lg shadow-indigo-500/30 border border-indigo-500/50 scale-[1.02]'
+                    : 'text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800/80 hover:text-indigo-600 dark:hover:text-indigo-400 hover:shadow-md border border-transparent hover:border-indigo-100 dark:hover:border-indigo-900/50'
                 }`}
               >
-                {isActive && <div className="absolute inset-0 bg-white/20 w-full h-full skew-x-12 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]" />}
-                <Icon className={`w-5 h-5 relative z-10 transition-colors ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300'}`} />
+                {isActive && <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent w-[200%] h-full skew-x-12 -translate-x-full group-hover:animate-[shimmer_2s_infinite]" />}
+                <Icon className={`w-5 h-5 relative z-10 transition-transform duration-300 ${isActive ? 'text-white scale-110' : 'text-slate-400 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 group-hover:scale-110'}`} />
                 <span className="relative z-10">{item.label}</span>
               </button>
             )
@@ -125,16 +131,16 @@ export default function CompanySettingsPage() {
         {/* Content Area */}
         <div className="flex-1 min-w-0 space-y-6 w-full">
           {activeTab === 'profile' && (
-            <form onSubmit={handleSaveProfile} className="glass-panel animate-in fade-in slide-in-from-bottom-4 duration-500 rounded-3xl p-8 border border-white/40 dark:border-slate-700/50 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 dark:bg-blue-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-              <div className="mb-8 pb-5 border-b border-slate-200/50 dark:border-slate-700/50 relative z-10">
-                <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-3">
-                  <div className="p-2.5 bg-blue-50 dark:bg-blue-500/10 rounded-xl text-blue-600 dark:text-blue-400">
+            <form onSubmit={handleSaveProfile} className="glass-panel animate-in fade-in slide-in-from-bottom-4 duration-500 rounded-3xl p-8 border border-white/60 dark:border-slate-700/60 shadow-xl shadow-slate-200/40 dark:shadow-none relative overflow-hidden bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl">
+              <div className="absolute top-0 right-0 w-72 h-72 bg-indigo-500/10 dark:bg-indigo-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+              <div className="mb-8 pb-5 border-b border-slate-200/60 dark:border-slate-700/60 relative z-10">
+                <h3 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-3">
+                  <div className="p-3 bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-500/10 dark:to-blue-500/10 rounded-2xl text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20 shadow-sm">
                     <Building className="w-6 h-6" />
                   </div>
                   Company Profile
                 </h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 font-medium">Manage your company's core identity and contact information.</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-2.5 font-medium ml-1">Manage your company's core identity and contact information.</p>
               </div>
 
               {profMessage && (
@@ -339,6 +345,10 @@ export default function CompanySettingsPage() {
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
               <CompanyModulesSection />
             </div>
+          )}
+
+          {activeTab === 'integrations' && (
+            <IntegrationsSection />
           )}
 
           {activeTab === 'modules_legacy' && (

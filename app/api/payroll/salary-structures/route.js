@@ -5,6 +5,9 @@ import { ok } from '@/lib/apiResponse'
 import { requireAuth, requireRole, requireTenantId } from '@/lib/auth'
 import Employee from '@/models/Employee'
 import SalaryStructure from '@/models/SalaryStructure'
+import '@/models/Branch'
+import '@/models/Department'
+import '@/models/Designation'
 
 export const GET = withApi(async (req) => {
   const session = await requireAuth()

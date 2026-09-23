@@ -7,6 +7,7 @@ out/
 .DS_Store
 node_modules/
 .next/
+.next-dev/
 .next-stale-*/
 .env
 .env.local

@@ -62,15 +62,15 @@ export function OnboardingDetailPage({ id }) {
     )
   }
 
-  // Calculate readiness to convert
-  const requiredTasks = record.tasks.filter(t => t.required)
-  const requiredDocs = record.documents.filter(d => d.required)
-  
-  const pendingTasks = requiredTasks.filter(t => t.status !== 'COMPLETED').length
-  const pendingDocs = requiredDocs.filter(d => d.status !== 'VERIFIED').length
-  const totalPending = pendingTasks + pendingDocs
-  
-  const canConvert = totalPending === 0 && record.status !== 'COMPLETED' && record.status !== 'CANCELLED'
+  const converted = record.status === 'COMPLETED' || record.conversionStatus === 'COMPLETED' || !!record.convertedEmployeeId
+  const conversionStageMilestones = new Set(['login-access', 'employee-created'])
+  const pendingTasks = Array.isArray(record.pendingMilestones)
+    ? record.pendingMilestones.filter(t => !conversionStageMilestones.has(t.id)).length
+    : record.tasks.filter(t => t.required && !conversionStageMilestones.has(t.id) && t.status !== 'COMPLETED').length
+  const pendingDocs = record.documents.filter(d => d.required && d.status !== 'VERIFIED').length
+  const totalPending = converted ? 0 : Math.max(pendingTasks, pendingDocs)
+  const canConvert = !converted && record.canConvert && record.status !== 'CANCELLED'
+  const joiningDateText = record.joiningDate ? new Date(record.joiningDate).toLocaleDateString() : 'Not set'
 
   return (
     <div className="animate-fade-in space-y-6 pb-20">
@@ -94,13 +94,13 @@ export function OnboardingDetailPage({ id }) {
             {record.candidate.name.charAt(0)}
           </div>
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white mb-2">{record.candidate.name}</h1>
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full mb-2">{record.candidate.name}</h1>
             <div className="flex flex-wrap items-center gap-2 md:gap-4 text-sm text-slate-500 dark:text-slate-400">
               <span className="flex items-center gap-1.5"><Briefcase className="w-4 h-4" /> {record.position}</span>
               <span className="hidden md:block w-1 h-1 bg-slate-300 dark:bg-slate-600 rounded-full"></span>
               <span className="flex items-center gap-1.5"><Building className="w-4 h-4" /> {record.department}</span>
               <span className="hidden md:block w-1 h-1 bg-slate-300 dark:bg-slate-600 rounded-full"></span>
-              <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4" /> Joining: {new Date(record.joiningDate).toLocaleDateString()}</span>
+              <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4" /> Joining: {joiningDateText}</span>
             </div>
           </div>
         </div>
@@ -117,12 +117,12 @@ export function OnboardingDetailPage({ id }) {
                 onClick={() => setIsConvertModalOpen(true)}
                 className={`${canConvert ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-emerald-500/25 border-emerald-500 hover:shadow-lg' : 'bg-slate-100 text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-500 cursor-not-allowed'} font-medium px-5 py-2.5 rounded-xl border flex items-center gap-2 justify-center w-full transition-all duration-300`}
               >
-                <CheckCircle2 className="w-4 h-4" /> Convert to Employee
+                <CheckCircle2 className="w-4 h-4" /> {converted ? 'Converted' : 'Convert to Employee'}
               </button>
               
               {!canConvert && record.status !== 'COMPLETED' && (
                 <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 bg-slate-900 text-white text-xs rounded-xl py-2 px-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 text-center shadow-xl">
-                  {totalPending} mandatory items pending (Tasks/Docs)
+                  {totalPending} mandatory onboarding milestone{totalPending === 1 ? '' : 's'} pending
                 </div>
               )}
             </div>
@@ -159,8 +159,8 @@ export function OnboardingDetailPage({ id }) {
           {/* Tab Content */}
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden min-h-[500px]">
             {activeTab === 'overview' && <OnboardingOverview record={record} />}
-            {activeTab === 'employee_details' && <OnboardingEmployeeDetails record={record} />}
-            {activeTab === 'tasks' && <OnboardingTasks record={record} onRefresh={loadRecord} />}
+            {activeTab === 'employee_details' && <OnboardingEmployeeDetails record={record} onRefresh={loadRecord} />}
+            {activeTab === 'tasks' && <OnboardingTasks record={record} onNavigate={setActiveTab} onConvert={() => setIsConvertModalOpen(true)} />}
             {activeTab === 'documents' && <OnboardingDocuments record={record} onRefresh={loadRecord} />}
             {activeTab === 'joining' && <OnboardingJoiningDetails record={record} onRefresh={loadRecord} />}
             {activeTab === 'activity' && <OnboardingActivity record={record} />}
@@ -217,7 +217,7 @@ export function OnboardingDetailPage({ id }) {
               </div>
             </div>
             
-            {totalPending > 0 && (
+            {!converted && totalPending > 0 && (
               <div className="mt-6 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30 flex items-start gap-3 text-amber-800 dark:text-amber-400 text-sm">
                 <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
                 <p><strong>{totalPending} mandatory items pending.</strong> Must be completed to enable Employee Conversion.</p>

@@ -12,4 +12,9 @@ export const assetApi = {
   request: (data) => api.post('/asset-requests', data),
   approveRequest: (id, remarks) => api.put(`/asset-requests/${id}/approve`, { remarks }),
   rejectRequest: (id, remarks) => api.put(`/asset-requests/${id}/reject`, { remarks }),
+  uploadImage: (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post('/assets/upload', formData)
+  },
 }

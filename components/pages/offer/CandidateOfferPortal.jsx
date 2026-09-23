@@ -44,20 +44,20 @@ export function CandidateOfferPortal({ token }) {
   if (!data) return null
 
   if (data.status === 'WITHDRAWN') {
-    return <Centered><Card className="text-center"><XCircle className="w-10 h-10 text-slate-300 mx-auto mb-3" /><h1 className="font-bold text-slate-800 dark:text-slate-100 mb-1">This offer is no longer active</h1><p className="text-sm text-slate-500 dark:text-slate-400">{data.withdrawalReason}</p></Card></Centered>
+    return <Centered><Card className="text-center"><XCircle className="w-10 h-10 text-slate-300 mx-auto mb-3" /><h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full mb-1">This offer is no longer active</h1><p className="text-sm text-slate-500 dark:text-slate-400">{data.withdrawalReason}</p></Card></Centered>
   }
   if (data.status === 'EXPIRED') {
-    return <Centered><Card className="text-center"><XCircle className="w-10 h-10 text-amber-400 mx-auto mb-3" /><h1 className="font-bold text-slate-800 dark:text-slate-100 mb-1">This offer has expired</h1><p className="text-sm text-slate-500 dark:text-slate-400">Please reach out to your recruiter if you'd still like to proceed.</p></Card></Centered>
+    return <Centered><Card className="text-center"><XCircle className="w-10 h-10 text-amber-400 mx-auto mb-3" /><h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full mb-1">This offer has expired</h1><p className="text-sm text-slate-500 dark:text-slate-400">Please reach out to your recruiter if you'd still like to proceed.</p></Card></Centered>
   }
   if (data.status === 'DECLINED' || result === 'declined') {
-    return <Centered><Card className="text-center"><XCircle className="w-10 h-10 text-slate-300 mx-auto mb-3" /><h1 className="font-bold text-slate-800 dark:text-slate-100 mb-1">Offer Declined</h1><p className="text-sm text-slate-500 dark:text-slate-400">Thank you for letting us know. We wish you the best.</p></Card></Centered>
+    return <Centered><Card className="text-center"><XCircle className="w-10 h-10 text-slate-300 mx-auto mb-3" /><h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full mb-1">Offer Declined</h1><p className="text-sm text-slate-500 dark:text-slate-400">Thank you for letting us know. We wish you the best.</p></Card></Centered>
   }
   if (data.status === 'ACCEPTED' || result === 'accepted') {
     return (
       <Centered>
         <Card className="text-center">
           <div className="w-14 h-14 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center mx-auto mb-4"><CheckCircle2 className="w-7 h-7 text-emerald-500" /></div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Offer Accepted!</h1>
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full mb-2">Offer Accepted!</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm">Welcome to {data.companyName}. Our HR team will be in touch shortly with next steps.</p>
         </Card>
       </Centered>
@@ -68,7 +68,7 @@ export function CandidateOfferPortal({ token }) {
       <Centered>
         <Card className="text-center">
           <MessageSquare className="w-10 h-10 text-blue-400 mx-auto mb-3" />
-          <h1 className="font-bold text-slate-800 dark:text-slate-100 mb-1">Request Sent</h1>
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full mb-1">Request Sent</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">Our HR team will review your request and get back to you.</p>
           <button onClick={() => { setResult(null); setView('summary') }} className="mt-4 text-sm text-blue-600 dark:text-blue-400 hover:underline">Back to offer</button>
         </Card>
@@ -86,7 +86,7 @@ export function CandidateOfferPortal({ token }) {
           <button onClick={() => setView('summary')} className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"><ArrowLeft className="w-3.5 h-3.5" /> Back</button>
           <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm p-8">
             <div className="flex items-center justify-between mb-6">
-              <h1 className="font-bold text-slate-900 dark:text-white">{data.offerCode}</h1>
+              <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full">{data.offerCode}</h1>
               <a href={publicOfferApi.pdfUrl(token)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm text-blue-600 dark:text-blue-400 hover:underline"><Download className="w-3.5 h-3.5" /> Download PDF</a>
             </div>
             <div className="space-y-2 text-sm leading-relaxed text-slate-700 dark:text-slate-200">
@@ -110,7 +110,7 @@ export function CandidateOfferPortal({ token }) {
     <Centered>
       <Card>
         <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">Congratulations, {data.candidateName}</p>
-        <h1 className="text-xl font-bold text-slate-900 dark:text-white mt-1">We are pleased to offer you the position of {v.designation || data.jobTitle}</h1>
+        <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full mt-1">We are pleased to offer you the position of {v.designation || data.jobTitle}</h1>
 
         <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
           <div><p className="text-slate-400 text-xs">Designation</p><p className="font-medium text-slate-700 dark:text-slate-200">{v.designation || '—'}</p></div>
@@ -131,6 +131,28 @@ export function CandidateOfferPortal({ token }) {
         <button onClick={() => setView('letter')} className="w-full mt-5 px-6 py-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center justify-center gap-2">
           <FileText className="w-4 h-4" /> View Full Offer
         </button>
+        {v.attachments?.length > 0 && (
+          <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/60">
+            <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Additional Documents</p>
+            <div className="space-y-2">
+              {v.attachments.map((attachment) => (
+                <a
+                  key={attachment.fileName}
+                  href={publicOfferApi.attachmentUrl(token, attachment.fileName)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:text-blue-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:text-blue-400"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <FileText className="h-4 w-4 shrink-0 text-blue-500" />
+                    <span className="truncate">{attachment.originalFileName}</span>
+                  </span>
+                  <Download className="h-4 w-4 shrink-0 text-slate-400" />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
         <button onClick={() => setView('accept')} className="w-full mt-3 px-6 py-3 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-medium transition-colors">Accept Offer</button>
         <div className="flex gap-2 mt-3">
           <button onClick={() => setView('decline')} className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Decline Offer</button>
@@ -159,7 +181,7 @@ function AcceptView({ token, onBack, onDone }) {
     <Centered>
       <Card>
         <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 mb-4"><ArrowLeft className="w-3.5 h-3.5" /> Back</button>
-        <h1 className="text-lg font-bold text-slate-900 dark:text-white mb-3">Accept Offer</h1>
+        <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full mb-3">Accept Offer</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">I have reviewed the offer and agree to the terms.</p>
         {error && <div className="mb-3 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">{error}</div>}
         <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200 mb-4">
@@ -195,7 +217,7 @@ function DeclineView({ token, onBack, onDone }) {
     <Centered>
       <Card>
         <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 mb-4"><ArrowLeft className="w-3.5 h-3.5" /> Back</button>
-        <h1 className="text-lg font-bold text-slate-900 dark:text-white mb-3">Decline Offer</h1>
+        <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full mb-3">Decline Offer</h1>
         {error && <div className="mb-3 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">{error}</div>}
         <label className="block mb-3">
           <span className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Reason *</span>
@@ -238,7 +260,7 @@ function DiscussView({ token, onBack, onDone }) {
     <Centered>
       <Card>
         <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 mb-4"><ArrowLeft className="w-3.5 h-3.5" /> Back</button>
-        <h1 className="text-lg font-bold text-slate-900 dark:text-white mb-1">Request Discussion</h1>
+        <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full mb-1">Request Discussion</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Want different terms? Let us know — this won't decline your offer.</p>
         {error && <div className="mb-3 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">{error}</div>}
         <div className="grid grid-cols-2 gap-3 mb-3">

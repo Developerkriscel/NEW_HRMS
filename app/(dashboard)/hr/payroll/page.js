@@ -274,9 +274,14 @@ export default function HRPayrollPage() {
   const [selectedPayslip, setSelectedPayslip] = useState(null)
   const [selectedSalaryRow, setSelectedSalaryRow] = useState(null)
 
-  const load = useCallback(() => {
+  const load = useCallback((overrides = {}) => {
+    const nextMonth = overrides.month ?? month
+    const nextYear = overrides.year ?? year
+    const nextPage = overrides.page ?? page
+    const nextStatus = overrides.status ?? statusFilter
+    const nextSearch = overrides.search ?? search
     setLoading(true)
-    payrollApi.getMonthly({ month, year, page, size: 20, status: statusFilter, search })
+    payrollApi.getMonthly({ month: nextMonth, year: nextYear, page: nextPage, size: 20, status: nextStatus, search: nextSearch })
       .then((res) => {
         setPayslips(res.data.data.content)
         setTotalElements(res.data.data.totalElements)
@@ -494,31 +499,33 @@ export default function HRPayrollPage() {
     }
   }
 
+  const headerAction = (
+    <div className="flex bg-slate-100/50 dark:bg-slate-800/50 p-1 rounded-xl w-fit border border-slate-200/50 dark:border-slate-700/50 backdrop-blur-xl shrink-0">
+      <button
+        onClick={() => setActiveTab('company')}
+        className={`flex items-center gap-2 px-4 py-1.5 rounded-lg font-bold text-sm transition-all duration-300 ${
+          activeTab === 'company'
+            ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-slate-200 dark:ring-slate-700'
+            : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800'
+        }`}
+      >
+        <Banknote className="w-4 h-4" /> Company Payroll
+      </button>
+      <button
+        onClick={() => setActiveTab('mine')}
+        className={`flex items-center gap-2 px-4 py-1.5 rounded-lg font-bold text-sm transition-all duration-300 ${
+          activeTab === 'mine'
+            ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-slate-200 dark:ring-slate-700'
+            : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800'
+        }`}
+      >
+        <FileText className="w-4 h-4" /> My Payroll
+      </button>
+    </div>
+  )
+
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-5 pb-6">
-      
-      <div className="flex bg-slate-100/50 dark:bg-slate-800/50 p-1 rounded-xl w-fit border border-slate-200/50 dark:border-slate-700/50 backdrop-blur-xl">
-        <button
-          onClick={() => setActiveTab('company')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all duration-300 ${
-            activeTab === 'company'
-              ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-slate-200 dark:ring-slate-700'
-              : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800'
-          }`}
-        >
-          <Banknote className="w-4 h-4" /> Company Payroll
-        </button>
-        <button
-          onClick={() => setActiveTab('mine')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all duration-300 ${
-            activeTab === 'mine'
-              ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-slate-200 dark:ring-slate-700'
-              : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800'
-          }`}
-        >
-          <FileText className="w-4 h-4" /> My Payroll
-        </button>
-      </div>
 
       {activeTab === 'company' ? (
         <>
@@ -530,15 +537,17 @@ export default function HRPayrollPage() {
         
         <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div>
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg text-[10px] font-bold uppercase tracking-wider mb-2">
-              <Banknote className="w-3.5 h-3.5" /> Core HRMS
-            </div>
-            <h1 className="text-2xl font-black text-slate-900 dark:text-white mb-1.5">Payroll Operations</h1>
+            <div className="relative z-10 group w-fit mb-2">
+  <h1 className="text-2xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-900 via-indigo-700 to-blue-600 dark:from-indigo-200 dark:via-indigo-400 dark:to-blue-400 drop-shadow-sm transition-all duration-500 group-hover:scale-[1.02] origin-left">Payroll Operations</h1>
+  <div className="h-1 w-12 rounded-full bg-gradient-to-r from-indigo-600 to-blue-500 mt-1.5 transition-all duration-500 group-hover:w-full opacity-70"></div>
+</div>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-center gap-3">
-            <button 
-              onClick={() => setIsRunModalOpen(true)}
+          <div className="flex flex-col items-end gap-3">
+            {headerAction}
+            <div className="flex flex-col sm:flex-row items-center gap-3">
+              <button 
+                onClick={() => setIsRunModalOpen(true)}
               className="group bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-sm flex items-center gap-2 text-sm"
             >
               <Play className="w-4 h-4 fill-current" /> 
@@ -562,6 +571,7 @@ export default function HRPayrollPage() {
               <FileDown className="w-4 h-4" /> 
               <span>Export</span>
             </button>
+            </div>
           </div>
         </div>
       </div>
@@ -595,13 +605,13 @@ export default function HRPayrollPage() {
         ].map((kpi, i) => {
           const style = KPI_STYLES[kpi.color]
           return (
-          <div key={i} className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col relative overflow-hidden group">
+          <div key={i} className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col relative overflow-hidden group">
             <div className={`absolute -right-4 -top-4 w-24 h-24 ${style.blob} rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500`}></div>
-            <div className={`w-10 h-10 rounded-xl ${style.icon} flex items-center justify-center mb-4 relative z-10 border`}>
-              <kpi.icon className="w-5 h-5" />
+            <div className={`w-6 h-6 rounded-md ${style.icon} flex items-center justify-center mb-1.5 relative z-10 border`}>
+              <kpi.icon className="w-3.5 h-3.5" />
             </div>
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider relative z-10">{kpi.label}</h3>
-            <div className="text-2xl font-black text-slate-900 dark:text-white mt-1 relative z-10">{kpi.value}</div>
+            <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider relative z-10">{kpi.label}</h3>
+            <div className="text-lg font-black text-slate-900 dark:text-white mt-0.5 relative z-10">{kpi.value}</div>
           </div>
         )})}
       </div>
@@ -674,7 +684,7 @@ export default function HRPayrollPage() {
             columns={columns} 
             data={payslips} 
             isLoading={loading} 
-            hideSearch 
+            searchable={false} 
           />
         </div>
         
@@ -692,9 +702,6 @@ export default function HRPayrollPage() {
         <div className="border-b border-slate-100 bg-gradient-to-r from-amber-50 via-white to-indigo-50 p-5 dark:border-slate-800 dark:from-amber-950/20 dark:via-slate-900 dark:to-indigo-950/20">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-600 shadow-sm dark:bg-slate-950 dark:text-amber-300">
-                <Settings2 className="h-3.5 w-3.5" /> Finance Control
-              </div>
               <h2 className="text-xl font-black text-slate-950 dark:text-white">Salary Setup</h2>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -747,7 +754,12 @@ export default function HRPayrollPage() {
         onClose={() => setIsRunModalOpen(false)} 
         month={month} 
         year={year} 
-        onComplete={load}
+        onComplete={(processedMonth, processedYear) => {
+          setMonth(processedMonth)
+          setYear(processedYear)
+          setPage(0)
+          return load({ month: processedMonth, year: processedYear, page: 0 })
+        }}
         onOpenSalarySetup={() => setCompanyView('setup')}
       />
 
@@ -770,7 +782,7 @@ export default function HRPayrollPage() {
       />
         </>
       ) : (
-        <EmployeePayslipsWorkspace />
+        <EmployeePayslipsWorkspace headerAction={headerAction} />
       )}
     </div>
   )

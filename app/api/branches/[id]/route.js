@@ -16,8 +16,13 @@ function validateCoordinates(body) {
   const longitude = normalizeNumber(body.longitude)
   if (body.latitude !== undefined && body.latitude !== '' && body.latitude != null && latitude == null) return 'Latitude must be a valid number'
   if (body.longitude !== undefined && body.longitude !== '' && body.longitude != null && longitude == null) return 'Longitude must be a valid number'
+  if ((latitude == null && longitude != null) || (latitude != null && longitude == null)) return 'Latitude and longitude must be set together'
   if (latitude != null && (latitude < -90 || latitude > 90)) return 'Latitude must be between -90 and 90'
   if (longitude != null && (longitude < -180 || longitude > 180)) return 'Longitude must be between -180 and 180'
+  if (body.geoFenceRadius !== undefined) {
+    const radius = normalizeNumber(body.geoFenceRadius)
+    if (!radius || radius < 1) return 'Geo fence radius must be at least 1 meter'
+  }
   return ''
 }
 
@@ -56,8 +61,7 @@ export const PUT = withApi(async (req, { params }) => {
   if (body.latitude !== undefined) branch.latitude = normalizeNumber(body.latitude)
   if (body.longitude !== undefined) branch.longitude = normalizeNumber(body.longitude)
   if (body.geoFenceRadius !== undefined) {
-    const radius = normalizeNumber(body.geoFenceRadius, 100)
-    branch.geoFenceRadius = radius && radius > 0 ? radius : 100
+    branch.geoFenceRadius = normalizeNumber(body.geoFenceRadius, 100)
   }
 
   branch.updatedBy = session.sub

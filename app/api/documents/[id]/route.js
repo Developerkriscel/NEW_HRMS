@@ -30,3 +30,25 @@ export const PUT = withApi(async (req, { params }) => {
 
   return ok(document, 'Document updated')
 })
+
+export const DELETE = withApi(async (req, { params }) => {
+  const session = await requireAuth()
+  await requireRole(session, ['HR_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN'])
+  const tenantId = requireTenantId(session)
+
+  const document = await EmployeeDocument.findOne({ _id: params.id, tenantId, deleted: false })
+  if (!document) return fail('Document not found', 404)
+
+  document.deleted = true
+  document.updatedBy = session.sub
+  await document.save()
+
+  await logAction(session, {
+    action: 'DOCUMENT_DELETED',
+    entityType: 'EmployeeDocument',
+    entityId: document._id,
+    description: `Document "${document.title}" removed`,
+  })
+
+  return ok(null, 'Document removed')
+})

@@ -13,6 +13,9 @@ import Application from '@/models/Application'
 import Job from '@/models/Job'
 import JobPipelineStage from '@/models/JobPipelineStage'
 import CandidateJobMatch from '@/models/CandidateJobMatch'
+import CandidateSkill from '@/models/CandidateSkill'
+import CandidateExperience from '@/models/CandidateExperience'
+import CandidateEducation from '@/models/CandidateEducation'
 import { MATCHING_MODEL_VERSION, MATCHING_RULES_VERSION, getMatchLabel } from '@/lib/matchingConstants'
 
 function normalizeBulkSource(source) {
@@ -22,6 +25,89 @@ function normalizeBulkSource(source) {
     return APPLICATION_SOURCE.MANUAL
   }
   return APPLICATION_SOURCE.MANUAL
+}
+
+function splitImportList(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item || '').trim()).filter(Boolean)
+  return String(value || '')
+    .split(/[,;|/]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function parseImportNumber(value) {
+  if (value === null || value === undefined || value === '') return null
+  const match = String(value).match(/(\d+(?:\.\d+)?)/)
+  return match ? Number(match[1]) : null
+}
+
+async function syncManualProfileData({ tenantId, candidateDoc, cand, session }) {
+  const skills = splitImportList(cand.skills)
+  if (skills.length) {
+    const existingSkills = new Set((candidateDoc.skills || []).map((skill) => String(skill).toLowerCase()))
+    const mergedSkills = [...(candidateDoc.skills || [])]
+    for (const skillName of skills) {
+      if (!existingSkills.has(skillName.toLowerCase())) mergedSkills.push(skillName)
+      await CandidateSkill.updateOne(
+        { tenantId, candidateId: candidateDoc._id, skillName: new RegExp(`^${skillName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+        {
+          $setOnInsert: {
+            tenantId,
+            candidateId: candidateDoc._id,
+            skillName,
+            source: 'MANUAL',
+            createdBy: session.sub,
+          },
+        },
+        { upsert: true }
+      )
+    }
+    candidateDoc.skills = mergedSkills
+  }
+
+  const educationText = cand.educationText || splitImportList(cand.education).join(', ')
+  if (educationText) {
+    const existingEducation = await CandidateEducation.findOne({
+      tenantId,
+      candidateId: candidateDoc._id,
+      degree: new RegExp(`^${String(educationText).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
+    }).select('_id')
+    if (!existingEducation) {
+      await CandidateEducation.create({
+        tenantId,
+        candidateId: candidateDoc._id,
+        degree: educationText,
+        source: 'MANUAL',
+        createdBy: session.sub,
+      })
+    }
+  }
+
+  const companyName = String(cand.currentCompany || '').trim()
+  const designation = String(cand.currentDesignation || cand.role || '').trim()
+  if (companyName || designation) {
+    const experienceQuery = {
+      tenantId,
+      candidateId: candidateDoc._id,
+      companyName: companyName || 'Manual Entry',
+      designation: designation || null,
+    }
+    const existingExperience = await CandidateExperience.findOne(experienceQuery).select('_id')
+    if (!existingExperience) {
+      await CandidateExperience.create({
+        tenantId,
+        candidateId: candidateDoc._id,
+        companyName: companyName || 'Manual Entry',
+        designation: designation || null,
+        isCurrent: !!companyName,
+        description: cand.exp ? `Total experience: ${cand.exp}` : null,
+        source: 'MANUAL',
+        createdBy: session.sub,
+      })
+    }
+  }
+
+  if (candidateDoc.isModified()) await candidateDoc.save()
 }
 
 export const POST = withApi(async (req) => {
@@ -91,6 +177,9 @@ export const POST = withApi(async (req) => {
 
       let candidateDoc = await findExistingCandidate(Candidate, tenantId, { email, phone: cand.phone || '' })
       const source = normalizeBulkSource(cand.source)
+      const importSkills = splitImportList(cand.skills)
+      const totalExperience = cand.totalExperience ?? parseImportNumber(cand.exp)
+      const expectedCtc = cand.expectedCtc ?? parseImportNumber(cand.expectedCtcText)
 
       if (!candidateDoc) {
         const candidateCode = await generateCandidateCode(Candidate, tenantId)
@@ -100,13 +189,39 @@ export const POST = withApi(async (req) => {
           lastName,
           email, 
           phone: cand.phone?.trim() || '000-000-0000', // Mock data lacks phone sometimes
-          totalExperience: cand.exp ? parseInt(cand.exp) : null,
+          currentLocation: cand.currentLocation || cand.location || null,
+          currentCompany: cand.currentCompany || null,
+          currentDesignation: cand.currentDesignation || cand.role || null,
+          educationSummary: cand.educationText || splitImportList(cand.education).join(', ') || null,
+          totalExperience,
+          expectedCtc,
+          skills: importSkills,
           source,
           tenantId,
           createdBy: session.sub,
           activityLog: [{ type: 'CREATED', message: 'Candidate created via Bulk Import', actorName: session.sub }],
         })
+      } else {
+        let shouldSaveCandidate = false
+        const fillIfEmpty = (field, value) => {
+          if ((candidateDoc[field] === null || candidateDoc[field] === undefined || candidateDoc[field] === '') && value) {
+            candidateDoc[field] = value
+            shouldSaveCandidate = true
+          }
+        }
+        fillIfEmpty('firstName', firstName)
+        fillIfEmpty('lastName', lastName)
+        fillIfEmpty('phone', cand.phone?.trim())
+        fillIfEmpty('currentLocation', cand.currentLocation || cand.location)
+        fillIfEmpty('currentCompany', cand.currentCompany)
+        fillIfEmpty('currentDesignation', cand.currentDesignation || cand.role)
+        fillIfEmpty('educationSummary', cand.educationText || splitImportList(cand.education).join(', '))
+        fillIfEmpty('totalExperience', totalExperience)
+        fillIfEmpty('expectedCtc', expectedCtc)
+        if (shouldSaveCandidate) await candidateDoc.save()
       }
+
+      await syncManualProfileData({ tenantId, candidateDoc, cand, session })
 
       // Check if an application already exists for this candidate and job
       let applicationDoc = await Application.findOne({ candidateId: candidateDoc._id, jobId: activeJobId, tenantId })

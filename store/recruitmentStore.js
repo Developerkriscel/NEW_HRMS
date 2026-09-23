@@ -4,10 +4,14 @@ import { offerApi } from '@/services/offerApi'
 import { interviewApi } from '@/services/interviewApi'
 import { selectionApi } from '@/services/selectionApi'
 
-function displayStatus(application) {
+const CANDIDATE_PAGE_SIZE = 100
+
+function displayStatus(application, offer) {
   if (application.status === 'REJECTED' || application.status === 'WITHDRAWN') return 'Rejected'
-  if (application.selectionStatus === 'SELECTED' || application.selectionStatus === 'SELECTION_APPROVAL_PENDING' || application.selectionStatus === 'SELECTION_APPROVED') return 'Selected'
   if (application.status === 'HIRED') return 'HIRED'
+  const offerStatus = offer?.status || offer?.offerStatus
+  if (offerStatus && offerStatus !== 'DRAFT') return 'Offered'
+  if (application.selectionStatus === 'SELECTED' || application.selectionStatus === 'SELECTION_APPROVAL_PENDING' || application.selectionStatus === 'SELECTION_APPROVED') return 'Selected'
   return application.status
 }
 
@@ -44,19 +48,40 @@ function combineInterviewDateTime(interview) {
   return `${datePart}T${timePart}:00`
 }
 
+function patchCandidateInState(state, candidateId, patch) {
+  const patchValue = typeof patch === 'function' ? patch : () => patch
+  const candidates = state.candidates.map((candidate) => (
+    candidate.id === candidateId ? { ...candidate, ...patchValue(candidate) } : candidate
+  ))
+  return {
+    candidates,
+    offers: candidates.filter((candidate) => ['Selected', 'Offered', 'HIRED'].includes(candidate.status)),
+    rejected: candidates.filter((candidate) => candidate.status === 'Rejected'),
+  }
+}
+
 export const useRecruitmentStore = create((set, get) => ({
   candidates: [],
   offers: [],
   rejected: [],
   loading: false,
+  loadingMore: false,
   error: null,
+  candidatePage: 0,
+  candidateTotal: 0,
+  hasMoreCandidates: false,
 
   fetchCandidates: async (params = {}) => {
-    set({ loading: true, error: null });
+    const append = !!params.append
+    const page = Number(params.page ?? (append ? get().candidatePage + 1 : 0))
+    const size = Number(params.size || CANDIDATE_PAGE_SIZE)
+    set({ [append ? 'loadingMore' : 'loading']: true, error: null });
     try {
       // Load raw applications from backend
-      const res = await candidateApi.list({ size: 200, ...params });
-      const rows = res.data.data.content || [];
+      const { append: _append, ...requestParams } = params
+      const res = await candidateApi.list({ ...requestParams, page, size });
+      const data = res.data.data || {}
+      const rows = data.content || [];
       
       // Transform backend shape (application) into the UI candidate card shape
       const mappedCandidates = rows.map(a => ({
@@ -68,7 +93,7 @@ export const useRecruitmentStore = create((set, get) => ({
         role: a.jobTitle,
         stage: a.stage || 'Applied',
         score: a.aiMatchScore || 0,
-        status: displayStatus(a),
+        status: displayStatus(a, { status: a.offerStatus }),
         backendStatus: a.status,
         selectionStatus: a.selectionStatus,
         readyForOffer: a.readyForOffer,
@@ -81,24 +106,65 @@ export const useRecruitmentStore = create((set, get) => ({
         offerExpiresAt: a.offerExpiresAt,
         latestInterview: a.latestInterview,
         appliedAt: a.appliedAt,
+        stageEnteredAt: a.stageEnteredAt,
+        shortlistedAt: a.shortlistedAt,
         interviewAt: combineInterviewDateTime(a.latestInterview),
         interviewTime: a.latestInterview?.startTime || null,
         interviewEndTime: a.latestInterview?.endTime || null,
         interviewRoundName: a.latestInterview?.roundName || null,
         interviewMode: a.latestInterview?.mode || null,
         interviewStatus: a.latestInterview?.status || null,
-        selectedAt: null,
+        selectedAt: a.selectionStatus === 'SELECTED' ? (a.decision?.decidedAt || a.stageEnteredAt) : null,
       }));
 
-      set({ 
-        candidates: mappedCandidates,
-        offers: mappedCandidates.filter(c => c.status === 'Selected' || c.status === 'HIRED'),
-        rejected: mappedCandidates.filter(c => c.status === 'Rejected'),
-        loading: false 
+      const nextCandidates = append
+        ? [...get().candidates.filter((candidate) => !mappedCandidates.some((item) => item.id === candidate.id)), ...mappedCandidates]
+        : mappedCandidates
+
+      set({
+        candidates: nextCandidates,
+        offers: nextCandidates.filter(c => ['Selected', 'Offered', 'HIRED'].includes(c.status)),
+        rejected: nextCandidates.filter(c => c.status === 'Rejected'),
+        loading: false,
+        loadingMore: false,
+        candidatePage: page,
+        candidateTotal: data.totalElements || nextCandidates.length,
+        hasMoreCandidates: nextCandidates.length < (data.totalElements || nextCandidates.length),
       });
     } catch (e) {
       console.error(e);
-      set({ error: 'Failed to fetch candidates', loading: false });
+      set({ error: 'Failed to fetch candidates', loading: false, loadingMore: false });
+    }
+  },
+
+  loadMoreCandidates: async () => get().fetchCandidates({ append: true }),
+
+  shortlistCandidate: async (candidateObj) => {
+    const previous = get().candidates.find((candidate) => candidate.id === candidateObj.id)
+    set((state) => patchCandidateInState(state, candidateObj.id, {
+      status: 'ACTIVE',
+      backendStatus: 'ACTIVE',
+      stage: 'Shortlisted',
+      stageEnteredAt: new Date().toISOString(),
+      shortlistedAt: new Date().toISOString(),
+    }))
+    try {
+      const res = await candidateApi.shortlist(candidateObj.id, 'Shortlisted from recruitment board')
+      const result = res.data?.data || {}
+      set((state) => patchCandidateInState(state, candidateObj.id, {
+        status: displayStatus(result),
+        backendStatus: result.status || 'ACTIVE',
+        stage: result.currentStageName || 'Shortlisted',
+        stageEnteredAt: result.stageEnteredAt || new Date().toISOString(),
+        shortlistedAt: result.shortlistedAt || result.stageEnteredAt || new Date().toISOString(),
+        selectionStatus: result.selectionStatus || null,
+        readyForOffer: !!result.readyForOffer,
+      }))
+    } catch (e) {
+      console.error(e)
+      if (previous) set((state) => patchCandidateInState(state, candidateObj.id, previous))
+      set({ error: e.response?.data?.message || 'Failed to shortlist candidate' })
+      throw e
     }
   },
 
@@ -107,36 +173,80 @@ export const useRecruitmentStore = create((set, get) => ({
     // For simplicity, if newStatus is 'Rejected', we can call candidateApi.reject
     try {
       if (newStatus === 'Rejected' || newStatus === 'REJECTED') {
-         await candidateApi.reject(candidateObj.id, { reason: 'Other', comment: 'General rejection' });
+         const previous = get().candidates.find((candidate) => candidate.id === candidateObj.id)
+         set((state) => patchCandidateInState(state, candidateObj.id, { status: 'Rejected', backendStatus: 'REJECTED' }))
+         try {
+           await candidateApi.reject(candidateObj.id, { reason: 'Other', comment: 'General rejection' });
+         } catch (e) {
+           if (previous) set((state) => patchCandidateInState(state, candidateObj.id, previous))
+           throw e
+         }
+      } else if (newStatus === 'Pipeline' || newStatus === 'ACTIVE') {
+         const previous = get().candidates.find((candidate) => candidate.id === candidateObj.id)
+         const restoreStage = candidateObj.stage || 'Applied'
+         set((state) => patchCandidateInState(state, candidateObj.id, {
+           status: 'ACTIVE',
+           backendStatus: 'ACTIVE',
+           stage: restoreStage,
+           selectionStatus: null,
+           readyForOffer: false,
+         }))
+         try {
+           const res = await candidateApi.restore(candidateObj.id, {
+             stageName: restoreStage,
+             comment: 'Restored from recruitment board',
+           })
+           const result = res.data?.data || {}
+           set((state) => patchCandidateInState(state, candidateObj.id, {
+             status: 'ACTIVE',
+             backendStatus: result.application?.status || 'ACTIVE',
+             stage: result.stage?.name || result.application?.currentStageName || restoreStage,
+             selectionStatus: result.application?.selectionStatus || null,
+             readyForOffer: !!result.application?.readyForOffer,
+           }))
+         } catch (e) {
+           if (previous) set((state) => patchCandidateInState(state, candidateObj.id, previous))
+           throw e
+         }
       } else if (newStatus === 'Selected' || newStatus === 'HIRED') {
          // Placeholder for selecting/hiring
          // Usually you'd create an offer.
       }
-      // Re-fetch after mutation
-      get().fetchCandidates();
     } catch (e) {
       console.error(e);
     }
   },
 
   selectCandidate: async (candidateObj, data = {}) => {
+    const previous = get().candidates.find((candidate) => candidate.id === candidateObj.id)
+    set((state) => patchCandidateInState(state, candidateObj.id, {
+      status: 'Selected',
+      selectionStatus: 'SELECTED',
+      stage: 'Selected',
+      selectedAt: new Date().toISOString(),
+      readyForOffer: true,
+    }))
     try {
-      const application = await candidateApi.getApplication(candidateObj.id)
-      const stages = application.data.data.pipelineStages || []
-      const selectedStage = pickStage(stages, 'Selected', 'SELECTED')
-      if (selectedStage && application.data.data.currentStageName !== selectedStage.name) {
-        await candidateApi.moveStage(candidateObj.id, selectedStage._id, 'Moved to selected from recruitment board')
-      }
       const proposedJoiningDate = data.proposedJoiningDate || new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)
-      await selectionApi.select(candidateObj.id, {
+      const res = await selectionApi.select(candidateObj.id, {
         proposedJoiningDate,
         employmentType: data.employmentType || null,
         comments: data.comments || 'Selected from recruitment board',
+        moveToSelectedStage: true,
       })
-      await get().fetchCandidates()
+      const result = res.data?.data || {}
+      set((state) => patchCandidateInState(state, candidateObj.id, {
+        status: 'Selected',
+        selectionStatus: result.application?.selectionStatus || 'SELECTED',
+        stage: result.stage?.name || 'Selected',
+        readyForOffer: true,
+        selectedAt: result.decision?.decidedAt || new Date().toISOString(),
+      }))
     } catch (e) {
       console.error(e)
+      if (previous) set((state) => patchCandidateInState(state, candidateObj.id, previous))
       set({ error: e.response?.data?.message || 'Failed to select candidate' })
+      throw e
     }
   },
 
@@ -154,7 +264,11 @@ export const useRecruitmentStore = create((set, get) => ({
         meetingProvider: data.meetingUrl ? 'CUSTOM_LINK' : null,
         meetingUrl: data.meetingUrl || null,
         location: data.location || null,
-        candidateInstructions: data.candidateInstructions || null,
+        sendCandidateEmail: data.sendCandidateEmail !== false,
+        candidateEmailSubject: data.candidateEmailSubject || null,
+        candidateEmailBody: data.candidateEmailBody || data.candidateInstructions || null,
+        candidateInstructions: data.candidateInstructions || data.candidateEmailBody || null,
+        candidateEmail: data.candidateEmail || candidateObj.email || null,
         interviewers: data.interviewers || [],
       })
       await get().fetchCandidates()
@@ -166,16 +280,40 @@ export const useRecruitmentStore = create((set, get) => ({
   },
 
   sendOffer: async (candidate) => {
+    const candidateId = candidate.id || candidate
+    const previous = get().candidates.find((item) => item.id === candidateId)
     try {
       const payload = candidate?.offerEmail ? {
         subject: candidate.offerEmail.subject,
         body: candidate.offerEmail.body,
-      } : {}
-      const res = await candidateApi.quickOffer(candidate.id || candidate, payload)
-      await get().fetchCandidates()
-      return res.data.data
+        candidateEmail: candidate.email || undefined,
+      } : { candidateEmail: candidate?.email || undefined }
+      let requestBody = payload
+      const attachments = candidate?.offerEmail?.attachments || []
+      if (attachments.length) {
+        requestBody = new FormData()
+        requestBody.append('subject', payload.subject || '')
+        requestBody.append('body', payload.body || '')
+        if (candidate?.email) {
+          requestBody.append('candidateEmail', candidate.email)
+        }
+        attachments.forEach((file) => requestBody.append('attachments', file))
+      }
+      const res = await candidateApi.quickOffer(candidateId, requestBody)
+      const result = res.data.data
+      set((state) => patchCandidateInState(state, candidateId, {
+        status: 'Offered',
+        stage: result.stage?.name || result.application?.currentStageName || 'Offered',
+        offerId: result.offer?._id || previous?.offerId,
+        offerStatus: displayOfferStatus(result.offer?.status) || 'Sent',
+        backendOfferStatus: result.offer?.status || 'SENT',
+        offerSentAt: result.offer?.sentAt || new Date().toISOString(),
+        offerExpiresAt: result.offer?.expiresAt || null,
+      }))
+      return result
     } catch (e) {
       console.error(e)
+      if (previous) set((state) => patchCandidateInState(state, candidateId, previous))
       set({ error: e.response?.data?.message || 'Failed to send offer' })
       throw e
     }
@@ -187,11 +325,25 @@ export const useRecruitmentStore = create((set, get) => ({
         ? candidateOrId
         : get().offers.find((item) => item.id === candidateOrId) || get().candidates.find((item) => item.id === candidateOrId)
       if (!candidate?.offerId) throw new Error('No sent offer found for this candidate')
+      
+      const job = get().selectedPositionForCandidates;
+      let hiredStageName = 'Hired';
+      if (job?.pipelineStages?.length > 0) {
+        const hiredStage = job.pipelineStages.find(s => s.category === 'HIRED' || s.name.toLowerCase() === 'hired');
+        if (hiredStage) hiredStageName = hiredStage.name;
+      }
+
       await offerApi.accept(candidate.offerId, {
         fullName: candidate.name,
         comment: 'Marked accepted from recruitment board',
       })
-      await get().fetchCandidates()
+      set((state) => patchCandidateInState(state, candidate.id, {
+        offerStatus: 'Accepted',
+        backendOfferStatus: 'ACCEPTED',
+        offerAcceptedAt: new Date().toISOString(),
+        status: 'HIRED',
+        stage: hiredStageName
+      }))
     } catch (e) {
       console.error(e)
       set({ error: e.response?.data?.message || e.message || 'Failed to accept offer' })
@@ -209,7 +361,11 @@ export const useRecruitmentStore = create((set, get) => ({
         reason: 'Other',
         comment: 'Marked declined from recruitment board',
       })
-      await get().fetchCandidates()
+      set((state) => patchCandidateInState(state, candidate.id, {
+        offerStatus: 'Rejected',
+        backendOfferStatus: 'DECLINED',
+        offerDeclinedAt: new Date().toISOString(),
+      }))
     } catch (e) {
       console.error(e)
       set({ error: e.response?.data?.message || e.message || 'Failed to decline offer' })
@@ -218,23 +374,28 @@ export const useRecruitmentStore = create((set, get) => ({
   },
 
   updateCandidateStage: async (candidateId, newStageName) => {
+    const previous = get().candidates.find((candidate) => candidate.id === candidateId)
+    set((state) => patchCandidateInState(state, candidateId, { stage: newStageName }))
     try {
-      const application = await candidateApi.getApplication(candidateId)
-      const stages = application.data.data.pipelineStages || []
-      const preferredCategory = /interview|technical|round/i.test(newStageName) ? 'INTERVIEW' : null
-      const targetStage = pickStage(stages, newStageName, preferredCategory)
-      if (!targetStage) throw new Error('No pipeline stage found for this job')
-      await candidateApi.moveStage(candidateId, targetStage._id, `Moved to ${targetStage.name}`)
-
-      const state = get();
-      const updatedCandidates = state.candidates.map(c => 
-        c.id === candidateId ? { ...c, stage: targetStage.name } : c
-      );
-      set({ candidates: updatedCandidates });
-      await get().fetchCandidates()
+      const preferredCategory = /shortlist/i.test(newStageName) ? 'SCREENING'
+        : /offer/i.test(newStageName) ? 'OFFER'
+        : /interview|technical|round/i.test(newStageName) ? 'INTERVIEW'
+        : null
+      const res = await candidateApi.moveStage(candidateId, {
+        stageName: newStageName,
+        preferredCategory,
+        comment: `Moved to ${newStageName}`,
+      })
+      const stage = res.data?.data?.stage
+      set((state) => patchCandidateInState(state, candidateId, {
+        stage: stage?.name || newStageName,
+        backendStatus: res.data?.data?.application?.status || previous?.backendStatus,
+      }))
     } catch (e) {
       console.error(e);
+      if (previous) set((state) => patchCandidateInState(state, candidateId, previous))
       set({ error: e.response?.data?.message || e.message || 'Failed to move candidate stage' })
+      throw e
     }
   }
 }))

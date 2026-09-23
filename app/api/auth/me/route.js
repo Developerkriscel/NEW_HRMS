@@ -4,17 +4,10 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import jwt from 'jsonwebtoken'
 import { ok, fail } from '@/lib/apiResponse'
+import { buildDevUserForEmail } from '@/lib/devLogin'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'NexaHRSuperSecretKey2025ForJWTTokenSigningMustBe256BitsOrMore'
 const ACCESS_COOKIE = 'nexahr_token'
-
-function prewarmDatabaseConnection() {
-  setTimeout(() => {
-    void import('@/lib/db')
-      .then(({ connectDB }) => connectDB())
-      .catch(() => {})
-  }, 0)
-}
 
 async function readDevSession() {
   if (process.env.NODE_ENV === 'production') return null
@@ -22,7 +15,24 @@ async function readDevSession() {
   if (!token) return null
   try {
     const payload = jwt.verify(token, JWT_SECRET)
-    if (payload.type === 'access' && payload.devLogin) return payload
+    if (payload.type === 'access' && payload.devLogin) {
+      const currentDevUser = buildDevUserForEmail(payload.sub)
+      if (!currentDevUser) return payload
+      return {
+        ...payload,
+        userId: currentDevUser.id,
+        name: currentDevUser.name,
+        role: currentDevUser.role,
+        tenantId: currentDevUser.tenantId || null,
+        companyName: currentDevUser.companyName || null,
+        companySlug: currentDevUser.companySlug || null,
+        tenantDatabaseName: currentDevUser.tenantDatabaseName || null,
+        permissions: currentDevUser.permissions || [],
+        moduleAccess: currentDevUser.moduleAccess || [],
+        platformPermissions: currentDevUser.platformPermissions || [],
+        platformRoles: currentDevUser.platformRoles || [],
+      }
+    }
   } catch {
     return null
   }
@@ -33,17 +43,18 @@ export async function GET() {
   try {
     const devSession = await readDevSession()
     if (devSession) {
-      prewarmDatabaseConnection()
       return ok({
         id: devSession.userId,
-        name: 'Dev Super Admin',
+        name: devSession.name || 'Dev User',
         email: devSession.sub,
-        role: 'SUPER_ADMIN',
-        tenantId: null,
-        companyName: null,
-        permissions: [],
-        platformPermissions: ['*'],
-        platformRoles: ['PLATFORM_OWNER (dev)'],
+        role: devSession.role,
+        tenantId: devSession.tenantId || null,
+        companyName: devSession.companyName || null,
+        companySlug: devSession.companySlug || null,
+        permissions: devSession.permissions || [],
+        moduleAccess: devSession.moduleAccess || [],
+        platformPermissions: devSession.platformPermissions || [],
+        platformRoles: devSession.platformRoles || [],
         devLogin: true,
       })
     }
@@ -56,7 +67,6 @@ export async function GET() {
     if (!session) return fail('Authentication required', 401, 'UNAUTHENTICATED')
 
     if (session.name) {
-      prewarmDatabaseConnection()
       return ok({
         id: session.userId,
         name: session.name,

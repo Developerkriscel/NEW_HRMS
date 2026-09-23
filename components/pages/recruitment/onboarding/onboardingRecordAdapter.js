@@ -1,3 +1,5 @@
+import { buildPreboardingMilestones } from '@/lib/preboardingMilestones'
+
 function fullName(person) {
   if (!person) return 'Unknown Candidate'
   return [person.firstName, person.lastName].filter(Boolean).join(' ').trim() || person.name || 'Unknown Candidate'
@@ -18,48 +20,15 @@ function normalizeDocumentStatus(status) {
 }
 
 function buildTasks(preboarding) {
-  if (Array.isArray(preboarding.tasks) && preboarding.tasks.length) {
-    return preboarding.tasks.map((task) => ({
-      id: String(task._id || task.id),
-      name: task.name || 'Task',
-      assignedTo: task.assignedTo || 'HR Department',
-      dueDate: task.dueDate || '',
-      priority: task.priority || 'Medium',
-      required: task.required !== false,
-      status: task.status || 'PENDING',
-    }))
-  }
-
   const joiningDate = preboarding.confirmedJoiningDate || preboarding.proposedJoiningDate || preboarding.joiningDate || ''
-  return [
-    {
-      id: 'information',
-      name: 'Information Form Approval',
-      assignedTo: 'HR Department',
-      dueDate: joiningDate,
-      priority: 'High',
-      required: true,
-      status: preboarding.formStatus === 'APPROVED' ? 'COMPLETED' : 'PENDING',
-    },
-    {
-      id: 'documents',
-      name: 'Document Verification',
-      assignedTo: 'HR Department',
-      dueDate: joiningDate,
-      priority: 'High',
-      required: true,
-      status: preboarding.verificationStatus === 'COMPLETE' ? 'COMPLETED' : 'PENDING',
-    },
-    {
-      id: 'joining',
-      name: 'Joining Confirmation',
-      assignedTo: 'HR Department',
-      dueDate: joiningDate,
-      priority: 'Medium',
-      required: true,
-      status: ['READY_TO_JOIN', 'JOINED'].includes(preboarding.status) ? 'COMPLETED' : 'PENDING',
-    },
-  ]
+  const converted = preboarding.conversionStatus === 'COMPLETED' || !!preboarding.convertedEmployeeId
+  return buildPreboardingMilestones(preboarding).milestones.map((task) => ({
+    ...task,
+    status: converted ? 'COMPLETED' : task.status,
+    assignedTo: 'System',
+    dueDate: joiningDate,
+    systemGenerated: true,
+  }))
 }
 
 function buildDocuments(preboarding) {
@@ -101,19 +70,6 @@ function buildActivities(preboarding) {
   }))
 }
 
-function progressFromRecord(documents, tasks) {
-  const requiredDocs = documents.filter((doc) => doc.required)
-  const verifiedDocs = requiredDocs.filter((doc) => doc.status === 'VERIFIED').length
-  
-  const requiredTasks = tasks.filter((task) => task.required)
-  const completedTasks = requiredTasks.filter((task) => task.status === 'COMPLETED').length
-  
-  const totalRequired = requiredDocs.length + requiredTasks.length
-  if (totalRequired === 0) return 100
-  
-  return Math.round(((verifiedDocs + completedTasks) / totalRequired) * 100)
-}
-
 export function adaptPreboardingRecord(source) {
   const preboarding = source || {}
   const candidate = preboarding.candidateId && typeof preboarding.candidateId === 'object'
@@ -127,7 +83,10 @@ export function adaptPreboardingRecord(source) {
     }
 
   const documents = buildDocuments(preboarding)
-  const tasks = buildTasks(preboarding)
+  const tasks = buildTasks({ ...preboarding, documents })
+  const milestoneState = buildPreboardingMilestones({ ...preboarding, documents })
+  const converted = preboarding.conversionStatus === 'COMPLETED' || !!preboarding.convertedEmployeeId
+  const hasFullMilestoneContext = !!(preboarding.personal || preboarding.emergencyContact || preboarding.offer)
   const offer = preboarding.offer || {}
   const branch = preboarding.branch || offer.branch || null
   const shift = preboarding.shift || offer.shift || null
@@ -139,7 +98,12 @@ export function adaptPreboardingRecord(source) {
     rawStatus: preboarding.status,
     conversionStatus: preboarding.conversionStatus,
     convertedEmployeeId: preboarding.convertedEmployeeId,
-    canConvert: preboarding.conversionStatus === 'READY' || preboarding.status === 'READY_TO_JOIN' || preboarding.status === 'JOINED',
+    canConvert: !converted && (
+      preboarding.conversionStatus === 'READY' ||
+      preboarding.status === 'READY_TO_JOIN' ||
+      preboarding.status === 'JOINED' ||
+      (hasFullMilestoneContext && milestoneState.pending.length === 0)
+    ),
     id: String(preboarding._id || preboarding.preboardingId || preboarding.id),
     candidate: {
       id: candidate.candidateCode || String(candidate._id || preboarding.candidateId || ''),
@@ -162,8 +126,10 @@ export function adaptPreboardingRecord(source) {
     reportingManager: offer.reportingManager || preboarding.reportingManager || '',
     onboardingOwner: preboarding.createdByName || preboarding.onboardingOwner || 'HR',
     joiningDate,
-    status: normalizeUiStatus(preboarding.status, preboarding.conversionStatus),
-    progress: progressFromRecord(documents, tasks),
+    status: converted ? 'COMPLETED' : normalizeUiStatus(preboarding.status, preboarding.conversionStatus),
+    progress: converted ? 100 : (hasFullMilestoneContext ? milestoneState.progress : (preboarding.progressPercentage ?? milestoneState.progress)),
+    milestoneProgress: converted ? 100 : milestoneState.progress,
+    pendingMilestones: converted ? [] : milestoneState.pending,
     createdAt: preboarding.createdAt,
     formStatus: preboarding.formStatus,
     verificationStatus: preboarding.verificationStatus,

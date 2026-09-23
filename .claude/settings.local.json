@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Saura\\\\OneDrive\\\\Documents\\\\Claude\\\\Projects\\\\NexaHR\\\\backend\\\\src\\\\main\\\\java\\\\com\\\\nexahr\\\\entity\\\\\" -Recurse -Filter \"*.java\" | Select-Object FullName)"
+    ]
+  }
+}

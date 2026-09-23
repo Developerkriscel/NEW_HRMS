@@ -9,6 +9,11 @@ import { baseFields, model } from './_base'
 const PlatformOperatorSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
+    firstName: { type: String, default: null },
+    lastName: { type: String, default: null },
+    mobileNumber: { type: String, default: null },
+    designation: { type: String, default: null },
+    profilePhoto: { type: String, default: null },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true }, // bcrypt hash
     status: { type: String, enum: ['ACTIVE', 'SUSPENDED'], default: 'ACTIVE' },

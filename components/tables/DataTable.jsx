@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { ChevronUp, ChevronDown, Search } from 'lucide-react'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
@@ -23,13 +23,12 @@ export function DataTable({
   actions,
   emptyMessage = 'No records found',
   className,
+  pageSize = 5,
 }) {
   const [search, setSearch] = useState('')
   const [sortKey, setSortKey] = useState(null)
   const [sortDir, setSortDir] = useState('asc')
   const [page, setPage] = useState(1)
-  const pageSize = 10
-
   const filtered = data.filter((row) => {
     if (!search) return true
     return collectSearchText(row).toLowerCase().includes(search.toLowerCase())
@@ -45,6 +44,10 @@ export function DataTable({
 
   const totalPages = Math.ceil(sorted.length / pageSize)
   const paginated = sorted.slice((page - 1) * pageSize, page * pageSize)
+
+  useEffect(() => {
+    setPage(1)
+  }, [data.length, pageSize])
 
   const handleSort = (key) => {
     if (sortKey === key) {
@@ -89,7 +92,7 @@ export function DataTable({
                   )}
                   style={{ width: col.width }}
                 >
-                  <div className="flex items-center gap-1.5">
+                  <div className={cn("flex items-center gap-1.5", col.align === 'right' && "justify-end")}>
                     {col.header}
                     {col.accessor && sortKey === col.accessor && (
                       sortDir === 'asc'
@@ -134,7 +137,10 @@ export function DataTable({
                   {columns.map((col) => (
                     <td 
                       key={col.key || col.accessor} 
-                      className="px-6 py-4 text-sm font-medium text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-slate-100 transition-colors"
+                      className={cn(
+                        "px-6 py-4 text-sm font-medium text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-slate-100 transition-colors",
+                        col.align === 'right' && "text-right"
+                      )}
                     >
                       {col.render
                         ? col.render(col.accessor ? row[col.accessor] : row, row)

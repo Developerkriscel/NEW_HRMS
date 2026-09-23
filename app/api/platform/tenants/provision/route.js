@@ -23,14 +23,22 @@ export const POST = withApi(async (req) => {
   requirePlatformPermission(session, 'tenant.create')
 
   const body = await req.json()
-  const { idempotencyKey, payload } = body
+  const { idempotencyKey, payload, adminPassword } = body
   if (!idempotencyKey) return fail('idempotencyKey is required', 400)
   if (!payload) return fail('payload is required', 400)
+  if (adminPassword && !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(adminPassword)) {
+    return fail('Admin password must be at least 8 characters and include uppercase, lowercase and a number', 400, 'VALIDATION_ERROR')
+  }
 
   const missing = REQUIRED_FIELDS.filter((field) => !payload[field])
   if (missing.length) return fail(`Missing required fields: ${missing.join(', ')}`, 400, 'VALIDATION_ERROR')
 
   const job = await findOrCreateProvisioningJob({ idempotencyKey, payload, requestedBy: session.userId })
+
+  if (adminPassword && !job.adminTempPassword && !job.tenant) {
+    job.adminTempPassword = adminPassword
+    await job.save()
+  }
 
   if (job.status === 'PROVISIONING' || job.status === 'VALIDATING') {
     return fail('This submission is already being provisioned', 409, 'JOB_IN_PROGRESS')

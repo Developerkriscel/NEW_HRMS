@@ -9,6 +9,8 @@ import { sanitizeModuleAccess } from '@/lib/moduleAccess'
 import { sendEmployeeInvitationEmail } from '@/lib/mail'
 import Employee from '@/models/Employee'
 import Tenant from '@/models/Tenant'
+import '@/models/Department'
+import '@/models/Designation'
 
 export const GET = withApi(async (req) => {
   const session = await requireAuth()
@@ -23,6 +25,7 @@ export const GET = withApi(async (req) => {
   const departmentId = searchParams.get('departmentId')
   const status = searchParams.get('status')
   const joinedAfter = searchParams.get('joinedAfter')
+  const group = searchParams.get('group')
 
   if (session.role === 'SUPER_ADMIN' && !session.tenantId) {
     return ok(paged([], page, size, 0))
@@ -45,19 +48,46 @@ export const GET = withApi(async (req) => {
   }
   if (status) query.status = status
   if (joinedAfter) query.joiningDate = { $gte: new Date(joinedAfter) }
+  if (group === 'hr') query.role = 'HR_MANAGER'
+  if (group === 'managers') query.role = 'MANAGER'
+  if (group === 'employees') {
+    query.role = 'EMPLOYEE'
+    query.employmentType = { $not: /intern/i }
+  }
+  if (group === 'interns') query.employmentType = /intern/i
 
-  const totalElements = await Employee.countDocuments(query)
-  const content = await Employee.find(query)
-    .select('-password')
-    .populate('department', 'name')
-    .populate('designation', 'name')
-    .populate('reportingManager', 'firstName lastName')
-    .sort({ [sortBy]: sortDir })
-    .skip(page * size)
-    .limit(size)
+  const baseCountQuery = { tenantId, deleted: false }
+  if (session.role === 'MANAGER') baseCountQuery.reportingManager = session.userId
+
+  const [totalElements, groupCounts, content] = await Promise.all([
+    Employee.countDocuments(query),
+    Promise.all([
+      Employee.countDocuments(baseCountQuery),
+      Employee.countDocuments({ ...baseCountQuery, role: 'HR_MANAGER' }),
+      Employee.countDocuments({ ...baseCountQuery, role: 'MANAGER' }),
+      Employee.countDocuments({ ...baseCountQuery, role: 'EMPLOYEE', employmentType: { $not: /intern/i } }),
+      Employee.countDocuments({ ...baseCountQuery, employmentType: /intern/i }),
+    ]),
+    Employee.find(query)
+      .select('-password')
+      .populate('department', 'name')
+      .populate('designation', 'name')
+      .populate('reportingManager', 'firstName lastName')
+      .sort({ [sortBy]: sortDir })
+      .skip(page * size)
+      .limit(size),
+  ])
 
   const sanitized = content.map((e) => sanitizeForManager(e.toObject(), session.role))
-  return ok(paged(sanitized, page, size, totalElements))
+  const response = paged(sanitized, page, size, totalElements)
+  response.groupCounts = {
+    all: groupCounts[0],
+    hr: groupCounts[1],
+    managers: groupCounts[2],
+    employees: groupCounts[3],
+    interns: groupCounts[4],
+  }
+  return ok(response)
 })
 
 export const POST = withApi(async (req) => {
@@ -139,6 +169,7 @@ export const POST = withApi(async (req) => {
     employee,
     password: tempPassword,
     companyName: tenant?.companyName,
+    tenantId,
   })
 
   // Temp password has no delivery channel yet (email sending was never

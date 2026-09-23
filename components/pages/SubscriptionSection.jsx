@@ -120,30 +120,9 @@ export function SubscriptionSection() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <InfoPanel title="Plan Limits" icon={Users}>
-          <InfoRow label="Employee limit" value={limitText(tenant?.employeeLimit)} />
-          <InfoRow label="Storage used" value={`${limitText(tenant?.storageUsedMb || 0, ' MB')} / ${limitText(tenant?.storageLimitMb, ' MB')}`} />
-          <InfoRow label="API quota" value={limitText(tenant?.apiQuota)} />
-          <InfoRow label="Integration limit" value={limitText(tenant?.integrationLimit)} />
-        </InfoPanel>
-        <InfoPanel title="Recent Invoices" icon={Receipt}>
-          {(data?.invoices || []).length === 0 ? (
-            <EmptyLine text="No invoices recorded yet." />
-          ) : data.invoices.map((invoice) => (
-            <InfoRow key={invoice._id} label={invoice.invoiceNumber} value={`${formatCurrency(invoice.amount)} - ${invoice.status}`} />
-          ))}
-        </InfoPanel>
-        <InfoPanel title="Credits" icon={History}>
-          {(data?.credits || []).length === 0 ? (
-            <EmptyLine text="No credits applied." />
-          ) : data.credits.map((credit) => (
-            <InfoRow key={credit._id} label={credit.reason || 'Credit'} value={formatCurrency(credit.amount)} />
-          ))}
-        </InfoPanel>
-      </div>
 
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
         {filteredPlans.map((plan) => {
           const Icon = planIcon(plan.name)
           const isCurrent = currentPlan && String(currentPlan._id) === String(plan._id)

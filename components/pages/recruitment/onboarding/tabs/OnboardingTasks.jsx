@@ -1,56 +1,7 @@
-import React, { useState } from 'react'
-import { Plus, Check, Trash2, X, Calendar as CalendarIcon } from 'lucide-react'
-import { Portal } from '@/components/common/Portal'
-import { preboardingApi } from '@/services/preboardingApi'
+import React from 'react'
+import { Check, Calendar as CalendarIcon, ArrowRight, LockKeyhole } from 'lucide-react'
 
-export function OnboardingTasks({ record, onRefresh }) {
-  const [isAdding, setIsAdding] = useState(false)
-  const [newTask, setNewTask] = useState({ name: '', assignedTo: '', dueDate: '', priority: 'Medium', required: true })
-  const [saving, setSaving] = useState('')
-  const [error, setError] = useState('')
-
-  const handleToggleStatus = async (taskId, currentStatus) => {
-    setSaving(taskId)
-    setError('')
-    try {
-      await preboardingApi.updateTask(record.id, taskId, { status: currentStatus === 'COMPLETED' ? 'PENDING' : 'COMPLETED' })
-      await onRefresh?.()
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update task')
-    } finally {
-      setSaving('')
-    }
-  }
-
-  const handleAddTask = async () => {
-    if (newTask.name && newTask.assignedTo) {
-      setSaving('new')
-      setError('')
-      try {
-        await preboardingApi.addTask(record.id, newTask)
-        setIsAdding(false)
-        setNewTask({ name: '', assignedTo: '', dueDate: '', priority: 'Medium', required: true })
-        await onRefresh?.()
-      } catch (err) {
-        setError(err.response?.data?.message || 'Failed to add task')
-      } finally {
-        setSaving('')
-      }
-    }
-  }
-
-  const handleDeleteTask = async (taskId) => {
-    setSaving(taskId)
-    setError('')
-    try {
-      await preboardingApi.deleteTask(record.id, taskId)
-      await onRefresh?.()
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to delete task')
-    } finally {
-      setSaving('')
-    }
-  }
+export function OnboardingTasks({ record, onNavigate, onConvert }) {
 
   const getPriorityColor = (prio) => {
     switch(prio) {
@@ -65,18 +16,13 @@ export function OnboardingTasks({ record, onRefresh }) {
     <div className="p-6 md:p-8 animate-in fade-in duration-300 flex flex-col h-full">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h3 className="text-lg font-bold text-slate-900 dark:text-white">Onboarding Tasks</h3>
-          <p className="text-sm text-slate-500">Manage and track checklist items for this candidate.</p>
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white">Automatic Onboarding Checklist</h3>
+          <p className="text-sm text-slate-500">These milestones complete automatically from saved employee details, uploaded documents, joining setup, and employee conversion.</p>
         </div>
-        <button onClick={() => setIsAdding(true)} className="btn-primary">
-          <Plus className="w-4 h-4" /> Add Task
-        </button>
+        <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2 text-sm font-extrabold text-blue-700 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-300">
+          {record.progress}% Complete
+        </div>
       </div>
-      {error && (
-        <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">
-          {error}
-        </div>
-      )}
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden mb-6 flex-1">
         <table className="w-full text-left border-collapse">
@@ -96,16 +42,16 @@ export function OnboardingTasks({ record, onRefresh }) {
               return (
                 <tr key={task.id} className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors ${isCompleted ? 'opacity-60' : ''}`}>
                   <td className="py-4 px-6 text-center">
-                    <button 
-                      onClick={() => handleToggleStatus(task.id, task.status)}
-                      disabled={saving === task.id}
-                      className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isCompleted ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 dark:border-slate-600 hover:border-blue-500'}`}
+                    <div
+                      className={`mx-auto w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isCompleted ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800'}`}
+                      title={isCompleted ? 'Completed automatically' : 'Pending required data'}
                     >
                       {isCompleted && <Check className="w-4 h-4" />}
-                    </button>
+                    </div>
                   </td>
                   <td className="py-4 px-6">
                     <p className={`font-bold text-slate-900 dark:text-white ${isCompleted ? 'line-through text-slate-500' : ''}`}>{task.name}</p>
+                    {task.description && <p className="mt-1 text-xs font-medium text-slate-500">{task.description}</p>}
                     <div className="flex items-center gap-2 mt-1">
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${getPriorityColor(task.priority)}`}>{task.priority} Priority</span>
                       {task.required && <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400">Required</span>}
@@ -128,14 +74,24 @@ export function OnboardingTasks({ record, onRefresh }) {
                     </span>
                   </td>
                   <td className="py-4 px-6 text-right">
-                    <button
-                      onClick={() => handleDeleteTask(task.id)}
-                      disabled={saving === task.id}
-                      className="p-2 text-slate-400 hover:text-red-600 dark:hover:text-red-400 bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 disabled:opacity-50"
-                      title="Delete task"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {!isCompleted && task.targetTab !== 'convert' && (
+                      <button
+                        type="button"
+                        onClick={() => onNavigate?.(task.targetTab)}
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-extrabold text-slate-700 shadow-sm transition hover:border-blue-200 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                      >
+                        Complete Step <ArrowRight className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {!isCompleted && task.targetTab === 'convert' && (
+                      <button
+                        type="button"
+                        onClick={onConvert}
+                        className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-extrabold text-emerald-700 shadow-sm transition hover:bg-emerald-100"
+                      >
+                        <LockKeyhole className="h-3.5 w-3.5" /> Setup Access
+                      </button>
+                    )}
                   </td>
                 </tr>
               )
@@ -143,51 +99,6 @@ export function OnboardingTasks({ record, onRefresh }) {
           </tbody>
         </table>
       </div>
-
-      {isAdding && (
-        <Portal><div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="max-h-[90dvh] overflow-y-auto bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-xl overflow-hidden border border-slate-200 dark:border-slate-800 animate-in zoom-in-95">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="font-bold text-slate-900 dark:text-white">Add New Task</h3>
-              <button onClick={() => setIsAdding(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
-            </div>
-            <div className="p-6 space-y-4">
-              <label className="block">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Task Name</span>
-                <input className="input-field" placeholder="e.g. Provide Laptop" value={newTask.name} onChange={e => setNewTask({...newTask, name: e.target.value})} />
-              </label>
-              <label className="block">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Assign To</span>
-                <input className="input-field" placeholder="e.g. IT Admin" value={newTask.assignedTo} onChange={e => setNewTask({...newTask, assignedTo: e.target.value})} />
-              </label>
-              <div className="grid grid-cols-2 gap-4">
-                <label className="block">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Due Date</span>
-                  <input type="date" className="input-field" value={newTask.dueDate} onChange={e => setNewTask({...newTask, dueDate: e.target.value})} />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Priority</span>
-                  <select className="input-field" value={newTask.priority} onChange={e => setNewTask({...newTask, priority: e.target.value})}>
-                    <option>Low</option>
-                    <option>Medium</option>
-                    <option>High</option>
-                  </select>
-                </label>
-              </div>
-              <label className="flex items-center gap-2 mt-4 cursor-pointer">
-                <input type="checkbox" checked={newTask.required} onChange={e => setNewTask({...newTask, required: e.target.checked})} className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500" />
-                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">This task is mandatory for Employee Conversion</span>
-              </label>
-              <div className="pt-4 flex gap-3">
-                <button onClick={() => setIsAdding(false)} className="btn-secondary flex-1 justify-center">Cancel</button>
-                <button onClick={handleAddTask} disabled={!newTask.name || !newTask.assignedTo || saving === 'new'} className="btn-primary flex-1 justify-center">
-                  {saving === 'new' ? 'Saving...' : 'Add Task'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div></Portal>
-      )}
     </div>
   )
 }

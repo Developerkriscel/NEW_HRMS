@@ -25,7 +25,10 @@ export const GET = withApi(async (req) => {
     if (employeeId) query.assignedTo = employeeId
   }
 
-  const assets = await Asset.find(query).populate('assignedTo', 'firstName lastName employeeCode').sort({ createdAt: -1 })
+  const assets = await Asset.find(query)
+    .populate('assignedTo', 'firstName lastName employeeCode')
+    .populate({ path: 'assignmentHistory.employeeId', select: 'firstName lastName employeeCode', strictPopulate: false })
+    .sort({ createdAt: -1 })
   return ok(assets)
 })
 
@@ -35,7 +38,7 @@ export const POST = withApi(async (req) => {
   const tenantId = requireTenantId(session)
 
   const body = await req.json()
-  const { assetTag, name, category, condition } = body
+  const { assetTag, name, category, condition, details, imageUrl, serialNumber, purchaseDate, cost, warrantyExpiry } = body
 
   if (!assetTag || !name) {
     return ok({ message: 'Asset Tag and Name are required' }, 400)
@@ -53,6 +56,12 @@ export const POST = withApi(async (req) => {
     name,
     category,
     condition: condition || 'Good',
+    details,
+    imageUrl,
+    serialNumber,
+    purchaseDate: purchaseDate ? new Date(purchaseDate) : null,
+    cost: cost ? Number(cost) : null,
+    warrantyExpiry: warrantyExpiry ? new Date(warrantyExpiry) : null,
     status: 'AVAILABLE'
   })
 

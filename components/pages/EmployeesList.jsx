@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Briefcase, Edit, Eye, GraduationCap, Plus, ShieldCheck, Trash2, UserRound, Users } from 'lucide-react'
 import { DataTable } from '@/components/tables/DataTable'
@@ -10,6 +10,8 @@ import { Badge } from '@/components/common/Badge'
 import { AddEmployeePage } from './AddEmployeePage'
 import { employeeApi } from '@/services/employeeApi'
 import { formatDate } from '@/lib/utils'
+
+const PAGE_SIZE = 5
 
 const DIRECTORY_TABS = [
   { id: 'all', label: 'All', icon: Users },
@@ -27,47 +29,77 @@ function roleLabel(role) {
   return String(role || 'EMPLOYEE').replace(/_/g, ' ')
 }
 
-function isIntern(employee) {
-  return String(employee.employmentType || '').toLowerCase().includes('intern')
-}
-
-function filterByTab(employee, tab) {
-  if (tab === 'hr') return employee.role === 'HR_MANAGER'
-  if (tab === 'managers') return employee.role === 'MANAGER'
-  if (tab === 'employees') return employee.role === 'EMPLOYEE' && !isIntern(employee)
-  if (tab === 'interns') return isIntern(employee)
-  return true
-}
-
-function countForTab(employees, tab) {
-  return employees.filter((employee) => filterByTab(employee, tab)).length
+function humanizeEnum(value) {
+  return String(value || '-')
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
 export function EmployeesList({ basePath, hideHeader }) {
   const router = useRouter()
   const [employees, setEmployees] = useState([])
   const [activeDirectoryTab, setActiveDirectoryTab] = useState('all')
+  const [page, setPage] = useState(0)
+  const [totalElements, setTotalElements] = useState(0)
+  const [groupCounts, setGroupCounts] = useState({ all: 0, hr: 0, managers: 0, employees: 0, interns: 0 })
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
   const [employeeToDelete, setEmployeeToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const observerTarget = useRef(null)
 
-  function load() {
-    setLoading(true)
-    employeeApi.getAll({ size: 1000 })
-      .then((res) => setEmployees(res.data.data.content || []))
-      .finally(() => setLoading(false))
-  }
+  const load = useCallback((nextPage = 0, append = false, tab = activeDirectoryTab) => {
+    if (append) setLoadingMore(true)
+    else setLoading(true)
+    const params = {
+      page: nextPage,
+      size: PAGE_SIZE,
+      ...(tab !== 'all' ? { group: tab } : {}),
+    }
+    employeeApi.getAll(params)
+      .then((res) => {
+        const data = res.data.data || {}
+        const rows = data.content || []
+        setEmployees((prev) => append ? [...prev, ...rows] : rows)
+        setTotalElements(data.totalElements || 0)
+        setGroupCounts(data.groupCounts || { all: 0, hr: 0, managers: 0, employees: 0, interns: 0 })
+        setPage(nextPage)
+      })
+      .finally(() => {
+        setLoading(false)
+        setLoadingMore(false)
+      })
+  }, [activeDirectoryTab])
 
   useEffect(() => {
-    load()
-  }, [])
-
-  const filteredEmployees = useMemo(() => (
-    employees.filter((employee) => filterByTab(employee, activeDirectoryTab))
-  ), [employees, activeDirectoryTab])
+    load(0, false, activeDirectoryTab)
+  }, [activeDirectoryTab, load])
 
   const pageTitle = `${DIRECTORY_TABS.find((tab) => tab.id === activeDirectoryTab)?.label || 'All'} Directory`
+  const hasMore = employees.length < totalElements
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
+          load(page + 1, true, activeDirectoryTab)
+        }
+      },
+      { threshold: 0.1 }
+    )
+
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current)
+    }
+
+    return () => {
+      if (observerTarget.current) {
+        observer.unobserve(observerTarget.current)
+      }
+    }
+  }, [hasMore, loading, loadingMore, page, activeDirectoryTab, load])
 
   async function handleDelete() {
     if (!employeeToDelete) return
@@ -75,7 +107,7 @@ export function EmployeesList({ basePath, hideHeader }) {
     try {
       await employeeApi.delete(employeeToDelete._id)
       setEmployeeToDelete(null)
-      load()
+      load(0, false, activeDirectoryTab)
     } catch (err) {
       console.error(err)
     } finally {
@@ -99,7 +131,7 @@ export function EmployeesList({ basePath, hideHeader }) {
     },
     { header: 'Department', accessor: 'department', render: (v) => v?.name || '-' },
     { header: 'Role', accessor: 'role', render: (v) => <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-blue-700">{roleLabel(v)}</span> },
-    { header: 'Type', accessor: 'employmentType', render: (v) => v || '-' },
+    { header: 'Type', accessor: 'employmentType', render: (v) => humanizeEnum(v) },
     { header: 'Join Date', accessor: 'joiningDate', render: (v) => formatDate(v) },
     { header: 'Status', accessor: 'status', render: (v) => <Badge>{v}</Badge> },
     {
@@ -126,10 +158,9 @@ export function EmployeesList({ basePath, hideHeader }) {
       {!hideHeader && (
         <div className="mb-2 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="bg-gradient-to-r from-slate-950 to-slate-600 bg-clip-text text-3xl font-black tracking-tight text-transparent dark:from-white dark:to-slate-300">
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full">
               Employees
             </h1>
-            <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">Manage your organization's workforce</p>
           </div>
           <button className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white shadow-lg shadow-slate-900/10 transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100" onClick={() => setShowAddModal(true)}>
             <Plus className="h-4 w-4" /> Add Employee
@@ -137,21 +168,11 @@ export function EmployeesList({ basePath, hideHeader }) {
         </div>
       )}
 
-      <div className="relative overflow-hidden rounded-[2rem] border border-white/60 bg-white/85 p-5 shadow-[0_24px_70px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/80">
-        <div className="absolute -right-10 -top-16 h-52 w-52 rounded-full bg-blue-400/20 blur-3xl" />
-        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 className="text-2xl font-black tracking-tight text-slate-950 dark:text-white">{pageTitle}</h2>
-            <p className="mt-1 text-sm font-medium text-slate-500">Grouped by HR, managers, employees, and interns for faster access.</p>
-          </div>
-          {hideHeader && (
-            <button className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white shadow-lg shadow-slate-900/10 transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100" onClick={() => setShowAddModal(true)}>
-              <Plus className="h-4 w-4" /> Add Employee
-            </button>
-          )}
-        </div>
+      <div className="relative">
+        
+        
 
-        <div className="relative mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+        <div className="relative mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5 mb-4">
           {DIRECTORY_TABS.map((tab) => {
             const Icon = tab.icon
             const active = activeDirectoryTab === tab.id
@@ -169,7 +190,7 @@ export function EmployeesList({ basePath, hideHeader }) {
                 <div className="flex items-center justify-between">
                   <Icon className={`h-5 w-5 ${active ? 'text-white' : 'text-slate-400 group-hover:text-blue-600'}`} />
                   <span className={`rounded-full px-2.5 py-1 text-xs font-black ${active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'}`}>
-                    {countForTab(employees, tab.id)}
+                    {groupCounts[tab.id] || 0}
                   </span>
                 </div>
                 <p className="mt-3 text-sm font-black">{tab.label}</p>
@@ -181,15 +202,22 @@ export function EmployeesList({ basePath, hideHeader }) {
 
       <DataTable
         columns={columns}
-        data={filteredEmployees}
+        data={employees}
         isLoading={loading}
         onRowClick={(row) => router.push(`${basePath}/${row._id}`)}
         searchPlaceholder={`Search ${pageTitle.toLowerCase()}...`}
         emptyMessage="No employees found in this group"
+        pageSize={10000}
       />
 
+      {hasMore && !loading && (
+        <div ref={observerTarget} className="flex justify-center p-4">
+          {loadingMore && <span className="text-slate-500 text-sm font-semibold animate-pulse">Loading more employees...</span>}
+        </div>
+      )}
+
       {showAddModal && (
-        <AddEmployeePage basePath={basePath} onClose={() => { setShowAddModal(false); load() }} />
+        <AddEmployeePage basePath={basePath} onClose={() => { setShowAddModal(false); load(0, false, activeDirectoryTab) }} />
       )}
 
       <ConfirmDialog

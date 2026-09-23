@@ -72,5 +72,6 @@ const OfferSchema = new mongoose.Schema(
 OfferSchema.index({ tenantId: 1, offerCode: 1 }, { unique: true })
 OfferSchema.index({ tenantId: 1, applicationId: 1 })
 OfferSchema.index({ tenantId: 1, status: 1 })
+OfferSchema.index({ tenantId: 1, deleted: 1, applicationId: 1 })
 
 export default model('Offer', OfferSchema)

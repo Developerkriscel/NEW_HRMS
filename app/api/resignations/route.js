@@ -30,8 +30,17 @@ export const GET = withApi(async (req) => {
 
   const totalElements = await Resignation.countDocuments(query)
   const content = await Resignation.find(query)
-    .populate('employee', 'firstName lastName employeeCode')
-    .populate('handoverEmployee', 'firstName lastName')
+    .populate({
+      path: 'employee',
+      select: 'firstName lastName employeeCode email phone role status department designation branch reportingManager joiningDate employmentType',
+      populate: [
+        { path: 'department', select: 'name' },
+        { path: 'designation', select: 'name' },
+        { path: 'branch', select: 'name city' },
+        { path: 'reportingManager', select: 'firstName lastName employeeCode' },
+      ],
+    })
+    .populate('handoverEmployee', 'firstName lastName employeeCode email')
     .sort({ createdAt: -1 })
     .skip(page * size)
     .limit(size)

@@ -5,14 +5,18 @@ import { ok, fail, paged } from '@/lib/apiResponse'
 import { requireAuth, requireRole, requireTenantId } from '@/lib/auth'
 import { logAction } from '@/lib/audit'
 import { CANDIDATE_VIEW_ROLES, CANDIDATE_MANAGE_ROLES } from '@/lib/candidateConstants'
+import { STAGE_HISTORY_ACTION } from '@/lib/pipelineConstants'
 import { generateCandidateCode, findExistingCandidate } from '@/lib/candidateHelpers'
 import { claimDraftResume } from '@/lib/candidateProfileHelpers'
 import Candidate from '@/models/Candidate'
 import Application from '@/models/Application'
+import ApplicationStageHistory from '@/models/ApplicationStageHistory'
 import CandidateJobMatch from '@/models/CandidateJobMatch'
 import CandidateTagAssignment from '@/models/CandidateTagAssignment'
 import Offer from '@/models/Offer'
 import Interview from '@/models/Interview'
+import '@/models/CandidateTag'
+import '@/models/Job'
 
 // Application-centric on purpose — the HR Candidates table is really "one
 // row per application" (a candidate with two applications shows up twice,
@@ -72,33 +76,53 @@ export const GET = withApi(async (req) => {
     query.candidateId = { $in: intersected }
   }
 
-  // experienceMin/expectedCtcMax/noticePeriodMax/aiMatchMin all live on
-  // Candidate/CandidateJobMatch, not Application, so they're applied as
-  // in-memory filters after populating — this list is per-tenant recruiting
-  // data, never large enough for that to matter. totalElements below is
-  // computed from the fully-filtered set, not the raw query, so pagination
-  // stays accurate.
-  let applications = await Application.find(query)
-    .populate('candidateId')
-    .populate('jobId', 'jobCode jobTitle publicTitle department')
-    .sort({ appliedAt: -1 })
+  const usesInMemoryFilters = !!(experienceMin || expectedCtcMax || noticePeriodMax || aiMatchMin)
+  let totalElements = 0
+  let pageApplications = []
+  let matchByApplication = new Map()
 
-  applications = applications.filter((a) => a.candidateId && a.jobId)
-  if (experienceMin) applications = applications.filter((a) => (a.candidateId.totalExperience ?? -1) >= Number(experienceMin))
-  if (expectedCtcMax) applications = applications.filter((a) => (a.candidateId.expectedCtc ?? Infinity) <= Number(expectedCtcMax))
-  if (noticePeriodMax) {
-    applications = applications.filter((a) => {
-      const days = parseInt(a.candidateId.noticePeriod, 10)
-      return !Number.isFinite(days) || days <= Number(noticePeriodMax)
-    })
+  if (usesInMemoryFilters) {
+    let applications = await Application.find(query)
+      .select('applicationCode candidateId jobId source appliedAt stageEnteredAt currentStageName status selectionStatus readyForOffer assignedRecruiterId')
+      .populate('candidateId', 'candidateCode firstName lastName email phone totalExperience expectedCtc noticePeriod')
+      .populate('jobId', 'jobCode jobTitle publicTitle department')
+      .sort({ appliedAt: -1 })
+      .lean()
+
+    applications = applications.filter((a) => a.candidateId && a.jobId)
+    if (experienceMin) applications = applications.filter((a) => (a.candidateId.totalExperience ?? -1) >= Number(experienceMin))
+    if (expectedCtcMax) applications = applications.filter((a) => (a.candidateId.expectedCtc ?? Infinity) <= Number(expectedCtcMax))
+    if (noticePeriodMax) {
+      applications = applications.filter((a) => {
+        const days = parseInt(a.candidateId.noticePeriod, 10)
+        return !Number.isFinite(days) || days <= Number(noticePeriodMax)
+      })
+    }
+
+    const matches = await CandidateJobMatch.find({ tenantId, applicationId: { $in: applications.map((a) => a._id) } }).lean()
+    matchByApplication = new Map(matches.map((m) => [String(m.applicationId), m]))
+    if (aiMatchMin) applications = applications.filter((a) => (matchByApplication.get(String(a._id))?.overallScore ?? -1) >= Number(aiMatchMin))
+
+    totalElements = applications.length
+    pageApplications = applications.slice(page * size, page * size + size)
+  } else {
+    const [count, applications] = await Promise.all([
+      Application.countDocuments(query),
+      Application.find(query)
+        .select('applicationCode candidateId jobId source appliedAt stageEnteredAt currentStageName status selectionStatus readyForOffer assignedRecruiterId')
+        .populate('candidateId', 'candidateCode firstName lastName email phone totalExperience expectedCtc noticePeriod')
+        .populate('jobId', 'jobCode jobTitle publicTitle department')
+        .sort({ appliedAt: -1 })
+        .skip(page * size)
+        .limit(size)
+        .lean(),
+    ])
+    totalElements = count
+    pageApplications = applications.filter((a) => a.candidateId && a.jobId)
+    const matches = await CandidateJobMatch.find({ tenantId, applicationId: { $in: pageApplications.map((a) => a._id) } }).lean()
+    matchByApplication = new Map(matches.map((m) => [String(m.applicationId), m]))
   }
 
-  const matches = await CandidateJobMatch.find({ tenantId, applicationId: { $in: applications.map((a) => a._id) } }).lean()
-  const matchByApplication = new Map(matches.map((m) => [String(m.applicationId), m]))
-  if (aiMatchMin) applications = applications.filter((a) => (matchByApplication.get(String(a._id))?.overallScore ?? -1) >= Number(aiMatchMin))
-
-  const totalElements = applications.length
-  const pageApplications = applications.slice(page * size, page * size + size)
   const offers = await Offer.find({
     tenantId,
     applicationId: { $in: pageApplications.map((a) => a._id) },
@@ -116,18 +140,29 @@ export const GET = withApi(async (req) => {
     const key = String(interview.applicationId)
     if (!latestInterviewByApplication.has(key)) latestInterviewByApplication.set(key, interview)
   }
+  const shortlistHistory = await ApplicationStageHistory.find({
+    tenantId,
+    applicationId: { $in: pageApplications.map((a) => a._id) },
+    action: STAGE_HISTORY_ACTION.SHORTLISTED,
+  }).sort({ createdAt: 1 }).select('applicationId createdAt').lean()
+  const shortlistedAtByApplication = new Map()
+  for (const history of shortlistHistory) {
+    const key = String(history.applicationId)
+    if (!shortlistedAtByApplication.has(key)) shortlistedAtByApplication.set(key, history.createdAt)
+  }
 
   const rows = pageApplications
     .map((a) => {
       const match = matchByApplication.get(String(a._id))
       const offer = offerByApplication.get(String(a._id))
       const interview = latestInterviewByApplication.get(String(a._id))
+      const shortlistedAt = shortlistedAtByApplication.get(String(a._id))
       return {
         applicationId: a._id,
         applicationCode: a.applicationCode,
         candidateId: a.candidateId._id,
         candidateCode: a.candidateId.candidateCode,
-        candidateName: a.candidateId.getFullName(),
+        candidateName: [a.candidateId.firstName, a.candidateId.lastName].filter(Boolean).join(' ').trim(),
         email: a.candidateId.email,
         phone: a.candidateId.phone,
         jobId: a.jobId._id,
@@ -137,6 +172,8 @@ export const GET = withApi(async (req) => {
         noticePeriod: a.candidateId.noticePeriod,
         source: a.source,
         appliedAt: a.appliedAt,
+        stageEnteredAt: a.stageEnteredAt,
+        shortlistedAt: shortlistedAt || null,
         stage: a.currentStageName,
         status: a.status,
         selectionStatus: a.selectionStatus,
@@ -161,7 +198,8 @@ export const GET = withApi(async (req) => {
           location: interview.location,
         } : null,
         assignedRecruiterId: a.assignedRecruiterId,
-        aiMatchScore: match?.overallScore ?? null,
+        aiMatchScore: match?.aiMatchScore ?? match?.overallScore ?? null,
+        aiMatchReasoning: match?.aiMatchReasoning ?? match?.summary ?? null,
         matchLabel: match?.matchLabel ?? null,
       }
     })
@@ -202,10 +240,12 @@ export const POST = withApi(async (req) => {
     firstName: body.firstName.trim(), lastName: body.lastName?.trim() || '',
     email, phone: body.phone.trim(),
     currentLocation: body.currentLocation || null, currentCompany: body.currentCompany || null, currentDesignation: body.currentDesignation || null,
+    educationSummary: body.educationSummary || body.educationText || null,
     totalExperience: body.totalExperience ?? null, relevantExperience: body.relevantExperience ?? null,
     currentCtc: body.currentCtc ?? null, expectedCtc: body.expectedCtc ?? null,
     noticePeriod: body.noticePeriod || null, lastWorkingDate: body.lastWorkingDate || null,
     linkedinUrl: body.linkedinUrl || null, githubUrl: body.githubUrl || null, portfolioUrl: body.portfolioUrl || null,
+    skills: Array.isArray(body.skills) ? body.skills.map((skill) => String(skill).trim()).filter(Boolean) : [],
     source: 'MANUAL',
     tenantId,
     createdBy: session.sub,

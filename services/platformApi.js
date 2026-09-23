@@ -7,7 +7,7 @@ export const platformApi = {
   checkCompanyCode: (code) => api.get('/platform/tenants/check-code', { params: { code } }),
   checkSubdomain: (subdomain) => api.get('/platform/tenants/check-subdomain', { params: { subdomain } }),
   checkAdminEmail: (email) => api.get('/platform/tenants/check-admin-email', { params: { email } }),
-  provisionTenant: (idempotencyKey, payload) => api.post('/platform/tenants/provision', { idempotencyKey, payload }),
+  provisionTenant: (idempotencyKey, payload, adminPassword) => api.post('/platform/tenants/provision', { idempotencyKey, payload, adminPassword }),
   getProvisioningJobs: (params) => api.get('/platform/tenants/provisioning-jobs', { params }),
   getProvisioningJob: (id) => api.get(`/platform/tenants/provisioning-jobs/${id}`),
   retryProvisioningJob: (id) => api.post(`/platform/tenants/provisioning-jobs/${id}/retry`),
@@ -20,6 +20,12 @@ export const platformApi = {
   // Module catalogue (read-only here — the catalogue is seeded; only the
   // per-plan module mapping below is edited from the UI)
   getModules: () => api.get('/platform/modules'),
+  uploadOnboardingImage: (file, purpose = 'organization-logo') => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('purpose', purpose)
+    return api.post('/platform/uploads/images', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
 
   // Plans (list/create/update/archive already in tenantApi's plan.* — these
   // add the module-mapping layer plan CRUD doesn't cover)

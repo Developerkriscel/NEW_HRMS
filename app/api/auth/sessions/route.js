@@ -4,10 +4,11 @@ import { withApi } from '@/lib/handler'
 import { ok } from '@/lib/apiResponse'
 import { requireAuth } from '@/lib/auth'
 import { getActiveAccountSessions, revokeOtherAccountSessions } from '@/lib/accountSessions'
+import { isDevAuthAllowed } from '@/lib/devLogin'
 
-export const GET = withApi(async () => {
+export const GET = withApi(async (req) => {
   const session = await requireAuth()
-  if (session.devLogin && process.env.NODE_ENV !== 'production') {
+  if (session.devLogin && isDevAuthAllowed(req)) {
     return ok({
       activeCount: 1,
       currentSessionId: 'dev-session',
@@ -45,9 +46,9 @@ export const GET = withApi(async () => {
   })
 })
 
-export const DELETE = withApi(async () => {
+export const DELETE = withApi(async (req) => {
   const session = await requireAuth()
-  if (session.devLogin && process.env.NODE_ENV !== 'production') {
+  if (session.devLogin && isDevAuthAllowed(req)) {
     return ok({ revokedCount: 0, activeCount: 1, currentSessionId: 'dev-session', sessions: [] }, 'No other active devices found')
   }
   const revokedCount = await revokeOtherAccountSessions(session)

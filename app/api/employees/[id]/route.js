@@ -8,6 +8,10 @@ import { sanitizeForManager } from '@/lib/employeeVisibility'
 import { sanitizeModuleAccess } from '@/lib/moduleAccess'
 import Employee, { EMPLOYEE_ROLES } from '@/models/Employee'
 import Permission from '@/models/Permission'
+import '@/models/Branch'
+import '@/models/Department'
+import '@/models/Designation'
+import '@/models/Shift'
 
 const UPDATABLE_FIELDS = [
   'firstName', 'lastName', 'phone', 'alternatePhone', 'dateOfBirth', 'gender',

@@ -43,7 +43,7 @@ export function DepartmentsSection() {
     setError('')
     Promise.allSettled([
       departmentApi.getAll(),
-      employeeApi.getAll({ size: 200, status: 'ACTIVE' }),
+      employeeApi.getAll({ size: 50, status: 'ACTIVE' }),
     ])
       .then(([departmentResult, employeeResult]) => {
         if (departmentResult.status === 'fulfilled') {
@@ -167,7 +167,6 @@ export function DepartmentsSection() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Departments</h3>
-          <p className="mt-1 text-sm font-medium text-slate-500">Manage department structure, codes, ownership, and active status.</p>
         </div>
         <button
           type="button"
@@ -206,12 +205,14 @@ export function DepartmentsSection() {
           }[stat.color]
 
           return (
-            <div key={stat.label} className="rounded-3xl border border-white/60 bg-white/70 p-5 shadow-sm backdrop-blur-xl dark:border-slate-700/50 dark:bg-slate-900/60">
-              <div className={`mb-4 flex h-11 w-11 items-center justify-center rounded-2xl ${colorClasses}`}>
-                <Icon className="h-5 w-5" />
+            <div key={stat.label} className="flex items-center justify-between rounded-2xl border border-white/60 bg-white/70 px-4 py-3 shadow-sm backdrop-blur-xl dark:border-slate-700/50 dark:bg-slate-900/60">
+              <div>
+                <p className="text-xl font-black text-slate-900 dark:text-white leading-none">{stat.value}</p>
+                <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">{stat.label}</p>
               </div>
-              <p className="text-2xl font-black text-slate-900 dark:text-white">{stat.value}</p>
-              <p className="mt-1 text-xs font-bold uppercase tracking-wider text-slate-500">{stat.label}</p>
+              <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${colorClasses}`}>
+                <Icon className="h-4 w-4" />
+              </div>
             </div>
           )
         })}

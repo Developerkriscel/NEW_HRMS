@@ -46,7 +46,10 @@ export default function EmployeeProfileRoute() {
         <Avatar name={`${employee.firstName} ${employee.lastName}`} size="xl" className="w-32 h-32 text-4xl shadow-xl shadow-blue-500/20" />
         <div className="flex-1 text-center md:text-left">
           <div className="flex flex-col md:flex-row md:items-center gap-3 mb-2 justify-center md:justify-start">
-            <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">{employee.firstName} {employee.lastName}</h1>
+            <div className="relative z-10 group w-fit mb-2">
+  <h1 className="text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-900 via-indigo-700 to-blue-600 dark:from-indigo-200 dark:via-indigo-400 dark:to-blue-400 drop-shadow-sm transition-all duration-500 group-hover:scale-[1.02] origin-left">{employee.firstName} {employee.lastName}</h1>
+  <div className="h-1 w-12 rounded-full bg-gradient-to-r from-indigo-600 to-blue-500 mt-2 transition-all duration-500 group-hover:w-full opacity-70"></div>
+</div>
             <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">{employee.status}</Badge>
           </div>
           <p className="text-lg font-medium text-slate-500 dark:text-slate-400 mb-4">{employee.designation?.name || 'No Designation'} • {employee.department?.name || 'No Department'}</p>

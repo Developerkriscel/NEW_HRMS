@@ -7,6 +7,7 @@ import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { PermissionDenied } from '@/components/common/PermissionDenied'
 import { formatDate, cn } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
+import { TenantDetailsDrawer } from './TenantDetailsDrawer'
 
 const getPlatformApi = async () => (await import('@/services/platformApi')).platformApi
 const getTenantApi = async () => (await import('@/services/tenantApi')).tenantApi
@@ -22,6 +23,7 @@ const COLUMNS = [
   { key: 'status', label: 'Account Status', sortable: true },
   { key: 'provisioningStatus', label: 'Cluster State', sortable: true },
   { key: 'createdAt', label: 'Registered On', sortable: true },
+  { key: 'actions', label: '', sortable: false },
 ]
 
 function TenantStatusPill({ status }) {
@@ -67,10 +69,15 @@ function PlanBadge({ planName }) {
   )
 }
 
+import { CreateOrganizationModal } from './CreateOrganizationModal'
+import { EditOrganizationModal } from './EditOrganizationModal'
+
 export default function TenantsPage() {
   const router = useRouter()
   const hasPermission = useAuthStore((s) => s.hasPermission)
 
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [editingTenantId, setEditingTenantId] = useState(null)
   const [rows, setRows] = useState([])
   const [plans, setPlans] = useState([])
   const [loading, setLoading] = useState(true)
@@ -84,6 +91,7 @@ export default function TenantsPage() {
   const [searchInput, setSearchInput] = useState('')
   const [sortBy, setSortBy] = useState('createdAt')
   const [sortDir, setSortDir] = useState('desc')
+  const [selectedTenant, setSelectedTenant] = useState(null)
 
   useEffect(() => {
     const timer = setTimeout(() => setSearch(searchInput), 350)
@@ -150,13 +158,14 @@ export default function TenantsPage() {
   }
 
   return (
-    <div className="animate-fade-in space-y-6 pb-12">
-      
+    <div className="animate-fade-in pb-12">
+      <CreateOrganizationModal isOpen={showCreateModal} onClose={() => { setShowCreateModal(false); load(); }} />
+      <EditOrganizationModal open={!!editingTenantId} onClose={() => setEditingTenantId(null)} tenantId={editingTenantId} onSuccess={() => load()} />
       {/* Top Header Card */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100/80 dark:border-slate-800/60 pb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100/80 dark:border-slate-800/60 pb-3 mb-5">
         <div className="flex-1">
           <div className="flex flex-wrap items-center gap-3 mb-1.5">
-            <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-300 tracking-tight">Organizations</h1>
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-700 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-blue-500 after:to-transparent after:rounded-full">Organizations</h1>
             <span className="px-3 py-1 rounded-full text-[11px] font-black bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60 uppercase tracking-widest shadow-sm">
               {totalElements} Total
             </span>
@@ -166,7 +175,7 @@ export default function TenantsPage() {
         {hasPermission('tenant.create') && (
           <button 
             className="shrink-0 inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 text-white font-extrabold text-xs shadow-[0_8px_20px_-6px_rgba(79,70,229,0.4)] transition-all duration-300 active:scale-95 mt-2 sm:mt-0"
-            onClick={() => router.push('/super-admin/tenants/create')}
+            onClick={() => setShowCreateModal(true)}
           >
             <Plus className="w-4 h-4 stroke-[3]" /> 
             <span>Create Organization</span>
@@ -175,7 +184,7 @@ export default function TenantsPage() {
       </div>
 
       {/* Filter Tabs & Search Controls */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-5">
         {/* Status Filter Dropdown */}
         <select 
           className="bg-white dark:bg-slate-900 rounded-2xl px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer w-full lg:w-48"
@@ -248,7 +257,7 @@ export default function TenantsPage() {
                 rows.map((row, idx) => (
                   <tr 
                     key={row._id} 
-                    onClick={() => router.push(`/super-admin/tenants/${row._id}`)} 
+                    onClick={() => setSelectedTenant(row)} 
                     className="group cursor-pointer hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-all duration-200"
                   >
                     {/* Company Column */}
@@ -308,6 +317,24 @@ export default function TenantsPage() {
                     <td className="py-4 px-2 text-[11px] font-bold text-slate-400 dark:text-slate-500 tracking-wide">
                       {formatDate(row.createdAt)}
                     </td>
+
+                    {/* Actions */}
+                    <td className="py-4 px-2 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setSelectedTenant(row); }}
+                          className="btn-secondary px-3 py-1.5 text-[11px]"
+                        >
+                          View
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setEditingTenantId(row._id); }}
+                          className="btn-primary px-3 py-1.5 text-[11px] bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 rounded-lg font-semibold transition-colors"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}
@@ -338,6 +365,12 @@ export default function TenantsPage() {
           </div>
         )}
       </div>
+
+      <TenantDetailsDrawer 
+        isOpen={!!selectedTenant} 
+        onClose={() => setSelectedTenant(null)} 
+        tenant={selectedTenant} 
+      />
     </div>
   )
 }

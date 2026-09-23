@@ -152,15 +152,21 @@ function TrendCard({ title, value, data, dataKey, color, icon: Icon, accentColor
   const strokeColor = color || '#06b6d4'
 
   return (
-    <div className="relative bg-white dark:bg-slate-900 rounded-[20px] p-3.5 sm:p-4 border border-slate-100/90 dark:border-slate-800/80 shadow-[0_10px_25px_-8px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.02)] hover:shadow-[0_16px_30px_-8px_rgba(0,0,0,0.08)] hover:-translate-y-0.5 transition-all duration-300 flex flex-col justify-between min-h-[110px] overflow-hidden group">
+    <div className="relative bg-white dark:bg-slate-900 rounded-[20px] p-3.5 sm:p-4 border border-slate-100/90 dark:border-slate-800/80 shadow-[0_10px_25px_-8px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.02)] hover:shadow-[0_16px_30px_-8px_rgba(0,0,0,0.08)] hover:-translate-y-0.5 transition-all duration-300 flex flex-col justify-between h-[110px] overflow-hidden group">
+      
+      {/* Background Sparkline */}
+      <div className="absolute bottom-0 left-0 right-0 h-[45px] opacity-30 pointer-events-none -mb-1">
+        <Sparkline data={data} dataKey={dataKey} color={strokeColor} />
+      </div>
+
       {/* Right Edge Tab Notch */}
       <div 
-        className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-10 rounded-l-xl shadow-sm transition-all duration-300 group-hover:w-3"
+        className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-10 rounded-l-xl shadow-sm transition-all duration-300 group-hover:w-3 z-10"
         style={{ backgroundColor: strokeColor }}
       />
 
       {/* Top Header */}
-      <div className="flex items-center justify-between mb-1.5 pr-1.5">
+      <div className="flex items-center justify-between z-10 pr-1.5">
         {Icon ? (
           <div className="w-7 h-7 rounded-lg bg-slate-50 dark:bg-slate-800/60 flex items-center justify-center text-slate-800 dark:text-slate-200">
             <Icon className="w-3.5 h-3.5 stroke-[1.8]" />
@@ -168,7 +174,7 @@ function TrendCard({ title, value, data, dataKey, color, icon: Icon, accentColor
         ) : <div className="w-7 h-7" />}
 
         {/* Gauge */}
-        <div className="relative w-8 h-8 flex items-center justify-center">
+        <div className="relative w-8 h-8 flex items-center justify-center bg-white/50 dark:bg-slate-900/50 rounded-full backdrop-blur-sm">
           <svg className="w-8 h-8 -rotate-90" viewBox="0 0 32 32">
             <circle cx="16" cy="16" r={radius} fill="none" className="stroke-slate-100 dark:stroke-slate-800" strokeWidth="2.2" />
             <circle
@@ -192,15 +198,11 @@ function TrendCard({ title, value, data, dataKey, color, icon: Icon, accentColor
       </div>
 
       {/* Main Content */}
-      <div className="relative z-10 pr-3">
+      <div className="relative z-10 pr-3 mt-auto">
         <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 truncate mb-0.5">{title}</div>
         <div className="flex items-baseline gap-1.5">
           <span className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">{value}</span>
         </div>
-      </div>
-
-      <div className="mt-1.5 -mx-1">
-        <Sparkline data={data} dataKey={dataKey} color={strokeColor} />
       </div>
     </div>
   )
@@ -253,89 +255,77 @@ export default function SuperAdminDashboardPage() {
   return (
     <div className="space-y-4 animate-fade-in pb-8">
       
-      {/* Compact Slim Hero Banner */}
-      <div className="relative overflow-hidden rounded-2xl py-3 px-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 text-white shadow-md border border-slate-800 flex items-center justify-between gap-4">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-2xl pointer-events-none -mr-10 -mt-10" />
-        <div className="relative z-10">
-          <h1 className="text-base sm:text-lg font-bold tracking-tight text-white">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100/80 dark:border-slate-800/60 pb-4 mb-4">
+        <div>
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-700 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-blue-500 after:to-transparent after:rounded-full">
             Dashboard
           </h1>
         </div>
 
-        <div className="relative z-10 flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           <select 
             value={days} 
             onChange={(e) => setDays(Number(e.target.value))}
-            className="py-1.5 px-3 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/15 border border-white/20 text-white focus:outline-none cursor-pointer backdrop-blur-md transition-all"
+            className="py-2 px-4 rounded-xl text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer shadow-sm transition-all"
           >
             {RANGE_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value} className="bg-slate-900 text-white">{opt.label}</option>
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
           <button
             onClick={() => { setRefreshing(true); load(); }}
             disabled={refreshing}
-            className="p-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/20 text-white backdrop-blur-md transition-all active:scale-95"
+            className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 shadow-sm transition-all active:scale-95"
             title="Refresh Metrics"
           >
-            <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
+            <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
           </button>
         </div>
       </div>
 
       {/* Primary KPI Row */}
       <div>
-        <div className="flex items-center justify-between mb-2 px-1">
-          <h2 className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Tenant Health & Core KPIs</h2>
-        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatsCard title="Total Companies" value={cards.totalCompanies} icon={Building2} iconColor="text-blue-500" accentColor="bg-blue-500" />
-          <StatsCard title="Active Tenants" value={cards.activeCompanies} icon={CheckCircle2} iconColor="text-emerald-500" accentColor="bg-emerald-500" />
-          <StatsCard title="Free Trial Tenants" value={cards.trialCompanies} icon={Sparkles} iconColor="text-indigo-500" accentColor="bg-indigo-500" />
-          <StatsCard title="Suspended / Inactive" value={cards.suspendedCompanies} icon={XCircle} iconColor="text-rose-500" accentColor="bg-rose-500" />
+          <StatsCard className="h-[90px]" title="Total Companies" value={cards.totalCompanies} icon={Building2} iconColor="text-blue-500" accentColor="bg-blue-500" />
+          <StatsCard className="h-[90px]" title="Active Tenants" value={cards.activeCompanies} icon={CheckCircle2} iconColor="text-emerald-500" accentColor="bg-emerald-500" />
+          <StatsCard className="h-[90px]" title="Free Trial Tenants" value={cards.trialCompanies} icon={Sparkles} iconColor="text-indigo-500" accentColor="bg-indigo-500" />
+          <StatsCard className="h-[90px]" title="Suspended / Inactive" value={cards.suspendedCompanies} icon={XCircle} iconColor="text-rose-500" accentColor="bg-rose-500" />
         </div>
       </div>
 
       {/* Secondary Metrics & Trends */}
       <div>
-        <div className="flex items-center justify-between mb-2 px-1">
-          <h2 className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Resource Utilization & Velocity</h2>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          <TrendCard title="New Tenants (period)" value={newCompaniesThisPeriod} data={charts.companiesByMonth} dataKey="count" color="#06b6d4" icon={Building2} />
-          <TrendCard title="Active Employees" value={cards.activeEmployees} data={charts.employeeTrend} dataKey="count" color="#10b981" icon={Users} />
-          <TrendCard title="Storage Used (MB)" value={cards.storageUsedMb} data={charts.storageTrend} dataKey="mb" color="#8b5cf6" icon={HardDrive} />
-          <StatsCard title="Grace Period" value={cards.graceCompanies} icon={Clock} accentColor="bg-amber-500" iconColor="text-amber-500" />
-          <StatsCard title="Failed Jobs" value={cards.failedProvisioningJobs} icon={AlertTriangle} accentColor="bg-rose-500" iconColor="text-rose-500" />
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <StatsCard className="h-[90px]" title="New Tenants (period)" value={newCompaniesThisPeriod} icon={Building2} iconColor="text-cyan-500" accentColor="bg-cyan-500" />
+          <StatsCard className="h-[90px]" title="Active Employees" value={cards.activeEmployees} icon={Users} iconColor="text-emerald-500" accentColor="bg-emerald-500" />
+          <StatsCard className="h-[90px]" title="Storage Used (MB)" value={cards.storageUsedMb} icon={HardDrive} iconColor="text-violet-500" accentColor="bg-violet-500" />
+          <StatsCard className="h-[90px]" title="Grace Period" value={cards.graceCompanies} icon={Clock} iconColor="text-amber-500" accentColor="bg-amber-500" />
         </div>
       </div>
 
       {/* Analytics Charts */}
       <div>
-        <div className="flex items-center justify-between mb-2 px-1">
-          <h2 className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Distribution & Growth Analytics</h2>
-        </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
           <ChartCard title="Tenants by Status" subtitle="Active vs Trial vs Suspended distribution" icon={Layers}>
-            <DepartmentPieChart data={charts.tenantsByStatus.map((r) => ({ name: r.status, value: r.count }))} />
+            <DepartmentPieChart data={charts.tenantsByStatus.map((r) => ({ name: r.status, value: r.count }))} height={140} />
           </ChartCard>
           <ChartCard title="Plan Tier Distribution" subtitle="Distribution across SaaS pricing tiers" icon={CreditCard}>
-            <DepartmentPieChart data={charts.planDistribution.map((r) => ({ name: r.plan, value: r.count }))} />
+            <DepartmentPieChart data={charts.planDistribution.map((r) => ({ name: r.plan, value: r.count }))} height={140} />
           </ChartCard>
           <ChartCard title="Subscription Velocity" subtitle="Monthly new SaaS activations" icon={TrendingUp}>
-            <GenericAreaChart data={charts.subscriptionTrend} xKey="month" dataKey="count" color="#3b82f6" label="New Subscriptions" />
+            <GenericAreaChart data={charts.subscriptionTrend} xKey="month" dataKey="count" color="#3b82f6" label="New Subscriptions" height={140} />
           </ChartCard>
           <ChartCard title="Module Feature Adoption" subtitle="Most utilized modules across tenants" icon={Activity}>
-            <GenericBarChart data={charts.moduleAdoption} xKey="module" dataKey="count" color="#6366f1" label="Tenants Using" />
+            <GenericBarChart data={charts.moduleAdoption} xKey="module" dataKey="count" color="#6366f1" label="Tenants Using" height={140} />
           </ChartCard>
         </div>
       </div>
 
       {/* Live Data Tables */}
       <div>
-        <div className="flex items-center justify-between mb-3 px-1">
-          <h2 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Recent Tenant Operations</h2>
-        </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           
           <TableCard 

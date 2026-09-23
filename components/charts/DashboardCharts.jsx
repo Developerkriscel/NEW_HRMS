@@ -3,7 +3,7 @@
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer
+  Tooltip, Legend, ResponsiveContainer, Label
 } from 'recharts'
 
 const VIBRANT_PIE_COLORS = ['#3b82f6', '#10b981', '#f43f5e', '#0ea5e9', '#8b5cf6', '#f59e0b']
@@ -41,15 +41,15 @@ const PIE_GRADIENTS = [
   { id: 'grad-amber', colors: ['#fbbf24', '#d97706'] },
 ]
 
-export function DepartmentPieChart({ data }) {
+export function DepartmentPieChart({ data, height = 200 }) {
   if (!data?.length) return <div className="text-slate-400">No Data</div>
   
   const total = data.reduce((acc, curr) => acc + (curr.value || 0), 0)
   const mainPercentage = total > 0 ? Math.round(((data[0]?.value || 0) / total) * 100) : 0
 
   return (
-    <div className="relative w-full h-[200px] flex items-center justify-center">
-      <ResponsiveContainer width="100%" height={200}>
+    <div className={`relative w-full flex items-center justify-center`} style={{ height }}>
+      <ResponsiveContainer width="100%" height={height}>
         <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
           <defs>
             {PIE_GRADIENTS.map((g) => (
@@ -66,8 +66,8 @@ export function DepartmentPieChart({ data }) {
             data={data}
             cx="50%"
             cy="50%"
-            innerRadius={65}
-            outerRadius={90}
+            innerRadius={Math.min(65, height / 2 - 25)}
+            outerRadius={Math.min(90, height / 2 - 5)}
             paddingAngle={6}
             dataKey="value"
             stroke="none"
@@ -80,6 +80,20 @@ export function DepartmentPieChart({ data }) {
                 style={{ filter: 'url(#shadow)' }}
               />
             ))}
+            <Label
+              content={({ viewBox: { cx, cy } }) => {
+                return (
+                  <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central">
+                    <tspan x={cx} dy="-0.2em" fontSize="26" fontWeight="900" className="fill-slate-800 dark:fill-white">
+                      {mainPercentage}%
+                    </tspan>
+                    <tspan x={cx} dy="1.5em" fontSize="10" fontWeight="700" fill="#94a3b8" className="uppercase tracking-widest">
+                      {data[0]?.name?.split(' ')[0]}
+                    </tspan>
+                  </text>
+                )
+              }}
+            />
           </Pie>
           <Tooltip content={<CustomTooltip />} />
           <Legend 
@@ -91,24 +105,14 @@ export function DepartmentPieChart({ data }) {
           />
         </PieChart>
       </ResponsiveContainer>
-
-      {/* Center Number Badge */}
-      <div className="absolute top-[50%] left-[30%] sm:left-[35%] -translate-x-1/2 -translate-y-1/2 pointer-events-none text-center">
-        <span className="text-3xl font-black text-slate-800 dark:text-white tracking-tight">
-          {mainPercentage}%
-        </span>
-        <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-          {data[0]?.name?.split(' ')[0]}
-        </span>
-      </div>
     </div>
   )
 }
 
-export function GenericAreaChart({ data, xKey, dataKey, colorFrom = '#6366f1', colorTo = '#4f46e5', label }) {
+export function GenericAreaChart({ data, xKey, dataKey, colorFrom = '#6366f1', colorTo = '#4f46e5', label, height = 200 }) {
   if (!data?.length) return <div className="text-slate-400">No Data</div>
   return (
-    <ResponsiveContainer width="100%" height={200}>
+    <ResponsiveContainer width="100%" height={height}>
       <AreaChart data={data} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
         <defs>
           <linearGradient id={`area-grad-${dataKey}`} x1="0" y1="0" x2="0" y2="1">
@@ -147,10 +151,10 @@ export function GenericAreaChart({ data, xKey, dataKey, colorFrom = '#6366f1', c
   )
 }
 
-export function GenericBarChart({ data, xKey, dataKey, colorFrom = '#38bdf8', colorTo = '#2563eb', label }) {
+export function GenericBarChart({ data, xKey, dataKey, colorFrom = '#38bdf8', colorTo = '#2563eb', label, height = 200 }) {
   if (!data?.length) return <div className="text-slate-400">No Data</div>
   return (
-    <ResponsiveContainer width="100%" height={200}>
+    <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} margin={{ top: 20, right: 10, left: -20, bottom: 0 }} maxBarSize={45}>
         <defs>
           <linearGradient id={`bar-grad-1-${dataKey}`} x1="0" y1="0" x2="0" y2="1">
@@ -257,7 +261,7 @@ export function GrowthLineChart({ data }) {
 
 export function Sparkline({ data, dataKey, color = '#2563eb' }) {
   return (
-    <ResponsiveContainer width="100%" height={60}>
+    <ResponsiveContainer width="100%" height="100%">
       <LineChart data={data}>
         <Line 
           type="monotone" 

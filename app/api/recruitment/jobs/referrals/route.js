@@ -7,6 +7,8 @@ import { PUBLISHING_CHANNEL, PUBLICATION_STATUS } from '@/lib/publishingConstant
 import { computeRemainingOpenings } from '@/lib/jobConstants'
 import Job from '@/models/Job'
 import JobPublication from '@/models/JobPublication'
+import '@/models/Branch'
+import '@/models/Department'
 
 // Employee Portal -> Jobs / Referrals. Any authenticated tenant employee
 // can see this (that's the entire point of a referral program) — no

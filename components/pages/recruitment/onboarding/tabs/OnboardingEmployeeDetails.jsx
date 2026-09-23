@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import { User, MapPin, HeartPulse, Save, CreditCard, Edit3, X, ShieldCheck } from 'lucide-react'
+import { preboardingApi } from '@/services/preboardingApi'
 
 function SectionCard({ icon: Icon, title, description, children, tone = 'blue' }) {
   const tones = {
@@ -27,47 +28,61 @@ function SectionCard({ icon: Icon, title, description, children, tone = 'blue' }
   )
 }
 
-export function OnboardingEmployeeDetails({ record }) {
+export function OnboardingEmployeeDetails({ record, onRefresh }) {
   const [isEditing, setIsEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveMessage, setSaveMessage] = useState('')
+  const [saveError, setSaveError] = useState('')
   
   // Try to parse the candidate name
   const nameParts = record.candidate.name.split(' ')
   const initialFirstName = nameParts[0] || ''
   const initialLastName = nameParts.slice(1).join(' ') || ''
 
+  const raw = record.raw || {}
+  const personal = raw.personal || {}
+  const emergencyContact = raw.emergencyContact || {}
+  const bank = raw.bank || {}
+  const statutory = raw.statutory || {}
+  const customFields = statutory.customFields || {}
+
   const [formData, setFormData] = useState({
-    firstName: initialFirstName,
-    lastName: initialLastName,
-    officialEmail: record.candidate.email || '',
-    phone: record.candidate.phone || '',
-    personalEmail: '',
-    fatherName: '',
-    motherName: '',
-    spouseName: '',
-    bloodGroup: '',
-    gender: '',
-    maritalStatus: '',
-    dateOfBirth: '',
-    anniversaryDate: '',
-    currentAddress: '',
-    permanentAddress: '',
-    emergencyContactNumber: '',
-    emergencyPersonName: '',
-    bankName: '',
-    bankAccountNumber: '',
-    bankIfscCode: '',
-    panNumber: '',
-    aadhaarNumber: '',
-    pfNumber: '',
-    esiNumber: ''
+    firstName: personal.fullLegalName?.split(' ')?.[0] || initialFirstName,
+    lastName: personal.fullLegalName?.split(' ')?.slice(1).join(' ') || initialLastName,
+    officialEmail: customFields.officialEmail || record.candidate.email || '',
+    phone: personal.mobileNumber || record.candidate.phone || '',
+    personalEmail: personal.personalEmail || record.candidate.email || '',
+    fatherName: customFields.fatherName || '',
+    motherName: customFields.motherName || '',
+    spouseName: customFields.spouseName || '',
+    bloodGroup: customFields.bloodGroup || '',
+    gender: customFields.gender || '',
+    maritalStatus: customFields.maritalStatus || '',
+    dateOfBirth: personal.dateOfBirth?.slice?.(0, 10) || '',
+    anniversaryDate: customFields.anniversaryDate?.slice?.(0, 10) || '',
+    currentAddress: personal.currentAddress || '',
+    permanentAddress: personal.permanentAddress || '',
+    emergencyContactNumber: emergencyContact.phone || '',
+    emergencyPersonName: emergencyContact.contactName || '',
+    emergencyRelationship: emergencyContact.relationship || '',
+    bankName: bank.bankName || '',
+    bankAccountNumber: bank.bankAccountNumber || '',
+    bankIfscCode: bank.bankIfscCode || '',
+    bankBranch: bank.bankBranch || '',
+    accountHolderName: bank.accountHolderName || '',
+    panNumber: statutory.panNumber || '',
+    aadhaarNumber: customFields.aadhaarNumber || '',
+    pfNumber: customFields.pfNumber || '',
+    uanNumber: statutory.uanNumber || '',
+    esiNumber: customFields.esiNumber || ''
   })
 
   const handleChange = (key, value) => {
     setFormData(prev => ({ ...prev, [key]: value }))
   }
 
-  const handleSave = () => {
-    const requiredKeys = ['firstName', 'lastName', 'officialEmail']
+  const handleSave = async () => {
+    const requiredKeys = ['firstName', 'lastName', 'officialEmail', 'personalEmail', 'phone', 'dateOfBirth', 'currentAddress', 'emergencyPersonName', 'emergencyContactNumber']
     for (const key of requiredKeys) {
       if (!formData[key] || !String(formData[key]).trim()) {
         const el = document.getElementById(`field-${key}`)
@@ -80,9 +95,21 @@ export function OnboardingEmployeeDetails({ record }) {
         return
       }
     }
-    
-    setIsEditing(false)
-    // Here we would typically save to the store/API
+
+    setSaving(true)
+    setSaveError('')
+    setSaveMessage('')
+    try {
+      await preboardingApi.updateEmployeeDetails(record.id, formData)
+      setIsEditing(false)
+      setSaveMessage('Employee details saved and onboarding progress updated')
+      await onRefresh?.()
+      window.setTimeout(() => setSaveMessage(''), 3000)
+    } catch (err) {
+      setSaveError(err.response?.data?.message || err.message || 'Failed to save employee details')
+    } finally {
+      setSaving(false)
+    }
   }
 
   // Helper for rendering form fields elegantly
@@ -132,13 +159,16 @@ export function OnboardingEmployeeDetails({ record }) {
               <button onClick={() => setIsEditing(false)} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-extrabold text-slate-700 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                 <X className="h-4 w-4" /> Cancel
             </button>
-              <button onClick={handleSave} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-blue-500/20 transition-all hover:-translate-y-0.5 hover:shadow-xl">
-                <Save className="h-4 w-4" /> Save Details
+              <button onClick={handleSave} disabled={saving} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-blue-500/20 transition-all hover:-translate-y-0.5 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-70">
+                <Save className="h-4 w-4" /> {saving ? 'Saving...' : 'Save Details'}
             </button>
           </div>
         )}
         </div>
       </div>
+
+      {saveMessage && <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm">{saveMessage}</div>}
+      {saveError && <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-600 shadow-sm">{saveError}</div>}
 
       <div className="grid grid-cols-1 gap-6">
         
@@ -184,8 +214,9 @@ export function OnboardingEmployeeDetails({ record }) {
               {renderField('Permanent Address', 'permanentAddress', 'textarea')}
             </div>
             <div className="grid grid-cols-1 gap-4 border-t border-white/80 pt-4 sm:grid-cols-2 dark:border-slate-800">
-              {renderField('Emergency Contact No.', 'emergencyContactNumber', 'tel')}
-              {renderField('Emergency Person Name', 'emergencyPersonName')}
+            {renderField('Emergency Contact No.', 'emergencyContactNumber', 'tel')}
+            {renderField('Emergency Person Name', 'emergencyPersonName')}
+            {renderField('Relationship', 'emergencyRelationship')}
             </div>
           </div>
         </SectionCard>
@@ -194,10 +225,13 @@ export function OnboardingEmployeeDetails({ record }) {
         <SectionCard icon={CreditCard} title="Financial & Legal" description="Bank, tax, PF, and ESIC details needed before payroll activation." tone="emerald">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {renderField('Bank Name', 'bankName')}
+            {renderField('Account Holder Name', 'accountHolderName')}
             {renderField('Bank Account No', 'bankAccountNumber')}
             {renderField('Bank IFSC Code', 'bankIfscCode')}
+            {renderField('Bank Branch', 'bankBranch')}
             {renderField('PAN Card No', 'panNumber')}
             {renderField('Aadhar No', 'aadhaarNumber')}
+            {renderField('UAN No', 'uanNumber')}
             {renderField('PF No', 'pfNumber')}
             {renderField('ESIC No', 'esiNumber')}
           </div>

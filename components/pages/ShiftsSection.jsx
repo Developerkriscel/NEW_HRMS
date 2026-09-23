@@ -164,9 +164,6 @@ export function ShiftsSection() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-2xl font-black text-slate-900 dark:text-white">Shifts & Weekly Schedule</h2>
-          <p className="mt-1 max-w-2xl text-sm font-medium text-slate-500 dark:text-slate-400">
-            Create complete shift templates with timing, grace period, working days, and weekly off. These templates feed onboarding and employee profiles.
-          </p>
         </div>
         {canManage && (
           <button

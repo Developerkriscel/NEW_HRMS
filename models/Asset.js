@@ -10,6 +10,18 @@ const AssetSchema = new mongoose.Schema(
     assignedDate: { type: Date, default: null },
     status: { type: String, enum: ['AVAILABLE', 'ASSIGNED', 'DAMAGED', 'LOST', 'RETIRED'], default: 'AVAILABLE' },
     condition: { type: String },
+    details: { type: String },
+    serialNumber: { type: String },
+    purchaseDate: { type: Date },
+    cost: { type: Number },
+    warrantyExpiry: { type: Date },
+    imageUrl: { type: String },
+    assignmentHistory: [{
+      employeeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee' },
+      assignedDate: { type: Date },
+      recoveredDate: { type: Date },
+      conditionOnRecovery: { type: String },
+    }],
     ...tenantFields,
   },
   { timestamps: true }

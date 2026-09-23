@@ -41,14 +41,14 @@ export function CandidatePreboardingPortal({ token }) {
   if (loading) return <Centered><p className="text-slate-400">Loading...</p></Centered>
   if (error) return <Centered><Card className="text-center"><XCircle className="w-10 h-10 text-slate-300 mx-auto mb-3" /><p className="text-slate-500 dark:text-slate-400">{error}</p></Card></Centered>
   if (!data) return null
-  if (data.isCancelled) return <Centered><Card className="text-center"><XCircle className="w-10 h-10 text-slate-300 mx-auto mb-3" /><h1 className="font-bold text-slate-800 dark:text-slate-100">This preboarding process is no longer active</h1></Card></Centered>
+  if (data.isCancelled) return <Centered><Card className="text-center"><XCircle className="w-10 h-10 text-slate-300 mx-auto mb-3" /><h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full">This preboarding process is no longer active</h1></Card></Centered>
 
   if (submitted || data.formStatus === 'SUBMITTED') {
     return (
       <Centered>
         <Card className="text-center">
           <div className="w-14 h-14 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center mx-auto mb-4"><Clock className="w-7 h-7 text-emerald-500" /></div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Information Submitted</h1>
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full mb-2">Information Submitted</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm">Thank you, {data.candidateName}. Our HR team is reviewing your information and will be in touch if anything needs correction.</p>
         </Card>
       </Centered>
@@ -151,7 +151,7 @@ function InformationForm({ token, data, onSubmitted, onSaved }) {
       <div className="max-w-2xl mx-auto space-y-5">
         <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm p-8">
           <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">Welcome, {data.candidateName}</p>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white mt-1">Candidate Information Form</h1>
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full mt-1">Candidate Information Form</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Please complete every section below. You can save your progress and come back later.</p>
         </div>
 
@@ -354,7 +354,7 @@ function DocumentsView({ token, candidateName }) {
       <div className="max-w-2xl mx-auto space-y-5">
         <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm p-8">
           <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">Welcome, {candidateName}</p>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white mt-1">Documents</h1>
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full mt-1">Documents</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Please upload the documents below. We'll let you know if anything needs to be replaced.</p>
         </div>
 

@@ -9,4 +9,5 @@ export const publicOfferApi = {
   decline: (token, data) => api.post(`/public/offers/${token}/decline`, data),
   requestDiscussion: (token, data) => api.post(`/public/offers/${token}/request-discussion`, data),
   pdfUrl: (token) => `/api/public/offers/${token}/pdf`,
+  attachmentUrl: (token, filename) => `/api/public/offers/${token}/attachments/${encodeURIComponent(filename)}`,
 }

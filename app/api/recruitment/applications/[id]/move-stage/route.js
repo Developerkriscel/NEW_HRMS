@@ -9,9 +9,20 @@ import { STAGE_HISTORY_ACTION } from '@/lib/pipelineConstants'
 import { getActorName } from '@/lib/candidateHelpers'
 import { syncPipelineStages } from '@/lib/jobHelpers'
 import { applyStageMove, recordStageHistory } from '@/lib/pipelineHelpers'
+import { PIPELINE_STAGE_CATEGORY } from '@/lib/jobConstants'
 import Application from '@/models/Application'
 import Job from '@/models/Job'
 import JobPipelineStage from '@/models/JobPipelineStage'
+
+function pickStage(stages, preferredName, preferredCategory) {
+  const active = (stages || []).filter((stage) => stage.isActive !== false)
+  if (!active.length) return null
+  const wanted = String(preferredName || '').toLowerCase()
+  return active.find((stage) => String(stage.name || '').toLowerCase() === wanted)
+    || active.find((stage) => wanted && String(stage.name || '').toLowerCase().includes(wanted))
+    || active.find((stage) => preferredCategory && stage.category === preferredCategory)
+    || null
+}
 
 // POST { stageId, comment? } — the Kanban drag/drop *and* the Move Stage
 // modal both call this one route; the frontend drag is only a UI gesture,
@@ -24,7 +35,7 @@ export const POST = withApi(async (req, { params }) => {
   const body = await req.json().catch(() => ({}))
 
   if (!canManageCandidates(session)) return fail('You do not have permission to move applications', 403, 'FORBIDDEN')
-  if (!body.stageId) return fail('stageId is required', 400, 'VALIDATION_ERROR')
+  if (!body.stageId && !body.stageName) return fail('stageId or stageName is required', 400, 'VALIDATION_ERROR')
 
   const application = await Application.findOne({ _id: params.id, tenantId, deleted: false })
   if (!application) throw new ApiError(404, 'Application not found', 'NOT_FOUND')
@@ -32,13 +43,25 @@ export const POST = withApi(async (req, { params }) => {
     return fail(`Cannot move a ${application.status.toLowerCase()} application`, 400, 'INVALID_STATE')
   }
 
-  let stage = await JobPipelineStage.findOne({ _id: body.stageId, tenantId, jobId: application.jobId, isActive: true })
+  const preferredCategory = body.preferredCategory || (/interview|technical|round/i.test(body.stageName || '') ? PIPELINE_STAGE_CATEGORY.INTERVIEW : null)
+  let stage = body.stageId
+    ? await JobPipelineStage.findOne({ _id: body.stageId, tenantId, jobId: application.jobId, isActive: true })
+    : null
+  if (!stage && body.stageName) {
+    const stages = await JobPipelineStage.find({ tenantId, jobId: application.jobId, isActive: true }).sort({ order: 1 })
+    stage = pickStage(stages, body.stageName, preferredCategory)
+  }
   if (!stage) {
     const existingStageCount = await JobPipelineStage.countDocuments({ tenantId, jobId: application.jobId, isActive: true })
     if (existingStageCount === 0) {
       const job = await Job.findOne({ _id: application.jobId, tenantId }).select('pipelineTemplate').lean()
       await syncPipelineStages(tenantId, application.jobId, null, job?.pipelineTemplate || 'DEFAULT_HIRING')
-      stage = await JobPipelineStage.findOne({ _id: body.stageId, tenantId, jobId: application.jobId, isActive: true })
+      if (body.stageId) {
+        stage = await JobPipelineStage.findOne({ _id: body.stageId, tenantId, jobId: application.jobId, isActive: true })
+      } else if (body.stageName) {
+        const stages = await JobPipelineStage.find({ tenantId, jobId: application.jobId, isActive: true }).sort({ order: 1 })
+        stage = pickStage(stages, body.stageName, preferredCategory)
+      }
     }
   }
   if (!stage) return fail('That stage does not belong to this job', 400, 'VALIDATION_ERROR')
@@ -64,5 +87,5 @@ export const POST = withApi(async (req, { params }) => {
     req,
   })
 
-  return ok(application, 'Stage updated')
+  return ok({ application, stage: { _id: stage._id, name: stage.name, category: stage.category } }, 'Stage updated')
 })

@@ -30,6 +30,11 @@ const InterviewSchema = new mongoose.Schema(
     candidateInstructions: { type: String, default: null },
     internalNotes: { type: String, default: null }, // never exposed to the candidate/interviewer confirmation
 
+    candidateInviteSubject: { type: String, default: null },
+    candidateInviteSentAt: { type: Date, default: null },
+    candidateInviteStatus: { type: String, enum: ['NOT_SENT', 'SENT', 'FAILED'], default: 'NOT_SENT' },
+    candidateInviteError: { type: String, default: null },
+
     scorecardTemplateId: { type: mongoose.Schema.Types.ObjectId, ref: 'InterviewScorecardTemplate', default: null },
 
     status: { type: String, enum: INTERVIEW_STATUS_LIST, default: INTERVIEW_STATUS.SCHEDULED },
@@ -53,5 +58,6 @@ const InterviewSchema = new mongoose.Schema(
 InterviewSchema.index({ tenantId: 1, applicationId: 1 })
 InterviewSchema.index({ tenantId: 1, date: 1, status: 1 })
 InterviewSchema.index({ tenantId: 1, jobId: 1 })
+InterviewSchema.index({ tenantId: 1, deleted: 1, applicationId: 1, status: 1, date: -1, startTime: -1 })
 
 export default model('Interview', InterviewSchema)

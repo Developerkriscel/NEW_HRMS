@@ -70,6 +70,27 @@ async function main() {
       [{ tenantId: 1, status: 1, createdAt: -1 }],
       [{ tenantId: 1, startDate: 1, endDate: 1 }],
     ])
+    await createIndexes(db, 'jobs', [
+      [{ tenantId: 1, deleted: 1, createdAt: -1 }],
+      [{ tenantId: 1, deleted: 1, status: 1, createdAt: -1 }],
+    ])
+    await createIndexes(db, 'applications', [
+      [{ tenantId: 1, deleted: 1, appliedAt: -1 }],
+      [{ tenantId: 1, deleted: 1, currentStageName: 1, appliedAt: -1 }],
+      [{ tenantId: 1, deleted: 1, status: 1, appliedAt: -1 }],
+      [{ tenantId: 1, deleted: 1, jobId: 1, appliedAt: -1 }],
+    ])
+    await createIndexes(db, 'candidates', [
+      [{ tenantId: 1, deleted: 1, firstName: 1 }],
+      [{ tenantId: 1, deleted: 1, lastName: 1 }],
+      [{ tenantId: 1, deleted: 1, candidateCode: 1 }],
+    ])
+    await createIndexes(db, 'offers', [
+      [{ tenantId: 1, deleted: 1, applicationId: 1 }],
+    ])
+    await createIndexes(db, 'interviews', [
+      [{ tenantId: 1, deleted: 1, applicationId: 1, status: 1, date: -1, startTime: -1 }],
+    ])
   }
 
   console.log(`Synced platform indexes and tenant indexes for ${tenants.length} tenant database(s)`)

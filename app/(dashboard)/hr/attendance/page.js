@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { Check, X, Clock, Users, Building2 } from 'lucide-react'
+import { Check, X, Clock, Users, Building2, ChevronRight } from 'lucide-react'
+import { AttendanceDetailsDrawer } from '@/components/attendance/AttendanceDetailsDrawer'
 import { DataTable } from '@/components/tables/DataTable'
 import { Badge } from '@/components/common/Badge'
 import { Avatar } from '@/components/common/Avatar'
@@ -25,6 +26,9 @@ function CompanyAttendanceTab({ headerAction }) {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
   const [selectedEmployee, setSelectedEmployee] = useState('all')
   const [employeesList, setEmployeesList] = useState([])
+  
+  const [selectedRecord, setSelectedRecord] = useState(null)
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
 
   function formatAttendanceDate(value) {
     if (!value) return '-'
@@ -73,7 +77,7 @@ function CompanyAttendanceTab({ headerAction }) {
   }, [selectedDate, selectedEmployee]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    employeeApi.getAll({ size: 1000 }).then(empRes => {
+    employeeApi.getAll({ size: 50 }).then(empRes => {
       if (empRes?.data?.data?.content) {
         setEmployeesList(empRes.data.data.content)
       }
@@ -114,8 +118,19 @@ function CompanyAttendanceTab({ headerAction }) {
         {formatWorkDuration(row)}
       </span>
     ) },
-    { header: 'Status', accessor: 'status', render: (v) => <Badge variant={v === 'PRESENT' ? 'success' : v === 'ABSENT' ? 'danger' : 'warning'}>{v}</Badge> },
-  ]
+          { header: 'Status', accessor: 'status', render: (v) => <Badge variant={v === 'PRESENT' ? 'success' : v === 'ABSENT' ? 'danger' : 'warning'}>{v}</Badge> },
+      {
+        header: '', accessor: '_id',
+        render: (_, record) => (
+          <button
+            onClick={() => { setSelectedRecord(record); setIsDrawerOpen(true) }}
+            className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 text-sm font-medium flex items-center justify-end w-full group"
+          >
+            Details <ChevronRight className="w-4 h-4 ml-1 transform group-hover:translate-x-1 transition-transform" />
+          </button>
+        )
+      }
+    ]
 
   const stats = [
     { label: 'Present Today', value: summary.present, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
@@ -134,6 +149,7 @@ function CompanyAttendanceTab({ headerAction }) {
             <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-800 dark:text-white flex items-center gap-2">
               Company Attendance
             </h2>
+            {headerAction && <div>{headerAction}</div>}
           </div>
         </div>
       </div>
@@ -239,6 +255,13 @@ function CompanyAttendanceTab({ headerAction }) {
         </div>
       </div>
 
+      <AttendanceDetailsDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        record={selectedRecord}
+        canEdit={true}
+        onUpdate={loadData}
+      />
     </div>
   )
 }
@@ -246,8 +269,8 @@ function CompanyAttendanceTab({ headerAction }) {
 export default function HRAttendancePage() {
   const [activeTab, setActiveTab] = useState('mine')
 
-  const Tabs = (
-    <div className="flex bg-slate-100/50 dark:bg-slate-800/50 p-1 rounded-xl w-fit border border-slate-200/50 dark:border-slate-700/50 backdrop-blur-xl mb-6">
+  const headerAction = (
+    <div className="flex bg-slate-100/50 dark:bg-slate-800/50 p-1 rounded-xl w-fit border border-slate-200/50 dark:border-slate-700/50 backdrop-blur-xl shrink-0">
       <button
         onClick={() => setActiveTab('mine')}
         className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-bold text-xs transition-all duration-300 ${
@@ -275,13 +298,10 @@ export default function HRAttendancePage() {
 
   return (
     <div className="animate-fade-in space-y-4">
-      <div className="flex justify-end -mb-4 relative z-10">
-        {Tabs}
-      </div>
       {activeTab === 'mine' ? (
-        <EmployeeAttendanceWorkspace />
+        <EmployeeAttendanceWorkspace headerAction={headerAction} />
       ) : (
-        <CompanyAttendanceTab />
+        <CompanyAttendanceTab headerAction={headerAction} />
       )}
     </div>
   )

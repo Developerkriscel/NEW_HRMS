@@ -21,6 +21,7 @@ function validateBranch(body) {
   const longitude = normalizeNumber(body.longitude)
   if (body.latitude !== '' && body.latitude != null && latitude == null) return 'Latitude must be a valid number'
   if (body.longitude !== '' && body.longitude != null && longitude == null) return 'Longitude must be a valid number'
+  if ((latitude == null && longitude != null) || (latitude != null && longitude == null)) return 'Latitude and longitude must be set together'
   if (latitude != null && (latitude < -90 || latitude > 90)) return 'Latitude must be between -90 and 90'
   if (longitude != null && (longitude < -180 || longitude > 180)) return 'Longitude must be between -180 and 180'
 

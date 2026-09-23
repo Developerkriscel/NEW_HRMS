@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Users, Calendar, Clock, FileText, CheckCircle2, ListTodo, Search, Filter, MoreVertical, Plus, Download, Eye } from 'lucide-react'
+import { Users, Calendar, Clock, FileText, CheckCircle2, ListTodo, Search, Filter, MoreVertical, RefreshCw, Download, Eye } from 'lucide-react'
 import { OnboardingStatusBadge } from './components/OnboardingStatusBadge'
 import { OnboardingProgress } from './components/OnboardingProgress'
 import { EmptyState } from './components/EmptyState'
@@ -10,27 +10,42 @@ import { StartOnboardingModal } from './StartOnboardingModal'
 import { preboardingApi } from '@/services/preboardingApi'
 import { adaptPreboardingRecord } from './onboardingRecordAdapter'
 
+const PAGE_SIZE = 5
+
 export function OnboardingDashboardPage() {
   const router = useRouter()
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState('')
   const [isStartModalOpen, setIsStartModalOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
+  const [page, setPage] = useState(0)
+  const [totalElements, setTotalElements] = useState(0)
+  const [serverCards, setServerCards] = useState(null)
 
-  const loadRecords = useCallback(async () => {
-    setLoading(true)
+  const loadRecords = useCallback(async (nextPage = 0, append = false) => {
+    if (append) setLoadingMore(true)
+    else setLoading(true)
     setError('')
     try {
-      const res = await preboardingApi.list({ size: 200 })
-      const rows = res.data?.data?.content || res.data?.data?.items || []
-      setRecords(rows.map(adaptPreboardingRecord))
+      const res = await preboardingApi.list({ page: nextPage, size: PAGE_SIZE })
+      const data = res.data?.data || {}
+      const rows = data.content || data.items || []
+      setRecords((prev) => append ? [...prev, ...rows.map(adaptPreboardingRecord)] : rows.map(adaptPreboardingRecord))
+      setTotalElements(data.totalElements || rows.length)
+      setServerCards(data.cards || null)
+      setPage(nextPage)
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load onboarding records from database')
-      setRecords([])
+      const message = err.response?.data?.errorCode === 'DATABASE_UNAVAILABLE'
+        ? 'MongoDB is unreachable. Add your current IP in MongoDB Atlas Network Access, then retry onboarding.'
+        : err.response?.data?.message || 'Failed to load onboarding records from database'
+      setError(message)
+      if (!append) setRecords([])
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
   }, [])
 
@@ -39,13 +54,14 @@ export function OnboardingDashboardPage() {
   }, [loadRecords])
 
   // Derived metrics
-  const total = records.length
-  const inProgress = records.filter(r => r.status === 'IN_PROGRESS').length
+  const total = totalElements || records.length
+  const inProgress = serverCards?.formsPending ?? records.filter(r => r.status === 'IN_PROGRESS').length
   const completed = records.filter(r => r.status === 'COMPLETED').length
-  const upcoming = records.filter(r => r.status !== 'COMPLETED' && r.status !== 'CANCELLED').length
+  const upcoming = serverCards?.joiningThisWeek ?? records.filter(r => r.status !== 'COMPLETED' && r.status !== 'CANCELLED').length
   
-  const pendingDocs = records.reduce((acc, r) => acc + r.documents.filter(d => d.status !== 'VERIFIED').length, 0)
+  const pendingDocs = serverCards?.documentsPending ?? records.reduce((acc, r) => acc + r.documents.filter(d => d.status !== 'VERIFIED').length, 0)
   const pendingTasks = records.reduce((acc, r) => acc + r.tasks.filter(t => t.status !== 'COMPLETED').length, 0)
+  const hasMore = records.length < totalElements
 
   // Filtering
   const filteredRecords = records.filter(r => {
@@ -61,15 +77,15 @@ export function OnboardingDashboardPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Onboarding</h1>
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full">Onboarding</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Manage new hires, joining formalities, documents and onboarding progress.</p>
         </div>
         <div className="flex items-center gap-3">
           <button className="btn-secondary hidden sm:flex">
             <Download className="w-4 h-4" /> Export
           </button>
-          <button onClick={() => setIsStartModalOpen(true)} className="btn-primary">
-            <Plus className="w-4 h-4" /> Start Onboarding
+          <button onClick={() => setIsStartModalOpen(true)} className="btn-secondary">
+            <RefreshCw className="w-4 h-4" /> Sync Accepted Offers
           </button>
         </div>
       </div>
@@ -142,8 +158,8 @@ export function OnboardingDashboardPage() {
             title="No onboarding records found"
             description="Accepted offers will appear here automatically for employee onboarding."
             action={
-              <button onClick={() => setIsStartModalOpen(true)} className="btn-primary">
-                <Plus className="w-4 h-4" /> Start Onboarding
+              <button onClick={() => setIsStartModalOpen(true)} className="btn-secondary">
+                <RefreshCw className="w-4 h-4" /> Check Accepted Offers
               </button>
             }
           />
@@ -211,6 +227,19 @@ export function OnboardingDashboardPage() {
           </div>
         )}
       </div>
+
+      {hasMore && !loading && (
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={() => loadRecords(page + 1, true)}
+            disabled={loadingMore}
+            className="rounded-2xl border border-blue-200 bg-blue-50 px-5 py-3 text-sm font-bold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loadingMore ? 'Loading...' : 'Load More Onboarding Records'}
+          </button>
+        </div>
+      )}
 
       <StartOnboardingModal isOpen={isStartModalOpen} onClose={() => {
         setIsStartModalOpen(false)

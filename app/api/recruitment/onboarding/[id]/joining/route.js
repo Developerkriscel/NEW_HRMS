@@ -5,6 +5,7 @@ import { ok, fail } from '@/lib/apiResponse'
 import { requireAuth, requireRole, requireTenantId, ApiError } from '@/lib/auth'
 import { PREBOARDING_SENSITIVE_VIEW_ROLES } from '@/lib/preboardingConstants'
 import { syncReadinessStatus } from '@/lib/candidateEmployeeConversionService'
+import { recomputePreboardingStatus } from '@/lib/preboardingHelpers'
 import Preboarding from '@/models/Preboarding'
 import OfferVersion from '@/models/OfferVersion'
 
@@ -40,6 +41,7 @@ export const PUT = withApi(async (req, { params }) => {
 
   const patch = {}
   if (isObjectId(body.department)) patch.departmentId = body.department
+  if (isObjectId(body.designation)) patch.designationId = body.designation
   if (isObjectId(body.branch)) patch.locationId = body.branch
   if (isObjectId(body.shift)) patch.shiftId = body.shift
   if (isObjectId(body.reportingManager)) patch.managerId = body.reportingManager
@@ -61,15 +63,14 @@ export const PUT = withApi(async (req, { params }) => {
   )
   if (!version) return fail('Offer version not found', 404)
 
-  if (body.joiningDate) {
-    preboarding.confirmedJoiningDate = new Date(body.joiningDate)
-    preboarding.activityLog.push({
-      type: 'JOINING_CONFIG_UPDATED',
-      message: 'Joining configuration updated',
-      actorName: session.name || session.sub,
-    })
-    await preboarding.save()
-  }
+  if (body.joiningDate) preboarding.confirmedJoiningDate = new Date(body.joiningDate)
+  preboarding.activityLog.push({
+    type: 'JOINING_CONFIG_UPDATED',
+    message: 'Joining configuration updated',
+    actorName: session.name || session.sub,
+  })
+  await recomputePreboardingStatus(tenantId, preboarding)
+  await preboarding.save()
 
   const preview = await syncReadinessStatus(tenantId, params.id)
   return ok(preview, 'Joining configuration saved')

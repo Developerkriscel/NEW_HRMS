@@ -59,6 +59,13 @@ export const GET = withApi(async (req, { params }) => {
         offerValidUntil: version.offerValidUntil,
         renderedContent: version.renderedContent,
         pdfUrl: version.pdfUrl,
+        attachments: (version.attachments || []).map((attachment) => ({
+          fileName: attachment.fileName,
+          originalFileName: attachment.originalFileName,
+          size: attachment.size || 0,
+          contentType: attachment.contentType || 'application/pdf',
+          url: `/api/public/offers/${params.token}/attachments/${attachment.fileName}`,
+        })),
       },
       expiresAt: offer.expiresAt,
       sentAt: offer.sentAt,

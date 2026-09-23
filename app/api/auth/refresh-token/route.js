@@ -6,15 +6,7 @@ import { ok, fail } from '@/lib/apiResponse'
 import { verifyJwt, generateAccessToken, generateRefreshToken, setAuthCookies, isTokenBlacklisted, isPlatformSessionRevoked, createPlatformSession, ACCESS_TOKEN_EXPIRY_MS } from '@/lib/auth'
 import { findUserByEmail, isAccountUsable, buildUserInfo, toAuthUser } from '@/lib/userLookup'
 import { createAccountSession, isAccountSessionRevoked, touchAccountSession } from '@/lib/accountSessions'
-
-const DEV_USER = {
-  _id: 'dev-super-admin',
-  name: 'Dev Super Admin',
-  email: 'superadmin@nexahr.test',
-  role: 'SUPER_ADMIN',
-  isSuperAdmin: true,
-  devLogin: true,
-}
+import { buildDevUserForEmail, isDevAuthAllowed } from '@/lib/devLogin'
 
 // Fixes a bug present in the original: the Java refresh endpoint validated
 // signature/expiry only, so any still-valid access token could be replayed
@@ -40,22 +32,33 @@ export const POST = withApi(async (req) => {
     return fail('Session has been revoked', 401, 'SESSION_REVOKED')
   }
 
-  if (decoded.devLogin && process.env.NODE_ENV !== 'production') {
-    const newAccessToken = generateAccessToken(DEV_USER)
-    const newRefreshToken = generateRefreshToken(DEV_USER)
+  if (decoded.devLogin && isDevAuthAllowed(req)) {
+    const devUser = buildDevUserForEmail(decoded.sub) || {
+      id: decoded.userId,
+      name: decoded.name,
+      email: decoded.sub,
+      role: decoded.role,
+      tenantId: decoded.tenantId || null,
+      companyName: decoded.companyName || null,
+      companySlug: decoded.companySlug || null,
+      tenantDatabaseName: decoded.tenantDatabaseName || null,
+      permissions: decoded.permissions || [],
+      moduleAccess: decoded.moduleAccess || [],
+      platformPermissions: decoded.platformPermissions || [],
+      platformRoles: decoded.platformRoles || [],
+    }
+    const authUser = {
+      ...devUser,
+      _id: devUser.id || decoded.userId,
+      isSuperAdmin: devUser.role === 'SUPER_ADMIN',
+      devLogin: true,
+    }
+    const newAccessToken = generateAccessToken(authUser)
+    const newRefreshToken = generateRefreshToken(authUser)
     setAuthCookies(cookieStore, newAccessToken, newRefreshToken)
     return ok(
       {
-        user: {
-          _id: DEV_USER._id,
-          name: DEV_USER.name,
-          email: DEV_USER.email,
-          role: DEV_USER.role,
-          isSuperAdmin: true,
-          tenantId: null,
-          permissions: [],
-          devLogin: true,
-        },
+        user: { ...devUser, devLogin: true },
         expiresIn: Math.floor(ACCESS_TOKEN_EXPIRY_MS / 1000),
       },
       'Token refreshed'

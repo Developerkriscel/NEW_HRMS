@@ -52,17 +52,17 @@ export function StatsCard({
   return (
     <div 
       className={cn(
-        'relative bg-white dark:bg-slate-900 rounded-2xl p-3 sm:px-4 sm:py-3.5 border border-slate-200/80 dark:border-slate-800 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 group overflow-hidden flex flex-col justify-center',
+        'relative bg-white dark:bg-slate-900 rounded-2xl p-2.5 sm:px-4 sm:py-3.5 border border-slate-200/80 dark:border-slate-800 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 group overflow-hidden flex flex-col justify-center',
         className
       )}
     >
-      <div className="flex items-center gap-3.5 relative z-10 w-full">
+      <div className="flex items-center gap-2 sm:gap-3.5 relative z-10 w-full">
         {/* Left: Icon */}
         {Icon ? (
-          <div className={cn("w-10 h-10 shrink-0 rounded-xl flex items-center justify-center text-white shadow-sm transition-transform group-hover:scale-105 duration-300 drop-shadow-sm", theme.fill)}>
+          <div className={cn("w-8 h-8 sm:w-10 sm:h-10 shrink-0 rounded-[10px] sm:rounded-xl flex items-center justify-center text-white shadow-sm transition-transform group-hover:scale-105 duration-300 drop-shadow-sm", theme.fill)}>
             <Icon className="w-[18px] h-[18px]" />
           </div>
-        ) : <div className="w-10 h-10 shrink-0" />}
+        ) : <div className="w-8 h-8 sm:w-10 sm:h-10 shrink-0" />}
 
         {/* Middle: Text Content */}
         <div className="flex-1 min-w-0">
@@ -82,8 +82,8 @@ export function StatsCard({
         </div>
 
         {/* Right: Progress Gauge */}
-        <div className="shrink-0 relative w-8 h-8 flex items-center justify-center ml-1">
-          <svg className="w-8 h-8 -rotate-90" viewBox="0 0 32 32">
+        <div className="shrink-0 relative w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center ml-0.5 sm:ml-1">
+          <svg className="w-7 h-7 sm:w-8 sm:h-8 -rotate-90" viewBox="0 0 32 32">
             <circle
               cx="16"
               cy="16"

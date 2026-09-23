@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Mail, FileText, CheckCircle2 } from 'lucide-react'
+import { X, Mail, FileText, CheckCircle2, Paperclip, Trash2, UploadCloud } from 'lucide-react'
 import { Avatar } from '@/components/common/Avatar'
 import { Portal } from '@/components/common/Portal'
 
@@ -16,17 +16,44 @@ Please find the detailed offer letter attached to this email. We look forward to
 Best regards,
 The NexaHR Recruitment Team`;
 
+  const [recipientEmail, setRecipientEmail] = useState(candidate?.email || '')
   const [subject, setSubject] = useState(defaultSubject)
   const [emailBody, setEmailBody] = useState(defaultBody)
+  const [attachments, setAttachments] = useState([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+
+  const handleAttachmentChange = (e) => {
+    const files = Array.from(e.target.files || [])
+    e.target.value = ''
+    if (!files.length) return
+
+    const next = [...attachments]
+    for (const file of files) {
+      if (next.length >= 5) {
+        setError('You can attach up to 5 PDF files.')
+        break
+      }
+      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+      if (!isPdf) {
+        setError('Only PDF attachments are allowed.')
+        continue
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        setError(`${file.name} is too large. Each PDF must be under 10MB.`)
+        continue
+      }
+      next.push(file)
+    }
+    setAttachments(next)
+  }
   
   const handleSend = async (e) => {
     e.preventDefault()
     setSaving(true)
     setError(null)
     try {
-      await onSend({ ...candidate, offerEmail: { subject, body: emailBody } })
+      await onSend({ ...candidate, email: recipientEmail, offerEmail: { subject, body: emailBody, attachments } })
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to send offer')
     } finally {
@@ -75,6 +102,16 @@ The NexaHR Recruitment Team`;
 
           <div className="space-y-4">
             <div>
+              <label className="text-sm font-bold text-slate-700 dark:text-slate-300 block mb-2">To (Candidate Email)</label>
+              <input 
+                type="email" 
+                value={recipientEmail}
+                onChange={(e) => setRecipientEmail(e.target.value)}
+                required
+                className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow mb-4"
+              />
+            </div>
+            <div>
               <label className="text-sm font-bold text-slate-700 dark:text-slate-300 block mb-2">Email Subject</label>
               <input 
                 type="text" 
@@ -96,6 +133,57 @@ The NexaHR Recruitment Team`;
           <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl text-amber-700 dark:text-amber-400 text-sm font-medium">
             <FileText className="w-5 h-5 flex-shrink-0" />
             An automated PDF offer letter will be generated and attached based on the standard template.
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/40">
+            <div className="mb-3 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="flex items-center gap-2 text-sm font-black text-slate-900 dark:text-white">
+                  <Paperclip className="h-4 w-4 text-indigo-500" /> Additional Attachments
+                </h3>
+                <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Attach company policy, benefits guide, or joining instructions as PDF files.
+                </p>
+              </div>
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-black text-indigo-600 shadow-sm ring-1 ring-slate-200 transition-all hover:-translate-y-0.5 hover:shadow-md dark:bg-slate-900 dark:ring-slate-700">
+                <UploadCloud className="h-4 w-4" />
+                Add PDF
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  multiple
+                  className="hidden"
+                  onChange={handleAttachmentChange}
+                  disabled={saving}
+                />
+              </label>
+            </div>
+
+            {attachments.length > 0 ? (
+              <div className="space-y-2">
+                {attachments.map((file, index) => (
+                  <div key={`${file.name}-${file.size}-${index}`} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">{file.name}</p>
+                      <p className="text-xs font-medium text-slate-400">{(file.size / (1024 * 1024)).toFixed(2)} MB</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAttachments((items) => items.filter((_, i) => i !== index))}
+                      className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
+                      disabled={saving}
+                      title="Remove attachment"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-5 text-center text-xs font-bold text-slate-400 dark:border-slate-700 dark:bg-slate-900/60">
+                No extra PDFs attached. Offer letter PDF will still be generated automatically.
+              </div>
+            )}
           </div>
 
           {error && (

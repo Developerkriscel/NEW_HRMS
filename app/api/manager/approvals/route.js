@@ -53,7 +53,7 @@ export const GET = withApi(async (req) => {
 
   const items = []
 
-  const leavesQuery = { status: 'PENDING', tenantId }
+  const leavesQuery = { tenantId }
   if (isCompanyScope) {
     leavesQuery.employee = { $in: reportIds }
   } else {
@@ -63,19 +63,26 @@ export const GET = withApi(async (req) => {
   for (const l of leaves) {
     items.push({
       id: l._id, type: 'LEAVE', employee: employeeSummary(l.employee), status: l.status, createdAt: l.createdAt,
+      leaveType: l.leaveType?.name || 'Leave',
+      startDate: l.startDate,
+      endDate: l.endDate,
+      numberOfDays: l.numberOfDays,
+      reason: l.reason || '',
+      halfDay: l.halfDay,
+      halfDayType: l.halfDayType,
       summary: `${l.leaveType?.name || 'Leave'} · ${l.numberOfDays} day(s)`,
     })
   }
 
-  const regularizations = await Attendance.find({ employee: { $in: reportIds }, tenantId, regularizationStatus: 'PENDING' })
+  const regularizations = await Attendance.find({ employee: { $in: reportIds }, tenantId, regularizationStatus: { $in: ['PENDING', 'APPROVED', 'REJECTED'] } })
   for (const a of regularizations) {
     items.push({
-      id: a._id, type: 'ATTENDANCE_REGULARIZATION', employee: employeeSummary(a.employee), status: 'PENDING', createdAt: a.updatedAt,
+      id: a._id, type: 'ATTENDANCE_REGULARIZATION', employee: employeeSummary(a.employee), status: a.regularizationStatus, createdAt: a.updatedAt,
       summary: a.regularizationReason || 'Attendance correction requested',
     })
   }
 
-  const teamRequests = await TeamRequest.find({ employee: { $in: reportIds }, status: 'PENDING', tenantId })
+  const teamRequests = await TeamRequest.find({ employee: { $in: reportIds }, tenantId })
   for (const r of teamRequests) {
     items.push({
       id: r._id, type: r.type, employee: employeeSummary(r.employee), status: r.status, createdAt: r.createdAt,
@@ -83,7 +90,7 @@ export const GET = withApi(async (req) => {
     })
   }
 
-  const expenses = await Expense.find({ employee: { $in: reportIds }, status: 'PENDING', tenantId })
+  const expenses = await Expense.find({ employee: { $in: reportIds }, tenantId })
   for (const e of expenses) {
     items.push({
       id: e._id, type: 'EXPENSE', employee: employeeSummary(e.employee), status: e.status, createdAt: e.createdAt,
@@ -91,7 +98,7 @@ export const GET = withApi(async (req) => {
     })
   }
 
-  const assetRequests = await AssetRequest.find({ requestedFor: { $in: reportIds }, status: 'PENDING', tenantId })
+  const assetRequests = await AssetRequest.find({ requestedFor: { $in: reportIds }, tenantId })
   for (const a of assetRequests) {
     items.push({
       id: a._id, type: 'ASSET_REQUEST', employee: employeeSummary(a.requestedFor), status: a.status, createdAt: a.createdAt,
@@ -99,7 +106,7 @@ export const GET = withApi(async (req) => {
     })
   }
 
-  const resignations = await Resignation.find({ employee: { $in: reportIds }, status: { $in: ['SUBMITTED', 'MANAGER_REVIEWED'] }, tenantId })
+  const resignations = await Resignation.find({ employee: { $in: reportIds }, status: { $in: ['SUBMITTED', 'MANAGER_REVIEWED', 'FORWARDED_TO_HR', 'APPROVED', 'REJECTED', 'WITHDRAWN'] }, tenantId })
   for (const r of resignations) {
     items.push({
       id: r._id, type: 'RESIGNATION', employee: employeeSummary(r.employee), status: r.status, createdAt: r.createdAt,
@@ -107,7 +114,7 @@ export const GET = withApi(async (req) => {
     })
   }
 
-  const kras = await Kra.find({ assignedBy: managerId, status: 'SUBMITTED', tenantId }).populate('employee', 'firstName lastName employeeCode')
+  const kras = await Kra.find({ assignedBy: managerId, status: { $in: ['SUBMITTED', 'REVIEWED'] }, tenantId }).populate('employee', 'firstName lastName employeeCode')
   for (const k of kras) {
     items.push({
       id: k._id,

@@ -4,6 +4,7 @@ import { withApi } from '@/lib/handler'
 import { ok, fail } from '@/lib/apiResponse'
 import { requireAuth, requireRole, requireTenantId } from '@/lib/auth'
 import { CANDIDATE_VIEW_ROLES, APPLICATION_STATUS } from '@/lib/candidateConstants'
+import { STAGE_HISTORY_ACTION } from '@/lib/pipelineConstants'
 import { computeStageAging } from '@/lib/pipelineHelpers'
 import { PIPELINE_STAGE_CATEGORY } from '@/lib/jobConstants'
 import { INTERVIEW_STATUS } from '@/lib/interviewConstants'
@@ -12,6 +13,7 @@ import { COMPENSATION_VIEW_ROLES, COMPENSATION_STATUS_LABELS, computeBudgetFit }
 import Job from '@/models/Job'
 import JobPipelineStage from '@/models/JobPipelineStage'
 import Application from '@/models/Application'
+import ApplicationStageHistory from '@/models/ApplicationStageHistory'
 import Candidate from '@/models/Candidate'
 import CandidateJobMatch from '@/models/CandidateJobMatch'
 import CandidateTagAssignment from '@/models/CandidateTagAssignment'
@@ -147,6 +149,16 @@ export const GET = withApi(async (req) => {
 
   const byStage = new Map(stages.map((s) => [String(s._id), []]))
   const unassignedCards = [] // status HIRED or a stray currentStage not in the active list
+  const shortlistHistory = await ApplicationStageHistory.find({
+    tenantId,
+    applicationId: { $in: applications.map((a) => a._id) },
+    action: STAGE_HISTORY_ACTION.SHORTLISTED,
+  }).sort({ createdAt: 1 }).select('applicationId createdAt').lean()
+  const shortlistedAtByApplication = new Map()
+  for (const history of shortlistHistory) {
+    const key = String(history.applicationId)
+    if (!shortlistedAtByApplication.has(key)) shortlistedAtByApplication.set(key, history.createdAt)
+  }
 
   for (const a of applications) {
     const candidate = a.candidateId
@@ -162,7 +174,8 @@ export const GET = withApi(async (req) => {
       candidateId: candidate._id,
       candidateCode: candidate.candidateCode,
       candidateName: candidate.getFullName ? candidate.getFullName() : `${candidate.firstName} ${candidate.lastName}`,
-      aiMatchScore: match?.overallScore ?? null,
+      aiMatchScore: match?.aiMatchScore ?? match?.overallScore ?? null,
+      aiMatchReasoning: match?.aiMatchReasoning ?? match?.summary ?? null,
       matchLabel: match?.matchLabel ?? null,
       experience: candidate.totalExperience ?? null,
       noticePeriod: candidate.noticePeriod || null,
@@ -170,6 +183,7 @@ export const GET = withApi(async (req) => {
       status: a.status,
       appliedAt: a.appliedAt,
       stageEnteredAt: a.stageEnteredAt,
+      shortlistedAt: shortlistedAtByApplication.get(String(a._id)) || null,
       ageDays: aging.ageDays,
       slaDays: aging.slaDays,
       isOverdue: aging.isOverdue,

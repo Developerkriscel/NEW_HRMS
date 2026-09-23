@@ -12,8 +12,17 @@ export const GET = withApi(async (_req, { params }) => {
   const tenantId = requireTenantId(session)
 
   const resignation = await Resignation.findOne({ _id: params.id, tenantId })
-    .populate('employee', 'firstName lastName employeeCode reportingManager')
-    .populate('handoverEmployee', 'firstName lastName')
+    .populate({
+      path: 'employee',
+      select: 'firstName lastName employeeCode email phone role status department designation branch reportingManager joiningDate employmentType resignationDate lastWorkingDate',
+      populate: [
+        { path: 'department', select: 'name' },
+        { path: 'designation', select: 'name' },
+        { path: 'branch', select: 'name city' },
+        { path: 'reportingManager', select: 'firstName lastName employeeCode' },
+      ],
+    })
+    .populate('handoverEmployee', 'firstName lastName employeeCode email')
   if (!resignation) return fail('Resignation not found', 404)
 
   const isOwner = String(resignation.employee._id) === session.userId

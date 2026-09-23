@@ -12,18 +12,21 @@ const STEPS = [
   'Status'
 ]
 
-export function OpenPositionModal({ onClose, onSave, initialData }) {
+export function OpenPositionModal({ onClose, onSave, initialData, options = {} }) {
   const [currentStep, setCurrentStep] = useState(0)
   const [saving, setSaving] = useState(false)
   
   // Basic form state
-  const [form, setForm] = useState(initialData || {
+  const [form, setForm] = useState(initialData ? {
+    ...initialData,
+    status: initialData.status === 'Active' ? 'Open' : initialData.status,
+  } : {
     // Step 1
     title: '', department: '', jobType: 'Full-time', employmentType: 'Permanent', openings: 1, location: '', workMode: 'On-site',
     // Step 2
     description: '', requiredSkills: '', experience: '', education: '', preferredSkills: '', responsibilities: '',
     // Step 3
-    salaryMin: '', salaryMax: '', salaryType: 'Annual', currency: 'USD', benefits: '',
+    salaryMin: '', salaryMax: '', salaryType: 'Annual', currency: 'INR', benefits: '',
     // Step 4
     hiringManager: '', recruiter: '', priority: 'Medium', openingDate: '', targetClosingDate: '', expectedJoiningDate: '',
     // Step 5
@@ -33,18 +36,27 @@ export function OpenPositionModal({ onClose, onSave, initialData }) {
   const handleNext = () => setCurrentStep(p => Math.min(p + 1, STEPS.length - 1))
   const handlePrev = () => setCurrentStep(p => Math.max(p - 1, 0))
 
+  const departments = options.departments || []
+  const branches = options.branches || []
+  const employees = options.employees || []
+
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (currentStep < STEPS.length - 1) {
+      handleNext()
+      return
+    }
+
     setSaving(true)
-    // Simulate API call
-    setTimeout(() => {
-      setSaving(false)
+    try {
       if (onSave) {
-        onSave(form)
+        await onSave(form)
       } else {
         onClose()
       }
-    }, 1500)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const renderStepContent = () => {
@@ -59,7 +71,17 @@ export function OpenPositionModal({ onClose, onSave, initialData }) {
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Department <span className="text-rose-500">*</span></label>
-                <input required className="input-field" value={form.department} onChange={e => setForm({...form, department: e.target.value})} />
+                {departments.length ? (
+                  <select required className="input-field" value={form.departmentId || ''} onChange={e => {
+                    const dept = departments.find((item) => String(item._id) === e.target.value)
+                    setForm({...form, departmentId: e.target.value, department: dept?.name || ''})
+                  }}>
+                    <option value="">Select department</option>
+                    {departments.map((dept) => <option key={dept._id} value={dept._id}>{dept.name}</option>)}
+                  </select>
+                ) : (
+                  <input required className="input-field" value={form.department} onChange={e => setForm({...form, department: e.target.value})} />
+                )}
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Number of Openings <span className="text-rose-500">*</span></label>
@@ -85,7 +107,17 @@ export function OpenPositionModal({ onClose, onSave, initialData }) {
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Location</label>
-                <input className="input-field" value={form.location} onChange={e => setForm({...form, location: e.target.value})} />
+                {branches.length ? (
+                  <select className="input-field" value={form.locationId || ''} onChange={e => {
+                    const branch = branches.find((item) => String(item._id) === e.target.value)
+                    setForm({...form, locationId: e.target.value, location: branch?.name || ''})
+                  }}>
+                    <option value="">Select branch/location</option>
+                    {branches.map((branch) => <option key={branch._id} value={branch._id}>{branch.name} {branch.city ? `- ${branch.city}` : ''}</option>)}
+                  </select>
+                ) : (
+                  <input className="input-field" value={form.location} onChange={e => setForm({...form, location: e.target.value})} />
+                )}
               </div>
             </div>
           </div>
@@ -158,11 +190,33 @@ export function OpenPositionModal({ onClose, onSave, initialData }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div className="space-y-1.5">
                 <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Hiring Manager <span className="text-rose-500">*</span></label>
-                <input required className="input-field" value={form.hiringManager} onChange={e => setForm({...form, hiringManager: e.target.value})} />
+                {employees.length ? (
+                  <select required className="input-field" value={form.hiringManagerId || form.hiringManager || ''} onChange={e => {
+                    const employee = employees.find((item) => String(item._id) === e.target.value)
+                    const name = [employee?.firstName, employee?.lastName].filter(Boolean).join(' ')
+                    setForm({...form, hiringManagerId: e.target.value, hiringManager: name})
+                  }}>
+                    <option value="">Select hiring manager</option>
+                    {employees.map((employee) => <option key={employee._id} value={employee._id}>{[employee.firstName, employee.lastName].filter(Boolean).join(' ')} ({employee.employeeCode})</option>)}
+                  </select>
+                ) : (
+                  <input required className="input-field" value={form.hiringManager} onChange={e => setForm({...form, hiringManager: e.target.value})} />
+                )}
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Recruiter / HR <span className="text-rose-500">*</span></label>
-                <input required className="input-field" value={form.recruiter} onChange={e => setForm({...form, recruiter: e.target.value})} />
+                {employees.length ? (
+                  <select required className="input-field" value={form.recruiterId || form.recruiter || ''} onChange={e => {
+                    const employee = employees.find((item) => String(item._id) === e.target.value)
+                    const name = [employee?.firstName, employee?.lastName].filter(Boolean).join(' ')
+                    setForm({...form, recruiterId: e.target.value, recruiter: name})
+                  }}>
+                    <option value="">Select recruiter / HR</option>
+                    {employees.map((employee) => <option key={employee._id} value={employee._id}>{[employee.firstName, employee.lastName].filter(Boolean).join(' ')} ({employee.employeeCode})</option>)}
+                  </select>
+                ) : (
+                  <input required className="input-field" value={form.recruiter} onChange={e => setForm({...form, recruiter: e.target.value})} />
+                )}
               </div>
               <div className="space-y-1.5 sm:col-span-2">
                 <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Priority</label>
@@ -214,9 +268,13 @@ export function OpenPositionModal({ onClose, onSave, initialData }) {
 
   return (
     <Portal><div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
-      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose}></div>
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
       
-      <div className="max-h-[90dvh] overflow-y-auto relative bg-white dark:bg-slate-900 w-full max-w-3xl rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col h-[85vh] sm:h-auto sm:max-h-[90vh] animate-in zoom-in-95 duration-200">
+      <div
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-[90dvh] overflow-y-auto relative bg-white dark:bg-slate-900 w-full max-w-3xl rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col h-[85vh] sm:h-auto sm:max-h-[90vh] animate-in zoom-in-95 duration-200"
+      >
         
         {/* Header */}
         <div className="px-6 sm:px-8 py-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20 flex items-center justify-between relative z-10">

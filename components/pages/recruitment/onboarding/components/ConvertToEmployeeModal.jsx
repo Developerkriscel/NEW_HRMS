@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { X, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { X, CheckCircle2, AlertTriangle, KeyRound, Mail } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { Portal } from '@/components/common/Portal'
 import { preboardingApi } from '@/services/preboardingApi'
@@ -10,6 +10,8 @@ export function ConvertToEmployeeModal({ isOpen, onClose, record }) {
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
   const [conversionResult, setConversionResult] = useState(null)
+  const [loginEmail, setLoginEmail] = useState(record?.candidate?.email || '')
+  const [initialPassword, setInitialPassword] = useState('')
 
   if (!isOpen || !record) return null
 
@@ -21,7 +23,7 @@ export function ConvertToEmployeeModal({ isOpen, onClose, record }) {
       if (record.rawStatus === 'READY_TO_JOIN') {
         await preboardingApi.markJoined(record.id)
       }
-      const res = await preboardingApi.convertToEmployee(record.id)
+      const res = await preboardingApi.convertToEmployee(record.id, { loginEmail, initialPassword })
       const result = res.data.data
       setConversionResult(result)
       setLoading(false)
@@ -130,11 +132,49 @@ export function ConvertToEmployeeModal({ isOpen, onClose, record }) {
                     </div>
                   </div>
                 </div>
+
+                <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50/60 p-5 dark:border-blue-500/20 dark:bg-blue-500/10">
+                  <div className="mb-4 flex items-start gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-blue-600 shadow-sm">
+                      <KeyRound className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 dark:text-white">Login ID & Password Setup</h4>
+                      <p className="text-xs font-medium text-slate-500">These credentials will be saved on the new employee account.</p>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <label className="block">
+                      <span className="mb-1.5 flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-slate-500">
+                        <Mail className="h-3.5 w-3.5" /> Login Email
+                      </span>
+                      <input
+                        type="email"
+                        value={loginEmail}
+                        onChange={(event) => setLoginEmail(event.target.value)}
+                        className="input-field"
+                        placeholder="employee@company.com"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-slate-500">
+                        <KeyRound className="h-3.5 w-3.5" /> Initial Password
+                      </span>
+                      <input
+                        type="text"
+                        value={initialPassword}
+                        onChange={(event) => setInitialPassword(event.target.value)}
+                        className="input-field font-mono"
+                        placeholder="Minimum 8 characters"
+                      />
+                    </label>
+                  </div>
+                </div>
               </div>
 
               <div className="p-6 pt-0 flex gap-3">
                 <button onClick={onClose} className="btn-secondary w-full justify-center">Cancel</button>
-                <button onClick={handleConvert} disabled={loading} className="btn-primary w-full justify-center bg-gradient-to-r from-emerald-500 to-teal-600 shadow-emerald-500/25">
+                <button onClick={handleConvert} disabled={loading || !loginEmail || initialPassword.length < 8} className="btn-primary w-full justify-center bg-gradient-to-r from-emerald-500 to-teal-600 shadow-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-60">
                   {loading ? 'Creating...' : <><CheckCircle2 className="w-4 h-4" /> Create Employee</>}
                 </button>
               </div>

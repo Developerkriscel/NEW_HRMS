@@ -10,7 +10,8 @@ import {
   Palmtree, 
   Activity, 
   TrendingUp,
-  BarChart3
+  BarChart3,
+  Briefcase
 } from 'lucide-react'
 import { PageLoader } from '@/components/common/LoadingSpinner'
 import { AttendanceBarChart, GenericAreaChart } from '@/components/charts/DynamicDashboardCharts'
@@ -18,6 +19,7 @@ import { employeeApi } from '@/services/employeeApi'
 import { departmentApi } from '@/services/departmentApi'
 import { attendanceApi } from '@/services/attendanceApi'
 import { leaveApi } from '@/services/leaveApi'
+import { jobApi } from '@/services/jobApi'
 
 function PremiumStatsCard({ title, value, icon: Icon, gradientFrom, gradientTo, delay }) {
   return (
@@ -72,13 +74,14 @@ export function CompanyDashboardWorkspace({ headerAction }) {
     Promise.all([
       employeeApi.getAll({ size: 1 }),
       departmentApi.getAll(),
-      attendanceApi.getAll(),
+      attendanceApi.getAll({ date: now.toISOString().slice(0, 10), summaryOnly: true }),
       leaveApi.getPendingApprovals({ size: 1 }),
       employeeApi.getAll({ size: 1, joinedAfter: monthStart }),
       leaveApi.getCalendar({ month: now.getMonth() + 1, year: now.getFullYear() }),
       employeeApi.getReports({ months: 6 }),
+      jobApi.list({ status: 'OPEN', size: 1 }),
     ])
-      .then(([empRes, deptRes, attRes, leaveRes, joinersRes, calendarRes, reportRes]) => {
+      .then(([empRes, deptRes, attRes, leaveRes, joinersRes, calendarRes, reportRes, jobRes]) => {
         const onLeaveToday = (calendarRes.data.data || []).filter((l) => {
           const start = new Date(l.startDate)
           const end = new Date(l.endDate)
@@ -92,6 +95,7 @@ export function CompanyDashboardWorkspace({ headerAction }) {
           absentToday: attRes.data.data.summary?.absent ?? 0,
           pendingLeaves: leaveRes.data.data.totalElements,
           newJoiners: joinersRes.data.data.totalElements,
+          openPositions: jobRes?.data?.data?.totalElements || 0,
           onLeaveToday,
         })
         setReport(reportRes.data.data)
@@ -123,7 +127,7 @@ export function CompanyDashboardWorkspace({ headerAction }) {
     <div className="animate-fade-in space-y-8 pb-12">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-300 tracking-tight">
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full">
             Company Operations
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 font-medium">Real-time overview of workforce and attendance.</p>
@@ -144,10 +148,11 @@ export function CompanyDashboardWorkspace({ headerAction }) {
       </div>
 
       <div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           <PremiumStatsCard title="Active Departments" value={stats?.totalDepartments ?? 0} icon={Building2} gradientFrom="from-indigo-400" gradientTo="to-purple-600" delay={400} />
           <PremiumStatsCard title="Pending Approvals" value={stats?.pendingLeaves ?? 0} icon={TrendingUp} gradientFrom="from-orange-400" gradientTo="to-pink-500" delay={500} />
           <PremiumStatsCard title="New Joiners" value={stats?.newJoiners ?? 0} icon={UserPlus} gradientFrom="from-cyan-400" gradientTo="to-blue-500" delay={600} />
+          <PremiumStatsCard title="Open Positions" value={stats?.openPositions ?? 0} icon={Briefcase} gradientFrom="from-emerald-400" gradientTo="to-teal-500" delay={700} />
         </div>
       </div>
 

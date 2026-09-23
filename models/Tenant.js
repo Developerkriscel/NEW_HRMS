@@ -5,17 +5,21 @@ const TenantSchema = new mongoose.Schema(
   {
     tenantCode: { type: String, required: true, unique: true }, // e.g. ACME
     companyName: { type: String, required: true },
+    legalBusinessName: { type: String },
     email: { type: String, required: true, unique: true },
     phone: { type: String },
     subdomain: { type: String, unique: true, sparse: true },
     customDomain: { type: String },
     logoUrl: { type: String },
+    website: { type: String },
     address: { type: String },
     city: { type: String },
     state: { type: String },
     country: { type: String },
+    pincode: { type: String },
     gstNumber: { type: String },
     panNumber: { type: String },
+    businessRegistrationNumber: { type: String },
     industryType: { type: String },
     status: {
       type: String,
@@ -59,6 +63,14 @@ const TenantSchema = new mongoose.Schema(
     securityDefaults: {
       allowedEmailDomains: [{ type: String }],
       sessionTimeoutMinutes: { type: Number, default: 60, min: 5 },
+    },
+    aiSettings: {
+      provider: { type: String, enum: ['GEMINI', 'GROK', 'MISTRAL'], default: 'GEMINI' },
+      model: { type: String },
+      apiKeyCiphertext: { type: String, select: false },
+      apiKeyIv: { type: String, select: false },
+      apiKeyTag: { type: String, select: false },
+      apiKeyPreview: { type: String },
     },
     suspensionReason: { type: String }, // holds the reason for the most recent lifecycle change, not suspend-only — full history lives in TenantLifecycleEvent
     features: { type: Map, of: Boolean, default: {} },

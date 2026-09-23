@@ -8,7 +8,12 @@ import { logSuperAdmin } from '@/lib/audit'
 import Tenant from '@/models/Tenant'
 import { devSuperAdminStore } from '@/lib/devSuperAdminStore'
 
-const UPDATABLE_FIELDS = ['companyName', 'phone', 'address', 'city', 'state', 'gstNumber', 'employeeLimit', 'storageLimitMb']
+const UPDATABLE_FIELDS = [
+  'companyName', 'legalBusinessName', 'industryType', 'website', 'logoUrl',
+  'gstNumber', 'panNumber', 'businessRegistrationNumber', 'email', 'phone',
+  'address', 'country', 'state', 'city', 'pincode', 'timezone', 'currency',
+  'employeeLimit', 'storageLimitMb'
+]
 
 export const GET = withApi(async (_req, { params }) => {
   const session = await requireAuth()

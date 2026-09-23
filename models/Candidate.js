@@ -31,6 +31,7 @@ const CandidateSchema = new mongoose.Schema(
     currentLocation: { type: String, default: null },
     currentCompany: { type: String, default: null },
     currentDesignation: { type: String, default: null },
+    educationSummary: { type: String, default: null },
 
     totalExperience: { type: Number, default: null },
     relevantExperience: { type: Number, default: null },
@@ -70,6 +71,9 @@ const CandidateSchema = new mongoose.Schema(
 CandidateSchema.index({ tenantId: 1, candidateCode: 1 }, { unique: true })
 CandidateSchema.index({ tenantId: 1, email: 1 })
 CandidateSchema.index({ tenantId: 1, phone: 1 })
+CandidateSchema.index({ tenantId: 1, deleted: 1, firstName: 1 })
+CandidateSchema.index({ tenantId: 1, deleted: 1, lastName: 1 })
+CandidateSchema.index({ tenantId: 1, deleted: 1, candidateCode: 1 })
 
 CandidateSchema.methods.getFullName = function () {
   return `${this.firstName} ${this.lastName}`.trim()

@@ -6,6 +6,7 @@ import { requireAuth, requireTenantId } from '@/lib/auth'
 import Attendance from '@/models/Attendance'
 import Employee from '@/models/Employee'
 import Tenant from '@/models/Tenant'
+import { normalizeAttendanceLocation, validateAttendanceLocationPolicy } from '@/lib/attendanceLocationPolicy'
 
 function startOfToday() {
   return new Date(new Date().toDateString())
@@ -32,6 +33,19 @@ export const POST = withApi(async (req) => {
   }
   if (attendance.checkOutTime) {
     return fail('You have already checked out today', 400)
+  }
+
+  const capturedLocation = normalizeAttendanceLocation(body)
+  const locationPolicy = await validateAttendanceLocationPolicy({ tenantId, location: capturedLocation })
+  if (!locationPolicy.ok) {
+    return fail(locationPolicy.message, 400, 'LOCATION_POLICY_VIOLATION', {
+      status: locationPolicy.status,
+      nearestLocation: locationPolicy.nearest ? {
+        name: locationPolicy.nearest.branch.name,
+        distanceMeters: locationPolicy.nearest.distance,
+        allowedRadiusMeters: locationPolicy.nearest.radius,
+      } : null,
+    })
   }
 
   // Calculate breaks total
@@ -76,14 +90,19 @@ export const POST = withApi(async (req) => {
 
   attendance.checkOutTime = now
   
-  if (body.location) {
-    attendance.checkOutLatitude = body.location.lat
-    attendance.checkOutLongitude = body.location.lng
-    attendance.checkOutAccuracy = body.location.accuracy
-  } else {
-    attendance.checkOutLatitude = body.latitude
-    attendance.checkOutLongitude = body.longitude
+  if (capturedLocation) {
+    attendance.checkOutLatitude = capturedLocation.latitude
+    attendance.checkOutLongitude = capturedLocation.longitude
+    attendance.checkOutAccuracy = capturedLocation.accuracy
   }
+
+  if (locationPolicy.location) {
+    attendance.checkOutBranch = locationPolicy.location.branchId
+    attendance.checkOutLocationName = locationPolicy.location.branchName
+    attendance.checkOutDistanceMeters = locationPolicy.location.distanceMeters
+    attendance.checkOutAllowedRadiusMeters = locationPolicy.location.radiusMeters
+  }
+  attendance.locationPolicyStatus = locationPolicy.status
 
   if (body.photo) {
     attendance.checkOutPhoto = body.photo
@@ -100,6 +119,12 @@ export const POST = withApi(async (req) => {
     checkOutTime: attendance.checkOutTime,
     workingHours: (workMinutes / 60).toFixed(1),
     overtimeMinutes,
+    locationPolicy: {
+      status: attendance.locationPolicyStatus,
+      locationName: attendance.checkOutLocationName,
+      distanceMeters: attendance.checkOutDistanceMeters,
+      allowedRadiusMeters: attendance.checkOutAllowedRadiusMeters,
+    },
     message: 'Checked out successfully',
   })
 })

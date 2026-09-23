@@ -11,6 +11,9 @@ import Holiday from '@/models/Holiday'
 import Announcement from '@/models/Announcement'
 import Resignation from '@/models/Resignation'
 import TeamRequest from '@/models/TeamRequest'
+import '@/models/Department'
+import '@/models/Designation'
+import '@/models/LeaveType'
 
 function startOfDay(date = new Date()) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate())
@@ -90,4 +93,3 @@ export const GET = withApi(async (req) => {
     recentAnnouncements,
   })
 })
-

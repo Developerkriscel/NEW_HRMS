@@ -113,7 +113,7 @@ export function HierarchySection() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    employeeApi.getAll({ size: 1000 })
+    employeeApi.getAll({ size: 50 })
       .then(res => setEmployees(res.data.data.content || []))
       .catch(console.error)
       .finally(() => setLoading(false))

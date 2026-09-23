@@ -3,7 +3,7 @@ import api from './api'
 export const interviewApi = {
   list: (params) => api.get('/recruitment/interviews', { params }),
   listForApplication: (applicationId) => api.get(`/recruitment/applications/${applicationId}/interviews`),
-  create: (data) => api.post('/recruitment/interviews', data),
+  create: (data) => api.post('/recruitment/interviews', data, { timeout: 60000 }),
   get: (id) => api.get(`/recruitment/interviews/${id}`),
   availability: (params) => api.get('/recruitment/interviews/availability', { params }),
 

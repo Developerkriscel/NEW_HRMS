@@ -12,7 +12,7 @@ export const PUT = withApi(async (req, { params }) => {
   const { id } = params
 
   const body = await req.json()
-  const { assetTag, name, category, condition } = body
+  const { assetTag, name, category, condition, details, imageUrl, serialNumber, purchaseDate, cost, warrantyExpiry } = body
 
   const asset = await Asset.findOne({ _id: id, tenantId })
   if (!asset) return ok({ message: 'Asset not found' }, 404)
@@ -26,6 +26,12 @@ export const PUT = withApi(async (req, { params }) => {
   if (name) asset.name = name
   if (category) asset.category = category
   if (condition) asset.condition = condition
+  if (details !== undefined) asset.details = details
+  if (imageUrl !== undefined) asset.imageUrl = imageUrl
+  if (serialNumber !== undefined) asset.serialNumber = serialNumber
+  if (purchaseDate !== undefined) asset.purchaseDate = purchaseDate ? new Date(purchaseDate) : null
+  if (cost !== undefined) asset.cost = cost ? Number(cost) : null
+  if (warrantyExpiry !== undefined) asset.warrantyExpiry = warrantyExpiry ? new Date(warrantyExpiry) : null
 
   await asset.save()
   return ok(asset)

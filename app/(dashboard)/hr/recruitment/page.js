@@ -7,10 +7,12 @@ import { PositionDetailsModal } from '@/components/pages/recruitment/PositionDet
 import { SendOfferModal } from '@/components/pages/recruitment/SendOfferModal'
 import { OpenPositionModal } from '@/components/pages/recruitment/OpenPositionModal'
 import { PublishJobModal } from '@/components/pages/recruitment/PublishJobModal'
+import ManualCandidateModal from '@/components/pages/recruitment/ManualCandidateModal'
 import { ConfirmDialog } from '@/components/common/ConfirmDialog'
 import { useRecruitmentStore } from '@/store/recruitmentStore'
 import { useAuthStore } from '@/store/authStore'
 import { candidateApi } from '@/services/candidateApi'
+import { jobApi } from '@/services/jobApi'
 
 // Utility: parse a CSV string into an array of candidate-shaped objects
 // Supports any common column names (partial match, case-insensitive)
@@ -224,6 +226,7 @@ export default function RecruitmentDashboardPage() {
   const [uploadError, setUploadError] = useState(null)
   const [uploadFileName, setUploadFileName] = useState(null)
   const [analysisError, setAnalysisError] = useState(null)
+  const [showManualCandidateModal, setShowManualCandidateModal] = useState(false)
   const [selectedOfferCandidate, setSelectedOfferCandidate] = useState(null)
   const [schedulingCandidate, setSchedulingCandidate] = useState(null)
   const [schedulingStep, setSchedulingStep] = useState('details') // details, email, success
@@ -235,8 +238,47 @@ export default function RecruitmentDashboardPage() {
   // Global Store State
   const { candidates: candidatesData, offers: offersList, rejected: rejectedList, updateCandidateStatus, updateCandidateStage, selectCandidate, scheduleInterview, sendOffer, acceptOffer, rejectOffer, fetchCandidates, loading } = useRecruitmentStore()
   
+  const fetchPositions = async () => {
+    try {
+      const res = await jobApi.list()
+      const jobs = res.data?.data?.content || res.data?.data || []
+      const mappedJobs = jobs.map(job => ({
+        id: job._id || job.id,
+        title: job.jobTitle || job.title,
+        department: job.department?.name || job.department || 'Unknown',
+        departmentId: job.department?._id || job.department,
+        status: job.status === 'OPEN' ? 'Open' : job.status === 'DRAFT' ? 'Draft' : job.status === 'ON_HOLD' ? 'On Hold' : job.status === 'CLOSED' ? 'Closed' : job.status === 'CANCELLED' ? 'Cancelled' : job.status,
+        jobType: job.employmentType === 'FULL_TIME' ? 'Full-time' : job.employmentType === 'PART_TIME' ? 'Part-time' : job.employmentType === 'CONTRACT' ? 'Contract' : job.employmentType === 'INTERN' ? 'Intern' : 'Full-time',
+        employmentType: 'Permanent',
+        workMode: job.workMode === 'ONSITE' ? 'On-site' : job.workMode === 'HYBRID' ? 'Hybrid' : job.workMode === 'REMOTE' ? 'Remote' : 'On-site',
+        openings: job.totalOpenings || 1,
+        location: job.location?.name || job.location,
+        locationId: job.location?._id || job.location,
+        description: job.jobSummary || '',
+        responsibilities: job.responsibilities || '',
+        requiredSkills: job.requiredQualifications || '',
+        preferredSkills: job.preferredQualifications || '',
+        experience: job.minExperience ? `${job.minExperience}+ Years` : '',
+        salaryMin: job.internalMinCtc || '',
+        salaryMax: job.internalMaxCtc || '',
+        currency: job.currency || 'INR',
+        hiringManager: job.hiringManager?.firstName ? `${job.hiringManager.firstName} ${job.hiringManager.lastName || ''}` : '',
+        hiringManagerId: job.hiringManager?._id || job.hiringManager,
+        recruiter: job.recruiter?.firstName ? `${job.recruiter.firstName} ${job.recruiter.lastName || ''}` : '',
+        recruiterId: job.recruiter?._id || job.recruiter,
+        openingDate: job.openingDate ? new Date(job.openingDate).toISOString().split('T')[0] : '',
+        targetClosingDate: job.targetClosingDate ? new Date(job.targetClosingDate).toISOString().split('T')[0] : '',
+        expectedJoiningDate: job.expectedJoiningDate ? new Date(job.expectedJoiningDate).toISOString().split('T')[0] : ''
+      }))
+      setPositionsList(mappedJobs)
+    } catch (e) {
+      console.error('Failed to fetch positions', e)
+    }
+  }
+
   useEffect(() => {
     fetchCandidates()
+    fetchPositions()
   }, [fetchCandidates])
 
   const formatInterviewSchedule = (cand) => {
@@ -257,8 +299,30 @@ export default function RecruitmentDashboardPage() {
     const isApplied = isPipelineStatus && (cand.stage === 'Screening' || cand.stage === 'Applied' || cand.stage === 'AI Match' || !cand.stage);
     const isInterviewing = isPipelineStatus && !isApplied;
     
+    // Find next dynamic stage
+    let nextStage = null;
+    if (selectedPositionForCandidates?.pipelineStages?.length > 0) {
+      const activeStages = selectedPositionForCandidates.pipelineStages.filter(s => s.isActive !== false).sort((a, b) => a.order - b.order);
+      const currentIndex = activeStages.findIndex(s => s.name === cand.stage);
+      if (currentIndex >= 0 && currentIndex < activeStages.length - 1) {
+        const next = activeStages[currentIndex + 1];
+        if (next.category === 'SELECTED' || next.category === 'OFFER' || next.category === 'HIRED' || next.name.toLowerCase().includes('offer') || next.name.toLowerCase().includes('select')) {
+          nextStage = null;
+        } else {
+          nextStage = next.name;
+        }
+      }
+    }
+    
     return (
-      <div key={cand.id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-xl transition-all group relative overflow-hidden">
+      <div 
+        key={cand.id} 
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData('candidateId', cand.id);
+        }}
+        className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-xl transition-all group relative overflow-hidden cursor-grab active:cursor-grabbing"
+      >
         {cand.status === 'HIRED' && <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500"></div>}
         {(cand.status === 'Rejected' || cand.status === 'REJECTED') && <div className="absolute top-0 left-0 w-full h-1 bg-red-500"></div>}
         
@@ -277,7 +341,7 @@ export default function RecruitmentDashboardPage() {
               cand.score >= 70 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-400' :
               'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400'
           }`}>
-            <Sparkles className="w-3 h-3" /> {cand.score || 0}%
+            <Sparkles className="w-3 h-3" /> {Math.round(cand.score || 0)}%
           </div>
         </div>
         
@@ -310,8 +374,20 @@ export default function RecruitmentDashboardPage() {
             </span>
           </div>
           
+          {/* Show Shortlisted date if available or if they moved past applied */}
+          {(cand.shortlistedAt || cand.stage?.toLowerCase().includes('shortlist') || (!['Screening', 'Applied', 'AI Match'].includes(cand.stage) && cand.stage)) && (
+            <div className="flex justify-between items-center">
+              <span className="flex items-center gap-1"><Calendar className="w-3 h-3 text-purple-400"/> Shortlisted:</span>
+              <span className="font-medium text-slate-700 dark:text-slate-300">
+                {cand.shortlistedAt ? new Date(cand.shortlistedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) 
+                  : (cand.stage?.toLowerCase().includes('shortlist') && cand.stageEnteredAt) ? new Date(cand.stageEnteredAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) 
+                  : 'Yes'}
+              </span>
+            </div>
+          )}
+
           {/* Always show interview date if stage implies they moved past applied */}
-          {(cand.interviewAt || (!['Screening', 'Applied', 'AI Match'].includes(cand.stage) && cand.stage)) && (
+          {(cand.interviewAt || (!['Screening', 'Applied', 'AI Match', 'Shortlisted'].includes(cand.stage) && cand.stage)) && (
             <div className="flex justify-between items-center">
               <span className="flex items-center gap-1"><Calendar className="w-3 h-3 text-indigo-400"/> Select for interview:</span>
               <span className="font-medium text-slate-700 dark:text-slate-300">
@@ -320,14 +396,17 @@ export default function RecruitmentDashboardPage() {
             </div>
           )}
 
-          {cand.status === 'HIRED' && (
+          {/* Show Selected date if candidate is in Selected, Offered or Hired status */}
+          {(cand.selectedAt || ['Selected', 'Offered', 'HIRED'].includes(cand.status)) && (
             <div className="flex justify-between items-center">
-              <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-emerald-400"/> Selected:</span>
-              <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                {cand.selectedAt ? new Date(cand.selectedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+              <span className="flex items-center gap-1"><Calendar className="w-3 h-3 text-emerald-400"/> Selected:</span>
+              <span className="font-medium text-slate-700 dark:text-slate-300">
+                {cand.selectedAt ? new Date(cand.selectedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Yes'}
               </span>
             </div>
           )}
+
+
 
           {(() => {
             const offer = offersList.find(o => o.id === cand.id);
@@ -351,7 +430,7 @@ export default function RecruitmentDashboardPage() {
             <button onClick={() => handleCandidateStatusChange(cand, 'Pipeline')} className="w-full bg-slate-50 hover:bg-slate-100 text-slate-700 py-2 rounded-xl text-xs font-bold transition-colors">Restore to Pipeline</button>
           )}
           
-          {cand.status === 'Selected' && (
+          {(cand.status === 'Selected' || cand.status === 'Offered') && (
             (() => {
               const offer = offersList.find(o => o.id === cand.id);
               if (!offer || !offer.offerStatus || offer.offerStatus === 'Draft') {
@@ -391,23 +470,36 @@ export default function RecruitmentDashboardPage() {
             })()
           )}
 
-          {isApplied && (
-            <div className="flex gap-2">
-              <button onClick={() => handleCandidateStatusChange(cand, 'Rejected')} className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 py-2 rounded-xl text-xs font-bold transition-colors">Reject</button>
-              <button onClick={() => updateCandidateStage(cand.id, 'Technical Round')} className="flex-[2] bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-xl text-xs font-bold transition-colors">Select for interview</button>
-            </div>
-          )}
-
-          {isInterviewing && (
-            <>
-              <button onClick={() => setSchedulingCandidate(cand)} className={`w-full ${cand.stage.includes('(On ') ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-600' : 'bg-blue-50 hover:bg-blue-100 text-blue-600'} py-2 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 mb-2`}>
-                <Calendar className="w-3.5 h-3.5"/> {cand.stage.includes('(On ') ? 'Reschedule Interview' : 'Schedule Interview'}
-              </button>
+          {isPipelineStatus && cand.status !== 'Selected' && cand.status !== 'Rejected' && cand.status !== 'HIRED' && (
+            <div className="flex flex-col gap-2">
+              {cand.stage?.toLowerCase().includes('interview') || cand.stage?.toLowerCase().includes('round') ? (
+                <button onClick={() => setSchedulingCandidate(cand)} className={`w-full ${cand.interviewAt ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-600' : 'bg-blue-50 hover:bg-blue-100 text-blue-600'} py-2 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5`}>
+                  <Calendar className="w-3.5 h-3.5"/> {cand.interviewAt ? 'Reschedule Interview' : 'Schedule Interview'}
+                </button>
+              ) : null}
               <div className="flex gap-2">
                 <button onClick={() => handleCandidateStatusChange(cand, 'Rejected')} className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 py-2 rounded-xl text-xs font-bold transition-colors">Reject</button>
-                <button onClick={() => handleCandidateStatusChange(cand, 'Selected')} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-xl text-xs font-bold transition-colors">Select & Offer</button>
+                {nextStage ? (
+                  <button 
+                    onClick={() => updateCandidateStage(cand.id, nextStage)} 
+                    disabled={nextStage.toLowerCase().includes('select') && !cand.interviewAt}
+                    title={nextStage.toLowerCase().includes('select') && !cand.interviewAt ? "Schedule an interview first" : undefined}
+                    className={`flex-[2] ${nextStage.toLowerCase().includes('select') && !cand.interviewAt ? 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 text-white'} py-2 rounded-xl text-xs font-bold transition-colors truncate px-2`}
+                  >
+                    Move to {nextStage}
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => handleCandidateStatusChange(cand, 'Selected')} 
+                    disabled={!cand.interviewAt}
+                    title={!cand.interviewAt ? "Schedule an interview first" : undefined}
+                    className={`flex-[2] ${!cand.interviewAt ? 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white'} py-2 rounded-xl text-xs font-bold transition-colors truncate px-2`}
+                  >
+                    Select & Offer
+                  </button>
+                )}
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>
@@ -415,13 +507,7 @@ export default function RecruitmentDashboardPage() {
   };
 
   // Positions State
-  const [positionsList, setPositionsList] = useState([
-    { id: 1, title: 'Senior Frontend Developer', department: 'Engineering', status: 'Active' },
-    { id: 2, title: 'Product Designer', department: 'Design', status: 'Active' },
-    { id: 3, title: 'Marketing Specialist', department: 'Marketing', status: 'On Hold' },
-    { id: 4, title: 'Backend Developer', department: 'Engineering', status: 'Closed' },
-    { id: 5, title: 'Sales Manager', department: 'Sales', status: 'Closed' },
-  ])
+  const [positionsList, setPositionsList] = useState([])
 
 
   // Handle file upload — detects file type and routes to proper handler
@@ -561,14 +647,26 @@ export default function RecruitmentDashboardPage() {
     }
 
     setCandidatePhase('analyzing')
-    window.setTimeout(() => {
-      const analyzed = parsedCandidates
-        .map((candidate) => analyzeCandidateForPosition(candidate, selectedPositionForCandidates))
-        .sort((a, b) => (b.score || 0) - (a.score || 0))
+    try {
+      const response = await candidateApi.bulkAnalyze({
+        candidates: parsedCandidates,
+        jobId: selectedPositionForCandidates.id
+      })
+      const analyzed = response.data.candidates || response.data.data?.candidates || []
+      analyzed.sort((a, b) => {
+        const scoreDiff = (b.score || 0) - (a.score || 0)
+        if (scoreDiff !== 0) return scoreDiff
+        return (a.name || '').localeCompare(b.name || '')
+      })
+      
       setParsedCandidates(analyzed)
       setLocalCandidateStatuses({})
       setCandidatePhase('results')
-    }, 650)
+    } catch (error) {
+      console.error('Failed to analyze candidates:', error)
+      setAnalysisError('AI analysis failed. Please try again.')
+      setCandidatePhase('uploaded')
+    }
   }
 
   const handleAddAllToPipeline = async () => {
@@ -625,14 +723,42 @@ export default function RecruitmentDashboardPage() {
     }
   }
 
-  const handleSavePosition = (form) => {
-    if (editingPositionForModal) {
-      setPositionsList(positionsList.map(p => p.id === editingPositionForModal.id ? { ...p, ...form } : p))
-    } else {
-      setPositionsList([...positionsList, { id: Date.now(), ...form }])
+  const handleSavePosition = async (form) => {
+    try {
+      const payload = {
+        jobTitle: form.title,
+        department: form.departmentId && form.departmentId.match(/^[0-9a-fA-F]{24}$/) ? form.departmentId : undefined,
+        totalOpenings: parseInt(form.openings, 10) || 1,
+        employmentType: form.jobType === 'Full-time' ? 'FULL_TIME' : form.jobType === 'Part-time' ? 'PART_TIME' : form.jobType === 'Contract' ? 'CONTRACT' : form.jobType === 'Intern' ? 'INTERN' : undefined,
+        workMode: form.workMode === 'On-site' ? 'ONSITE' : form.workMode === 'Hybrid' ? 'HYBRID' : form.workMode === 'Remote' ? 'REMOTE' : undefined,
+        location: form.locationId && form.locationId.match(/^[0-9a-fA-F]{24}$/) ? form.locationId : undefined,
+        jobSummary: form.description,
+        responsibilities: form.responsibilities,
+        requiredQualifications: form.requiredSkills,
+        preferredQualifications: form.preferredSkills,
+        minExperience: form.experience ? parseInt(form.experience) || undefined : undefined,
+        internalMinCtc: form.salaryMin ? parseInt(form.salaryMin) : undefined,
+        internalMaxCtc: form.salaryMax ? parseInt(form.salaryMax) : undefined,
+        currency: form.currency || 'INR',
+        hiringManager: form.hiringManagerId && form.hiringManagerId.match(/^[0-9a-fA-F]{24}$/) ? form.hiringManagerId : undefined,
+        recruiter: form.recruiterId && form.recruiterId.match(/^[0-9a-fA-F]{24}$/) ? form.recruiterId : undefined,
+        openingDate: form.openingDate || undefined,
+        targetClosingDate: form.targetClosingDate || undefined,
+        expectedJoiningDate: form.expectedJoiningDate || undefined,
+        status: form.status === 'Open' ? 'OPEN' : form.status === 'Draft' ? 'DRAFT' : form.status === 'On Hold' ? 'ON_HOLD' : form.status === 'Closed' ? 'CLOSED' : form.status === 'Cancelled' ? 'CANCELLED' : 'DRAFT'
+      }
+
+      if (editingPositionForModal) {
+        await jobApi.update(editingPositionForModal.id, payload)
+      } else {
+        await jobApi.create(payload)
+      }
+      setShowOpenPositionModal(false)
+      setEditingPositionForModal(null)
+      fetchPositions()
+    } catch (e) {
+      console.error('Failed to save position:', e)
     }
-    setShowOpenPositionModal(false)
-    setEditingPositionForModal(null)
   }
 
   const handleDeletePosition = (id) => {
@@ -768,7 +894,7 @@ export default function RecruitmentDashboardPage() {
     return activeCandidateKpi === section
   }
   const candidateBoardGridClass = activeCandidateKpi === 'all'
-    ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6'
+    ? 'flex overflow-x-auto gap-6 pb-4 snap-x hide-scrollbar'
     : 'grid grid-cols-1 gap-6'
 
   return (
@@ -867,9 +993,19 @@ export default function RecruitmentDashboardPage() {
                   {positionsList.filter(p => activeKpi === 'positions' ? p.status !== 'Closed' : p.status === 'Closed').map(pos => (
                     <tr 
                       key={pos.id} 
-                      onClick={(e) => {
+                      onClick={async (e) => {
                         if (e.target.closest('button')) return;
-                        setSelectedPositionForCandidates(pos);
+                        try {
+                          const res = await jobApi.get(pos.id);
+                          const fullJob = res.data?.data || res.data;
+                          setSelectedPositionForCandidates({
+                            ...pos,
+                            pipelineStages: fullJob.pipelineStages
+                          });
+                        } catch (err) {
+                          console.error('Failed to fetch job details', err);
+                          setSelectedPositionForCandidates(pos);
+                        }
                         setActiveTab('candidates');
                       }}
                       className="hover:bg-indigo-50/30 dark:hover:bg-indigo-500/5 transition-colors group cursor-pointer"
@@ -878,8 +1014,8 @@ export default function RecruitmentDashboardPage() {
                       {/* Column 1: ID, Title, Job Type */}
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 font-bold text-xs border border-slate-200 dark:border-slate-700">
-                            #{pos.id.toString().padStart(3, '0')}
+                          <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 font-bold text-xs border border-slate-200 dark:border-slate-700 overflow-hidden">
+                            {pos.title ? pos.title.substring(0, 2).toUpperCase() : 'JB'}
                           </div>
                           <div>
                             <div className="font-bold text-slate-900 dark:text-white text-base group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
@@ -980,12 +1116,20 @@ export default function RecruitmentDashboardPage() {
               </div>
               <div className="flex items-center gap-3">
                 {candidatePhase !== 'upload' && (
-                  <button 
-                    onClick={() => setCandidatePhase('upload')}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-md shadow-indigo-500/20"
-                  >
-                    <UploadCloud className="w-4 h-4" /> Upload Candidate Data
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => setCandidatePhase('upload')}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-md shadow-indigo-500/20"
+                    >
+                      <UploadCloud className="w-4 h-4" /> Upload Candidate Data
+                    </button>
+                    <button 
+                      onClick={() => setShowManualCandidateModal(true)}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-md shadow-emerald-500/20"
+                    >
+                      <UserPlus className="w-4 h-4" /> Add Candidate Manually
+                    </button>
+                  </div>
                 )}
                 <button 
                   onClick={() => {
@@ -1002,37 +1146,62 @@ export default function RecruitmentDashboardPage() {
 
           {candidatePhase === 'idle' && (
             <div className="space-y-6">
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
-                {[
-                  { id: 'applied', label: 'Applied Candidates', value: candidateStats.applied.toString(), icon: Users, colorClass: 'bg-gradient-to-br from-blue-500 to-blue-600 shadow-blue-500/30' },
-                  { id: 'interviewing', label: 'Interview Candidates', value: candidateStats.interviewing.toString(), icon: Calendar, colorClass: 'bg-gradient-to-br from-amber-500 to-orange-600 shadow-amber-500/30' },
-                  { id: 'selected', label: 'Selected Candidates', value: candidateStats.selected.toString(), icon: CheckCircle2, colorClass: 'bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-emerald-500/30' },
-                  { id: 'rejected', label: 'Rejected Candidates', value: candidateStats.rejected.toString(), icon: Trash2, colorClass: 'bg-gradient-to-br from-rose-500 to-rose-600 shadow-rose-500/30' },
-                  { id: 'referral', label: 'Referral Candidates', value: candidateStats.referral.toString(), icon: UserPlus, colorClass: 'bg-gradient-to-br from-indigo-500 to-indigo-600 shadow-indigo-500/30' },
-                ].map(kpi => {
-                  const Icon = kpi.icon
-                  const isActive = activeCandidateKpi === kpi.id
+              <div className="flex gap-3 w-full animate-in fade-in slide-in-from-bottom-4 duration-300 overflow-hidden">
+                {(() => {
+                  let kpiList = []
+                  if (selectedPositionForCandidates && selectedPositionForCandidates.pipelineStages && selectedPositionForCandidates.pipelineStages.length > 0) {
+                    const activeStages = selectedPositionForCandidates.pipelineStages.filter(s => s.isActive !== false).sort((a, b) => a.order - b.order)
+                    kpiList = activeStages.map(stage => {
+                      const count = candidatesData.filter(c => {
+                        if (c.role !== selectedPositionForCandidates.title) return false
+                        return (c.status === 'ACTIVE' || c.status === 'ON_HOLD' || c.status === 'Pipeline' || c.status === 'Referral') && c.stage === stage.name
+                      }).length
+                      
+                      let Icon = Users
+                      let colorClass = 'bg-gradient-to-br from-blue-500 to-blue-600 shadow-blue-500/30'
+                      if (stage.category === 'SCREENING') { Icon = FileText; colorClass = 'bg-gradient-to-br from-purple-500 to-purple-600 shadow-purple-500/30' }
+                      else if (stage.category === 'INTERVIEW' || stage.category === 'ASSESSMENT') { Icon = Calendar; colorClass = 'bg-gradient-to-br from-amber-500 to-orange-600 shadow-amber-500/30' }
+                      else if (stage.category === 'SELECTED' || stage.category === 'OFFER' || stage.category === 'HIRED') { Icon = CheckCircle2; colorClass = 'bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-emerald-500/30' }
+                      
+                      return { id: stage.name, label: stage.name, value: count.toString(), icon: Icon, colorClass }
+                    })
+                    const rejectedCount = candidatesData.filter(c => c.role === selectedPositionForCandidates.title && c.status === 'Rejected').length
+                    kpiList.push({ id: 'rejected', label: 'Rejected', value: rejectedCount.toString(), icon: Trash2, colorClass: 'bg-gradient-to-br from-rose-500 to-rose-600 shadow-rose-500/30' })
+                  } else {
+                    kpiList = [
+                      { id: 'applied', label: 'Applied', value: candidateStats.applied.toString(), icon: Users, colorClass: 'bg-gradient-to-br from-blue-500 to-blue-600 shadow-blue-500/30' },
+                      { id: 'interviewing', label: 'Interviewing', value: candidateStats.interviewing.toString(), icon: Calendar, colorClass: 'bg-gradient-to-br from-amber-500 to-orange-600 shadow-amber-500/30' },
+                      { id: 'selected', label: 'Selected', value: candidateStats.selected.toString(), icon: CheckCircle2, colorClass: 'bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-emerald-500/30' },
+                      { id: 'rejected', label: 'Rejected', value: candidateStats.rejected.toString(), icon: Trash2, colorClass: 'bg-gradient-to-br from-rose-500 to-rose-600 shadow-rose-500/30' },
+                      { id: 'referral', label: 'Referrals', value: candidateStats.referral.toString(), icon: UserPlus, colorClass: 'bg-gradient-to-br from-indigo-500 to-indigo-600 shadow-indigo-500/30' },
+                    ]
+                  }
+                  
+                  return kpiList.map(kpi => {
+                    const Icon = kpi.icon
+                    const isActive = activeCandidateKpi === kpi.id
 
-                  return (
-                    <div 
-                      key={kpi.id}
-                      onClick={() => setActiveCandidateKpi(isActive ? 'all' : kpi.id)}
-                      className={`cursor-pointer rounded-2xl p-4 border shadow-sm flex items-center gap-4 transition-all duration-300 group ${
-                        isActive
-                          ? 'bg-white dark:bg-slate-900 border-indigo-400 shadow-lg ring-2 ring-indigo-400/20 transform scale-[1.02]' 
-                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:shadow-xl hover:-translate-y-1'
-                      }`}
-                    >
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-white shadow-lg transition-transform group-hover:scale-110 duration-300 ${isActive ? 'bg-gradient-to-br from-indigo-500 to-purple-600 shadow-indigo-500/40' : kpi.colorClass}`}>
-                        <Icon className="w-5 h-5 drop-shadow-md" />
+                    return (
+                      <div 
+                        key={kpi.id}
+                        onClick={() => setActiveCandidateKpi(isActive ? 'all' : kpi.id)}
+                        className={`cursor-pointer rounded-2xl p-3 border shadow-sm flex items-center gap-2 transition-all duration-300 group flex-1 min-w-0 ${
+                          isActive
+                            ? 'bg-white dark:bg-slate-900 border-indigo-400 shadow-lg ring-2 ring-indigo-400/20 transform scale-[1.02] z-10' 
+                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:shadow-md hover:-translate-y-1'
+                        }`}
+                      >
+                        <div className={`w-8 h-8 xl:w-10 xl:h-10 rounded-lg flex items-center justify-center flex-shrink-0 text-white shadow-md transition-transform group-hover:scale-110 duration-300 ${isActive ? 'bg-gradient-to-br from-indigo-500 to-purple-600 shadow-indigo-500/40' : kpi.colorClass}`}>
+                          <Icon className="w-4 h-4 xl:w-5 xl:h-5 drop-shadow-md" />
+                        </div>
+                        <div className="min-w-0 flex-1 overflow-hidden">
+                          <p className={`text-[9px] xl:text-xs font-bold uppercase tracking-wider mb-0.5 xl:mb-1 truncate transition-colors ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>{kpi.label}</p>
+                          <h3 className={`text-lg xl:text-2xl font-bold truncate transition-colors ${isActive ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400'}`}>{kpi.value}</h3>
+                        </div>
                       </div>
-                      <div>
-                        <p className={`text-xs font-bold uppercase tracking-wider mb-1 transition-colors ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>{kpi.label}</p>
-                        <h3 className={`text-2xl font-bold transition-colors ${isActive ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400'}`}>{kpi.value}</h3>
-                      </div>
-                    </div>
-                  )
-                })}
+                    )
+                  })
+                })()}
               </div>
 
               {/* Kanban Pipeline Board */}
@@ -1116,7 +1285,7 @@ export default function RecruitmentDashboardPage() {
                                 </td>
                                 <td className="px-5 py-4">
                                   <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2.5 py-1 text-xs font-bold text-orange-600">
-                                    <Sparkles className="h-3 w-3" /> {candidate.score || 0}%
+                                    <Sparkles className="h-3 w-3" /> {Math.round(candidate.score || 0)}%
                                   </span>
                                 </td>
                                 <td className="px-5 py-4 text-right">
@@ -1144,176 +1313,310 @@ export default function RecruitmentDashboardPage() {
                   </div>
                 ) : (
                 <div className={candidateBoardGridClass}>
-                  {/* Applied / Screening Column */}
-                  {shouldShowCandidateSection('applied') && (
-                  <div className="bg-slate-50 dark:bg-slate-900/50 rounded-3xl p-4 border border-slate-200 dark:border-slate-800 flex flex-col h-full min-h-[500px]">
-                    <div className="flex items-center justify-between mb-4 px-2">
-                      <h3 className="font-bold text-sm uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-blue-400"></div> Applied
-                      </h3>
-                      <span className="bg-white dark:bg-slate-800 px-2.5 py-0.5 rounded-full text-xs font-bold text-slate-600 dark:text-slate-300 shadow-sm border border-slate-100 dark:border-slate-700">
-                        {candidatesData.filter(c => {
-                          if (selectedPositionForCandidates && c.role !== selectedPositionForCandidates.title) return false;
-                          if (activeCandidateKpi !== 'all') {
-                            if (activeCandidateKpi === 'applied' && !isAppliedCandidate(c)) return false;
-                            if (activeCandidateKpi === 'interviewing' && !isInterviewCandidate(c)) return false;
-                            if (activeCandidateKpi === 'selected' && c.status !== 'Selected') return false;
-                            if (activeCandidateKpi === 'rejected' && c.status !== 'Rejected') return false;
-                            if (activeCandidateKpi === 'referral' && c.status !== 'Referral') return false;
-                          }
-                          return (c.status === 'ACTIVE' || c.status === 'ON_HOLD' || c.status === 'Pipeline' || c.status === 'Referral') && (c.stage === 'Screening' || c.stage === 'Applied' || !c.stage);
-                        }).length}
-                      </span>
-                    </div>
-                    <div className="space-y-4 flex-1">
-                      {candidatesData.filter(c => {
-                        if (selectedPositionForCandidates && c.role !== selectedPositionForCandidates.title) return false;
-                        if (activeCandidateKpi !== 'all') {
-                          if (activeCandidateKpi === 'applied' && !isAppliedCandidate(c)) return false;
-                          if (activeCandidateKpi === 'interviewing' && !isInterviewCandidate(c)) return false;
-                          if (activeCandidateKpi === 'selected' && c.status !== 'Selected') return false;
-                          if (activeCandidateKpi === 'rejected' && c.status !== 'Rejected') return false;
-                          if (activeCandidateKpi === 'referral' && c.status !== 'Referral') return false;
+                  {(() => {
+                    if (selectedPositionForCandidates && selectedPositionForCandidates.pipelineStages && selectedPositionForCandidates.pipelineStages.length > 0) {
+                      const activeStages = selectedPositionForCandidates.pipelineStages.filter(s => s.isActive !== false).sort((a, b) => a.order - b.order)
+                      
+                      const columns = activeStages.map((stage, i) => {
+                        if (!shouldShowCandidateSection(stage.name)) return null;
+                        
+                        const stageCandidates = candidatesData.filter(c => {
+                          if (c.role !== selectedPositionForCandidates.title) return false;
+                          return (['ACTIVE', 'ON_HOLD', 'Pipeline', 'Referral', 'Selected', 'Offered', 'HIRED'].includes(c.status)) && c.stage === stage.name;
+                        })
+                        
+                        let dotColor = 'bg-blue-400'
+                        let bgClass = 'bg-slate-50 dark:bg-slate-900/50'
+                        let borderClass = 'border-slate-200 dark:border-slate-800'
+                        let textClass = 'text-slate-500 dark:text-slate-400'
+                        let badgeBg = 'bg-white dark:bg-slate-800'
+                        let badgeText = 'text-slate-600 dark:text-slate-300'
+                        let badgeBorder = 'border-slate-100 dark:border-slate-700'
+                        
+                        if (stage.category === 'SCREENING') {
+                          dotColor = 'bg-purple-500'
+                          bgClass = 'bg-purple-50/50 dark:bg-purple-900/10'
+                          borderClass = 'border-purple-100 dark:border-purple-900/30'
+                          textClass = 'text-purple-600 dark:text-purple-400'
+                          badgeText = 'text-purple-700 dark:text-purple-300'
+                          badgeBorder = 'border-purple-100 dark:border-slate-700'
+                        } else if (stage.category === 'INTERVIEW' || stage.category === 'ASSESSMENT') {
+                          dotColor = 'bg-indigo-500 animate-pulse'
+                          bgClass = 'bg-indigo-50/50 dark:bg-indigo-900/10'
+                          borderClass = 'border-indigo-100 dark:border-indigo-900/30'
+                          textClass = 'text-indigo-600 dark:text-indigo-400'
+                          badgeText = 'text-indigo-700 dark:text-indigo-300'
+                          badgeBorder = 'border-indigo-100 dark:border-slate-700'
+                        } else if (stage.category === 'SELECTED' || stage.category === 'OFFER' || stage.category === 'HIRED') {
+                          dotColor = 'bg-emerald-500'
+                          bgClass = 'bg-emerald-50/50 dark:bg-emerald-900/10'
+                          borderClass = 'border-emerald-100 dark:border-emerald-900/30'
+                          textClass = 'text-emerald-600 dark:text-emerald-400'
+                          badgeText = 'text-emerald-700 dark:text-emerald-300'
+                          badgeBorder = 'border-emerald-100 dark:border-slate-700'
                         }
-                        return (c.status === 'ACTIVE' || c.status === 'ON_HOLD' || c.status === 'Pipeline' || c.status === 'Referral') && (c.stage === 'Screening' || c.stage === 'Applied' || c.stage === 'AI Match' || !c.stage);
-                      }).map(cand => renderCandidateCard(cand))}
-                    </div>
-                  </div>
-                  )}
+                        
+                        return (
+                          <div 
+                            key={stage.name} 
+                            className={`${bgClass} rounded-3xl p-4 border ${borderClass} flex flex-col h-full min-h-[500px] min-w-[320px] w-[320px] flex-shrink-0 snap-start transition-colors`}
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={(e) => {
+                              const candidateId = e.dataTransfer.getData('candidateId');
+                              if (candidateId) {
+                                updateCandidateStage(candidateId, stage.name);
+                              }
+                            }}
+                          >
+                            <div className="flex items-center justify-between mb-4 px-2">
+                              <h3 className={`font-bold text-sm uppercase tracking-wider flex items-center gap-2 ${textClass}`}>
+                                <div className={`w-2 h-2 rounded-full ${dotColor}`}></div> {stage.name}
+                              </h3>
+                              <span className={`${badgeBg} px-2.5 py-0.5 rounded-full text-xs font-bold ${badgeText} shadow-sm border ${badgeBorder}`}>
+                                {stageCandidates.length}
+                              </span>
+                            </div>
+                            <div className="space-y-4 flex-1">
+                              {stageCandidates.map(cand => renderCandidateCard(cand))}
+                            </div>
+                          </div>
+                        )
+                      })
+                      
+                      // Always append Rejected column
+                      if (shouldShowCandidateSection('rejected')) {
+                        const rejectedCandidates = candidatesData.filter(c => c.role === selectedPositionForCandidates.title && c.status === 'Rejected')
+                        columns.push(
+                          <div 
+                            key="rejected" 
+                            className="bg-rose-50/50 dark:bg-rose-900/10 rounded-3xl p-4 border border-rose-100 dark:border-rose-900/30 flex flex-col h-full min-h-[500px] min-w-[320px] w-[320px] flex-shrink-0 snap-start transition-colors"
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={(e) => {
+                              const candidateId = e.dataTransfer.getData('candidateId');
+                              if (candidateId) {
+                                handleCandidateStatusChange({ id: candidateId }, 'Rejected');
+                              }
+                            }}
+                          >
+                            <div className="flex items-center justify-between mb-4 px-2">
+                              <h3 className="font-bold text-sm uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-rose-500"></div> Rejected
+                              </h3>
+                              <span className="bg-white dark:bg-slate-800 px-2.5 py-0.5 rounded-full text-xs font-bold text-rose-700 dark:text-rose-300 shadow-sm border border-slate-100 dark:border-slate-700">
+                                {rejectedCandidates.length}
+                              </span>
+                            </div>
+                            <div className="space-y-4 flex-1">
+                              {rejectedCandidates.map(cand => renderCandidateCard(cand))}
+                            </div>
+                          </div>
+                        )
+                      }
+                      
+                      return columns
+                    } else {
+                      // Fallback columns when no job is selected (All Candidates)
+                      return (
+                        <>
+                          {/* Applied / Screening Column */}
+                          {shouldShowCandidateSection('applied') && (
+                          <div 
+                            className="bg-slate-50 dark:bg-slate-900/50 rounded-3xl p-4 border border-slate-200 dark:border-slate-800 flex flex-col h-full min-h-[500px] min-w-[320px] w-[320px] flex-shrink-0 snap-start transition-colors"
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={(e) => {
+                              const candidateId = e.dataTransfer.getData('candidateId');
+                              if (candidateId) {
+                                handleCandidateStatusChange({ id: candidateId }, 'Pipeline');
+                              }
+                            }}
+                          >
+                            <div className="flex items-center justify-between mb-4 px-2">
+                              <h3 className="font-bold text-sm uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-blue-400"></div> Applied
+                              </h3>
+                              <span className="bg-white dark:bg-slate-800 px-2.5 py-0.5 rounded-full text-xs font-bold text-slate-600 dark:text-slate-300 shadow-sm border border-slate-100 dark:border-slate-700">
+                                {candidatesData.filter(c => {
+                                  if (activeCandidateKpi !== 'all') {
+                                    if (activeCandidateKpi === 'applied' && !isAppliedCandidate(c)) return false;
+                                  }
+                                  return (c.status === 'ACTIVE' || c.status === 'ON_HOLD' || c.status === 'Pipeline' || c.status === 'Referral') && (c.stage === 'Screening' || c.stage === 'Applied' || !c.stage);
+                                }).length}
+                              </span>
+                            </div>
+                            <div className="space-y-4 flex-1">
+                              {candidatesData.filter(c => {
+                                if (activeCandidateKpi !== 'all') {
+                                  if (activeCandidateKpi === 'applied' && !isAppliedCandidate(c)) return false;
+                                }
+                                return (c.status === 'ACTIVE' || c.status === 'ON_HOLD' || c.status === 'Pipeline' || c.status === 'Referral') && (c.stage === 'Screening' || c.stage === 'Applied' || c.stage === 'AI Match' || !c.stage);
+                              }).map(cand => renderCandidateCard(cand))}
+                            </div>
+                          </div>
+                          )}
 
-                  {/* Interviewing Column */}
-                  {shouldShowCandidateSection('interviewing') && (
-                  <div className="bg-indigo-50/50 dark:bg-indigo-900/10 rounded-3xl p-4 border border-indigo-100 dark:border-indigo-900/30 flex flex-col h-full min-h-[500px]">
-                    <div className="flex items-center justify-between mb-4 px-2">
-                      <h3 className="font-bold text-sm uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></div> Interviewing
-                      </h3>
-                      <span className="bg-white dark:bg-slate-800 px-2.5 py-0.5 rounded-full text-xs font-bold text-indigo-700 dark:text-indigo-300 shadow-sm border border-indigo-100 dark:border-slate-700">
-                        {candidatesData.filter(c => {
-                          if (selectedPositionForCandidates && c.role !== selectedPositionForCandidates.title) return false;
-                          if (activeCandidateKpi !== 'all') {
-                            if (activeCandidateKpi === 'applied' && !isAppliedCandidate(c)) return false;
-                            if (activeCandidateKpi === 'interviewing' && !isInterviewCandidate(c)) return false;
-                            if (activeCandidateKpi === 'selected' && c.status !== 'Selected') return false;
-                            if (activeCandidateKpi === 'rejected' && c.status !== 'Rejected') return false;
-                            if (activeCandidateKpi === 'referral' && c.status !== 'Referral') return false;
-                          }
-                          return (c.status === 'ACTIVE' || c.status === 'ON_HOLD' || c.status === 'Pipeline' || c.status === 'Referral') && c.stage !== 'Screening' && c.stage !== 'Applied' && c.stage !== 'AI Match' && !!c.stage;
-                        }).length}
-                      </span>
-                    </div>
-                    <div className="space-y-4 flex-1">
-                      {candidatesData.filter(c => {
-                        if (selectedPositionForCandidates && c.role !== selectedPositionForCandidates.title) return false;
-                        if (activeCandidateKpi !== 'all') {
-                          if (activeCandidateKpi === 'applied' && !isAppliedCandidate(c)) return false;
-                          if (activeCandidateKpi === 'interviewing' && !isInterviewCandidate(c)) return false;
-                          if (activeCandidateKpi === 'selected' && c.status !== 'Selected') return false;
-                          if (activeCandidateKpi === 'rejected' && c.status !== 'Rejected') return false;
-                          if (activeCandidateKpi === 'referral' && c.status !== 'Referral') return false;
-                        }
-                        return (c.status === 'ACTIVE' || c.status === 'ON_HOLD' || c.status === 'Pipeline' || c.status === 'Referral') && c.stage !== 'Screening' && c.stage !== 'Applied' && c.stage !== 'AI Match' && !!c.stage;
-                      }).map(cand => renderCandidateCard(cand))}
-                    </div>
-                  </div>
-                  )}
+                          {/* Interviewing Column */}
+                          {shouldShowCandidateSection('interviewing') && (
+                          <div 
+                            className="bg-indigo-50/50 dark:bg-indigo-900/10 rounded-3xl p-4 border border-indigo-100 dark:border-indigo-900/30 flex flex-col h-full min-h-[500px] min-w-[320px] w-[320px] flex-shrink-0 snap-start transition-colors"
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={(e) => {
+                              const candidateId = e.dataTransfer.getData('candidateId');
+                              if (candidateId) {
+                                updateCandidateStage(candidateId, 'Technical Round');
+                              }
+                            }}
+                          >
+                            <div className="flex items-center justify-between mb-4 px-2">
+                              <h3 className="font-bold text-sm uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></div> Interviewing
+                              </h3>
+                              <span className="bg-white dark:bg-slate-800 px-2.5 py-0.5 rounded-full text-xs font-bold text-indigo-700 dark:text-indigo-300 shadow-sm border border-indigo-100 dark:border-slate-700">
+                                {candidatesData.filter(c => {
+                                  if (activeCandidateKpi !== 'all') {
+                                    if (activeCandidateKpi === 'interviewing' && !isInterviewCandidate(c)) return false;
+                                  }
+                                  return (c.status === 'ACTIVE' || c.status === 'ON_HOLD' || c.status === 'Pipeline' || c.status === 'Referral') && c.stage !== 'Screening' && c.stage !== 'Applied' && c.stage !== 'AI Match' && !!c.stage;
+                                }).length}
+                              </span>
+                            </div>
+                            <div className="space-y-4 flex-1">
+                              {candidatesData.filter(c => {
+                                if (activeCandidateKpi !== 'all') {
+                                  if (activeCandidateKpi === 'interviewing' && !isInterviewCandidate(c)) return false;
+                                }
+                                return (c.status === 'ACTIVE' || c.status === 'ON_HOLD' || c.status === 'Pipeline' || c.status === 'Referral') && c.stage !== 'Screening' && c.stage !== 'Applied' && c.stage !== 'AI Match' && !!c.stage;
+                              }).map(cand => renderCandidateCard(cand))}
+                            </div>
+                          </div>
+                          )}
 
-                  {/* Selected Column */}
-                  {shouldShowCandidateSection('selected') && (
-                  <div className="bg-emerald-50/50 dark:bg-emerald-900/10 rounded-3xl p-4 border border-emerald-100 dark:border-emerald-900/30 flex flex-col h-full min-h-[500px]">
-                    <div className="flex items-center justify-between mb-4 px-2">
-                      <h3 className="font-bold text-sm uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500"></div> Selected
-                      </h3>
-                      <span className="bg-white dark:bg-slate-800 px-2.5 py-0.5 rounded-full text-xs font-bold text-emerald-700 dark:text-emerald-300 shadow-sm border border-emerald-100 dark:border-slate-700">
-                        {candidatesData.filter(c => {
-                          if (selectedPositionForCandidates && c.role !== selectedPositionForCandidates.title) return false;
-                          if (activeCandidateKpi !== 'all') {
-                            if (activeCandidateKpi === 'applied' && !isAppliedCandidate(c)) return false;
-                            if (activeCandidateKpi === 'interviewing' && !isInterviewCandidate(c)) return false;
-                            if (activeCandidateKpi === 'selected' && c.status !== 'Selected') return false;
-                            if (activeCandidateKpi === 'rejected' && c.status !== 'Rejected') return false;
-                            if (activeCandidateKpi === 'referral' && c.status !== 'Referral') return false;
-                          }
-                          return c.status === 'Selected';
-                        }).length}
-                      </span>
-                    </div>
-                    <div className="space-y-4 flex-1">
-                      {candidatesData.filter(c => {
-                        if (selectedPositionForCandidates && c.role !== selectedPositionForCandidates.title) return false;
-                        if (activeCandidateKpi !== 'all') {
-                          if (activeCandidateKpi === 'applied' && !isAppliedCandidate(c)) return false;
-                          if (activeCandidateKpi === 'interviewing' && !isInterviewCandidate(c)) return false;
-                          if (activeCandidateKpi === 'selected' && c.status !== 'Selected') return false;
-                          if (activeCandidateKpi === 'rejected' && c.status !== 'Rejected') return false;
-                          if (activeCandidateKpi === 'referral' && c.status !== 'Referral') return false;
-                        }
-                        return c.status === 'Selected';
-                      }).map(cand => renderCandidateCard(cand))}
-                    </div>
-                  </div>
-                  )}
+                          {/* Selected Column */}
+                          {shouldShowCandidateSection('selected') && (
+                          <div 
+                            className="bg-emerald-50/50 dark:bg-emerald-900/10 rounded-3xl p-4 border border-emerald-100 dark:border-emerald-900/30 flex flex-col h-full min-h-[500px] min-w-[320px] w-[320px] flex-shrink-0 snap-start transition-colors"
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={(e) => {
+                              const candidateId = e.dataTransfer.getData('candidateId');
+                              if (candidateId) {
+                                handleCandidateStatusChange({ id: candidateId }, 'Selected');
+                              }
+                            }}
+                          >
+                            <div className="flex items-center justify-between mb-4 px-2">
+                              <h3 className="font-bold text-sm uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-emerald-500"></div> Selected
+                              </h3>
+                              <span className="bg-white dark:bg-slate-800 px-2.5 py-0.5 rounded-full text-xs font-bold text-emerald-700 dark:text-emerald-300 shadow-sm border border-emerald-100 dark:border-slate-700">
+                                {candidatesData.filter(c => {
+                                  if (activeCandidateKpi !== 'all') {
+                                    if (activeCandidateKpi === 'selected' && c.status !== 'Selected') return false;
+                                  }
+                                  return c.status === 'Selected';
+                                }).length}
+                              </span>
+                            </div>
+                            <div className="space-y-4 flex-1">
+                              {candidatesData.filter(c => {
+                                if (activeCandidateKpi !== 'all') {
+                                  if (activeCandidateKpi === 'selected' && c.status !== 'Selected') return false;
+                                }
+                                return c.status === 'Selected';
+                              }).map(cand => renderCandidateCard(cand))}
+                            </div>
+                          </div>
+                          )}
 
-                  {/* Rejected Column */}
-                  {shouldShowCandidateSection('rejected') && (
-                  <div className="bg-rose-50/50 dark:bg-rose-900/10 rounded-3xl p-4 border border-rose-100 dark:border-rose-900/30 flex flex-col h-full min-h-[500px]">
-                    <div className="flex items-center justify-between mb-4 px-2">
-                      <h3 className="font-bold text-sm uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-rose-500"></div> Rejected
-                      </h3>
-                      <span className="bg-white dark:bg-slate-800 px-2.5 py-0.5 rounded-full text-xs font-bold text-rose-700 dark:text-rose-300 shadow-sm border border-rose-100 dark:border-slate-700">
-                        {candidatesData.filter(c => {
-                          if (selectedPositionForCandidates && c.role !== selectedPositionForCandidates.title) return false;
-                          if (activeCandidateKpi !== 'all') {
-                            if (activeCandidateKpi === 'applied' && !isAppliedCandidate(c)) return false;
-                            if (activeCandidateKpi === 'interviewing' && !isInterviewCandidate(c)) return false;
-                            if (activeCandidateKpi === 'selected' && c.status !== 'Selected') return false;
-                            if (activeCandidateKpi === 'rejected' && c.status !== 'Rejected') return false;
-                            if (activeCandidateKpi === 'referral' && c.status !== 'Referral') return false;
-                          }
-                          return c.status === 'Rejected';
-                        }).length}
-                      </span>
-                    </div>
-                    <div className="space-y-4 flex-1">
-                      {candidatesData.filter(c => {
-                        if (selectedPositionForCandidates && c.role !== selectedPositionForCandidates.title) return false;
-                        if (activeCandidateKpi !== 'all') {
-                          if (activeCandidateKpi === 'applied' && !isAppliedCandidate(c)) return false;
-                          if (activeCandidateKpi === 'interviewing' && !isInterviewCandidate(c)) return false;
-                          if (activeCandidateKpi === 'selected' && c.status !== 'Selected') return false;
-                          if (activeCandidateKpi === 'rejected' && c.status !== 'Rejected') return false;
-                          if (activeCandidateKpi === 'referral' && c.status !== 'Referral') return false;
-                        }
-                        return c.status === 'Rejected';
-                      }).map(cand => renderCandidateCard(cand))}
-                    </div>
-                  </div>
-                  )}
+                          {/* Offered Column */}
+                          {shouldShowCandidateSection('selected') && (
+                          <div 
+                            className="bg-amber-50/50 dark:bg-amber-900/10 rounded-3xl p-4 border border-amber-100 dark:border-amber-900/30 flex flex-col h-full min-h-[500px] min-w-[320px] w-[320px] flex-shrink-0 snap-start transition-colors"
+                          >
+                            <div className="flex items-center justify-between mb-4 px-2">
+                              <h3 className="font-bold text-sm uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-amber-500"></div> Offered
+                              </h3>
+                              <span className="bg-white dark:bg-slate-800 px-2.5 py-0.5 rounded-full text-xs font-bold text-amber-700 dark:text-amber-300 shadow-sm border border-amber-100 dark:border-slate-700">
+                                {candidatesData.filter(c => {
+                                  if (activeCandidateKpi !== 'all') {
+                                    if (activeCandidateKpi === 'selected' && c.status !== 'Offered') return false;
+                                  }
+                                  return c.status === 'Offered';
+                                }).length}
+                              </span>
+                            </div>
+                            <div className="space-y-4 flex-1">
+                              {candidatesData.filter(c => {
+                                if (activeCandidateKpi !== 'all') {
+                                  if (activeCandidateKpi === 'selected' && c.status !== 'Offered') return false;
+                                }
+                                return c.status === 'Offered';
+                              }).map(cand => renderCandidateCard(cand))}
+                            </div>
+                          </div>
+                          )}
 
-                  {/* Referral Column */}
-                  {shouldShowCandidateSection('referral') && (
-                    <div className="bg-indigo-50/50 dark:bg-indigo-900/10 rounded-3xl p-4 border border-indigo-100 dark:border-indigo-900/30 flex flex-col h-full min-h-[500px]">
-                      <div className="flex items-center justify-between mb-4 px-2">
-                        <h3 className="font-bold text-sm uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-indigo-500"></div> Referrals
-                        </h3>
-                        <span className="bg-white dark:bg-slate-800 px-2.5 py-0.5 rounded-full text-xs font-bold text-indigo-700 dark:text-indigo-300 shadow-sm border border-indigo-100 dark:border-slate-700">
-                          {candidatesData.filter(c => {
-                            if (selectedPositionForCandidates && c.role !== selectedPositionForCandidates.title) return false
-                            return c.status === 'Referral'
-                          }).length}
-                        </span>
-                      </div>
-                      <div className="space-y-4 flex-1">
-                        {candidatesData.filter(c => {
-                          if (selectedPositionForCandidates && c.role !== selectedPositionForCandidates.title) return false
-                          return c.status === 'Referral'
-                        }).map(cand => renderCandidateCard(cand))}
-                      </div>
-                    </div>
-                  )}
+                          {/* Rejected Column */}
+                          {shouldShowCandidateSection('rejected') && (
+                          <div 
+                            className="bg-rose-50/50 dark:bg-rose-900/10 rounded-3xl p-4 border border-rose-100 dark:border-rose-900/30 flex flex-col h-full min-h-[500px] min-w-[320px] w-[320px] flex-shrink-0 snap-start transition-colors"
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={(e) => {
+                              const candidateId = e.dataTransfer.getData('candidateId');
+                              if (candidateId) {
+                                handleCandidateStatusChange({ id: candidateId }, 'Rejected');
+                              }
+                            }}
+                          >
+                            <div className="flex items-center justify-between mb-4 px-2">
+                              <h3 className="font-bold text-sm uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-rose-500"></div> Rejected
+                              </h3>
+                              <span className="bg-white dark:bg-slate-800 px-2.5 py-0.5 rounded-full text-xs font-bold text-rose-700 dark:text-rose-300 shadow-sm border border-slate-100 dark:border-slate-700">
+                                {candidatesData.filter(c => {
+                                  if (activeCandidateKpi !== 'all') {
+                                    if (activeCandidateKpi === 'rejected' && c.status !== 'Rejected') return false;
+                                  }
+                                  return c.status === 'Rejected';
+                                }).length}
+                              </span>
+                            </div>
+                            <div className="space-y-4 flex-1">
+                              {candidatesData.filter(c => {
+                                if (activeCandidateKpi !== 'all') {
+                                  if (activeCandidateKpi === 'rejected' && c.status !== 'Rejected') return false;
+                                }
+                                return c.status === 'Rejected';
+                              }).map(cand => renderCandidateCard(cand))}
+                            </div>
+                          </div>
+                          )}
+
+                          {/* Referral Column */}
+                          {shouldShowCandidateSection('referral') && (
+                            <div 
+                              className="bg-indigo-50/50 dark:bg-indigo-900/10 rounded-3xl p-4 border border-indigo-100 dark:border-indigo-900/30 flex flex-col h-full min-h-[500px] min-w-[320px] w-[320px] flex-shrink-0 snap-start transition-colors"
+                            >
+                              <div className="flex items-center justify-between mb-4 px-2">
+                                <h3 className="font-bold text-sm uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
+                                  <div className="w-2 h-2 rounded-full bg-indigo-500"></div> Referrals
+                                </h3>
+                                <span className="bg-white dark:bg-slate-800 px-2.5 py-0.5 rounded-full text-xs font-bold text-indigo-700 dark:text-indigo-300 shadow-sm border border-indigo-100 dark:border-slate-700">
+                                  {candidatesData.filter(c => {
+                                    return c.status === 'Referral'
+                                  }).length}
+                                </span>
+                              </div>
+                              <div className="space-y-4 flex-1">
+                                {candidatesData.filter(c => {
+                                  return c.status === 'Referral'
+                                }).map(cand => renderCandidateCard(cand))}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )
+                    }
+                  })()}
                 </div>
                 )}
               </div>
@@ -1588,7 +1891,7 @@ export default function RecruitmentDashboardPage() {
                         <td className="px-6 py-4">
                           <div className="min-w-32">
                             <div className="mb-1 flex items-center justify-between gap-2">
-                              <span className="text-lg font-black text-slate-900 dark:text-white">{cand.score || 0}%</span>
+                              <span className="text-lg font-black text-slate-900 dark:text-white">{Math.round(cand.score || 0)}%</span>
                               <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
                                 cand.score >= 85 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
                                 : cand.score >= 70 ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300'
@@ -1623,16 +1926,24 @@ export default function RecruitmentDashboardPage() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="max-w-xs space-y-1">
-                            {(cand.strengths || []).slice(0, 2).map((item, idx) => (
-                              <div key={idx} className="flex items-start gap-1.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-300">
-                                <Check className="mt-0.5 h-3 w-3 shrink-0" /> {item}
+                            {cand.analysisSummary && (!cand.strengths || cand.strengths.length === 0) && (!cand.concerns || cand.concerns.length === 0) ? (
+                              <div className="text-[11px] text-slate-500 italic">
+                                {cand.analysisSummary}
                               </div>
-                            ))}
-                            {(cand.concerns || []).slice(0, 2).map((item, idx) => (
-                              <div key={idx} className="flex items-start gap-1.5 text-[11px] font-bold text-amber-600 dark:text-amber-300">
-                                <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" /> {item}
-                              </div>
-                            ))}
+                            ) : (
+                              <>
+                                {(cand.strengths || []).slice(0, 2).map((item, idx) => (
+                                  <div key={idx} className="flex items-start gap-1.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-300">
+                                    <Check className="mt-0.5 h-3 w-3 shrink-0" /> {item}
+                                  </div>
+                                ))}
+                                {(cand.concerns || []).slice(0, 2).map((item, idx) => (
+                                  <div key={idx} className="flex items-start gap-1.5 text-[11px] font-bold text-amber-600 dark:text-amber-300">
+                                    <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" /> {item}
+                                  </div>
+                                ))}
+                              </>
+                            )}
                           </div>
                         </td>
                         <td className="px-6 py-4 text-right">
@@ -1683,11 +1994,43 @@ export default function RecruitmentDashboardPage() {
         candidate={selectedOfferCandidate} 
         onClose={() => setSelectedOfferCandidate(null)}
         onSend={async (candidate) => {
+          const originalCand = candidatesData.find(c => c.id === candidate.id)
+          if (candidate.email && originalCand && candidate.email !== originalCand.email) {
+            try {
+              await candidateApi.update(candidate.candidateId || originalCand.candidateId, { email: candidate.email })
+            } catch (e) {
+              console.warn('Failed to update candidate email before sending offer', e)
+            }
+          }
           await sendOffer(candidate)
           setSelectedOfferCandidate(null)
         }}
       />
-      
+      {showManualCandidateModal && (
+        <ManualCandidateModal 
+          position={selectedPositionForCandidates}
+          onClose={() => setShowManualCandidateModal(false)}
+          onSave={async (candidateData) => {
+            try {
+              const res = await candidateApi.bulkApply({
+                jobId: selectedPositionForCandidates?.id,
+                candidates: [candidateData]
+              });
+              if (res.data?.success) {
+                toast.success('Candidate added manually!');
+                setShowManualCandidateModal(false);
+                fetchCandidates();
+              } else {
+                toast.error(res.data?.message || 'Failed to add candidate');
+              }
+            } catch (err) {
+              const msg = err.response?.data?.message || 'Failed to add candidate';
+              toast.error(msg);
+            }
+          }}
+        />
+      )}
+
       {showOpenPositionModal && (
         <OpenPositionModal 
           initialData={editingPositionForModal}
@@ -1702,13 +2045,20 @@ export default function RecruitmentDashboardPage() {
       <ConfirmDialog
         open={!!positionToDelete}
         title="Delete Position"
-        description={`Are you sure you want to delete the position "${positionToDelete?.title}"? This action cannot be undone.`}
+        description={`Are you sure you want to cancel the position "${positionToDelete?.title}"? This will cancel the job posting.`}
         requireReason={false}
-        confirmLabel="Delete"
+        confirmLabel="Cancel Position"
         variant="danger"
         onClose={() => setPositionToDelete(null)}
-        onConfirm={() => {
-          setPositionsList(positionsList.filter(p => p.id !== positionToDelete.id))
+        onConfirm={async () => {
+          if (positionToDelete) {
+            try {
+              await jobApi.cancel(positionToDelete.id, 'Cancelled from UI', true)
+              fetchPositions()
+            } catch (err) {
+              console.error('Failed to cancel position', err)
+            }
+          }
           setPositionToDelete(null)
         }}
       />
@@ -1725,7 +2075,7 @@ export default function RecruitmentDashboardPage() {
       {/* Schedule Interview Modal */}
       {schedulingCandidate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 max-w-md w-full max-h-[90vh] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-200 relative">
+          <div className={`bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 w-full max-h-[90vh] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-200 relative transition-all ${schedulingStep === 'email' ? 'max-w-2xl' : 'max-w-md'}`}>
             
             {schedulingStep === 'success' && scheduleSuccess ? (
               <div className="py-8 text-center animate-in zoom-in duration-300">
@@ -1787,11 +2137,25 @@ export default function RecruitmentDashboardPage() {
                   Review and edit the invitation email before sending it to <strong className="text-slate-900 dark:text-white">{schedulingCandidate.name}</strong>.
                 </p>
 
-                <textarea 
-                  className="w-full h-64 p-4 text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-800 dark:border-slate-700 dark:text-white mb-4 resize-none" 
-                  value={emailDraft}
-                  onChange={(e) => setEmailDraft(e.target.value)}
-                />
+                <div className="mb-4">
+                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">To (Candidate Email)</label>
+                  <input
+                    type="email"
+                    required
+                    className="w-full px-4 py-2.5 text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-800 dark:border-slate-700 dark:text-white transition-all"
+                    value={schedulingCandidate.email || ''}
+                    onChange={(e) => setSchedulingCandidate({ ...schedulingCandidate, email: e.target.value })}
+                  />
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Email Message</label>
+                  <textarea 
+                    className="w-full min-h-[400px] p-4 text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-800 dark:border-slate-700 dark:text-white resize-y" 
+                    value={emailDraft}
+                    onChange={(e) => setEmailDraft(e.target.value)}
+                  />
+                </div>
 
                 <div className="flex gap-3">
                   <button type="button" onClick={() => setSchedulingStep('details')} className="flex-1 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-bold hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700 transition-colors">
@@ -1805,6 +2169,15 @@ export default function RecruitmentDashboardPage() {
                         : schedulingFormData.type.includes('HR') ? 'MANAGERIAL'
                         : 'SCREENING'
                       try {
+                        const originalCand = candidatesData.find(c => c.id === schedulingCandidate.id)
+                        if (schedulingCandidate.email && originalCand && schedulingCandidate.email !== originalCand.email) {
+                          try {
+                            await candidateApi.update(schedulingCandidate.candidateId, { email: schedulingCandidate.email })
+                          } catch (e) {
+                            console.warn('Failed to update candidate email before scheduling', e)
+                          }
+                        }
+
                         await scheduleInterview(schedulingCandidate, {
                           roundName: schedulingFormData.type,
                           type: interviewType,
@@ -1813,6 +2186,8 @@ export default function RecruitmentDashboardPage() {
                           mode: schedulingFormData.link ? 'ONLINE' : 'ONLINE',
                           meetingUrl: schedulingFormData.link,
                           candidateInstructions: emailDraft,
+                          candidateEmailSubject: `Interview Invite: ${schedulingFormData.type} at NexaHR`,
+                          candidateEmail: schedulingCandidate.email,
                         })
                       } catch (err) {
                         console.warn('Interview schedule failed:', err.message)
@@ -1968,7 +2343,7 @@ NexaHR Talent Acquisition Team`;
                     <p className="text-sm font-medium text-indigo-600 dark:text-indigo-400">{selectedCandidateInfo.role}</p>
                   </div>
                   <div className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400 rounded-lg text-xs font-bold">
-                    <Sparkles className="w-3.5 h-3.5" /> {selectedCandidateInfo.score}% Match
+                    <Sparkles className="w-3.5 h-3.5" /> {Math.round(selectedCandidateInfo.score || 0)}% Match
                   </div>
                 </div>
 

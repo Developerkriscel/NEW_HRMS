@@ -41,6 +41,8 @@ const CandidateJobMatchSchema = new mongoose.Schema(
       }],
 
     summary: { type: String, default: null },
+    aiMatchScore: { type: Number, default: null }, // Supplementary AI score
+    aiMatchReasoning: { type: String, default: null }, // LLM explanation of the match
 
     modelVersion: { type: String, required: true },
     rulesVersion: { type: String, required: true },

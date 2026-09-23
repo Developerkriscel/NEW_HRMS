@@ -14,4 +14,5 @@ export const attendanceApi = {
   approveRegularization: (id) => api.put(`/attendance/regularization/${id}/approve`),
   rejectRegularization: (id, reason) => api.put(`/attendance/regularization/${id}/reject`, null, { params: { reason } }),
   getMonthlyReport: (params) => api.get('/attendance/monthly-report', { params }),
+  updateAttendance: (id, data) => api.put(`/attendance/${id}`, data),
 }

@@ -1,4 +1,4 @@
-'use client'
+3333333333333333333333333333333333333333'use client'
 
 import React, { useRef, useState, useCallback, useEffect } from 'react'
 import { Camera, X, RefreshCw, CheckCircle2, MapPin } from 'lucide-react'
@@ -126,7 +126,7 @@ export function CameraVerificationModal({ isOpen, onClose, onConfirm, locationRe
   if (!isOpen) return null
 
   const content = (
-    <div className={`${variant === 'inline' ? 'w-full overflow-hidden' : 'max-h-[90dvh] w-full max-w-md overflow-y-auto'} rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900 flex flex-col animate-in zoom-in-95 duration-200`}>
+    <div className={`${variant === 'inline' ? 'w-full overflow-hidden' : 'max-h-[90dvh] w-full max-w-xl mx-auto overflow-y-auto'} rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900 flex flex-col animate-in zoom-in-95 duration-200`}>
       
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
@@ -153,10 +153,10 @@ export function CameraVerificationModal({ isOpen, onClose, onConfirm, locationRe
             </button>
           </div>
         ) : capturedImage ? (
-          <div className="w-full flex flex-col items-center animate-in fade-in zoom-in-95 duration-300">
-            <div className={`${variant === 'inline' ? 'w-56 h-56 sm:w-64 sm:h-64' : 'w-64 h-64'} relative rounded-full overflow-hidden border-4 border-indigo-500 shadow-xl mb-6`}>
+          <div className={`w-full flex flex-col animate-in fade-in zoom-in-95 duration-300 ${variant === 'inline' ? 'items-start' : 'items-center'}`}>
+            <div className={`${variant === 'inline' ? 'w-full max-w-md aspect-[4/3]' : 'w-full max-w-md aspect-video sm:aspect-[4/3]'} relative rounded-2xl overflow-hidden border-2 border-slate-200 dark:border-slate-700 shadow-xl mb-6`}>
               <img src={capturedImage} alt="Captured" className="w-full h-full object-cover" />
-              <div className="absolute inset-0 border-4 border-white/20 rounded-full pointer-events-none"></div>
+              <div className="absolute inset-0 border-2 border-white/20 rounded-2xl pointer-events-none"></div>
             </div>
             
             {locationRequired && (
@@ -175,7 +175,7 @@ export function CameraVerificationModal({ isOpen, onClose, onConfirm, locationRe
                   <div className="flex items-start gap-3 text-emerald-600 dark:text-emerald-400">
                     <CheckCircle2 className="w-5 h-5 mt-0.5" />
                     <div>
-                      <p className="text-sm font-medium">Location Verified</p>
+                      <p className="text-sm font-medium">Device Location Captured</p>
                       <p className="text-xs opacity-80 mt-0.5">Accuracy: {Math.round(location.accuracy)}m</p>
                     </div>
                   </div>
@@ -198,8 +198,8 @@ export function CameraVerificationModal({ isOpen, onClose, onConfirm, locationRe
             </div>
           </div>
         ) : (
-          <div className="w-full flex flex-col items-center">
-            <div className={`${variant === 'inline' ? 'w-56 h-56 sm:w-64 sm:h-64' : 'w-72 h-72'} relative rounded-full overflow-hidden bg-slate-900 border-4 border-white dark:border-slate-800 shadow-2xl mb-8 group`}>
+          <div className={`w-full flex flex-col ${variant === 'inline' ? 'items-start' : 'items-center'}`}>
+            <div className={`${variant === 'inline' ? 'w-full max-w-md aspect-[4/3]' : 'w-full max-w-md aspect-video sm:aspect-[4/3]'} relative rounded-2xl overflow-hidden bg-slate-900 border-2 border-slate-200 dark:border-slate-700 shadow-2xl mb-8 group`}>
               <video 
                 ref={(node) => {
                   videoRef.current = node
@@ -214,23 +214,30 @@ export function CameraVerificationModal({ isOpen, onClose, onConfirm, locationRe
               />
               
               {/* Face Guide Overlay */}
-              <div className="absolute inset-0 pointer-events-none">
-                <div className="w-full h-full border-[8px] border-black/20 rounded-full"></div>
-                <div className="absolute inset-8 border-2 border-dashed border-white/50 rounded-[40%] animate-pulse"></div>
+              <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
+                <div className="w-48 h-64 border-2 border-dashed border-white/50 rounded-[40%] animate-pulse"></div>
                 <div className="absolute bottom-6 left-0 right-0 text-center">
-                  <span className="bg-black/50 text-white text-xs px-3 py-1 rounded-full backdrop-blur-md">
+                  <span className="bg-black/50 text-white text-xs px-4 py-1.5 rounded-full backdrop-blur-md">
                     Keep face inside frame
                   </span>
                 </div>
               </div>
             </div>
 
-            <button 
-              onClick={handleCapture}
-              className="group relative w-16 h-16 rounded-full bg-white dark:bg-slate-800 border-4 border-slate-200 dark:border-slate-700 flex items-center justify-center hover:border-indigo-500 transition-colors"
-            >
-              <div className="w-12 h-12 rounded-full bg-indigo-600 group-hover:scale-95 transition-transform"></div>
-            </button>
+            <div className="flex gap-3 w-full max-w-md">
+              <button 
+                onClick={handleCapture}
+                className="flex-1 py-3 px-4 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-500/30"
+              >
+                Capture
+              </button>
+              <button 
+                onClick={onClose}
+                className="flex-1 py-3 px-4 rounded-xl bg-slate-500 text-white font-medium hover:bg-slate-600 transition-colors shadow-lg shadow-slate-500/30"
+              >
+                Close
+              </button>
+            </div>
           </div>
         )}
       </div>

@@ -50,5 +50,5 @@ export const POST = withApi(async (req, { params }) => {
 
   await logAction(session, { action: 'APPLICATION_SHORTLISTED', entityType: 'Application', entityId: application._id, description: `Shortlisted ${application.applicationCode}`, req })
 
-  return ok(application, 'Candidate shortlisted')
+  return ok({ ...application.toObject(), shortlistedAt: application.stageEnteredAt || new Date() }, 'Candidate shortlisted')
 })

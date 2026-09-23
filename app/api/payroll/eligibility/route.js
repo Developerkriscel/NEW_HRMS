@@ -6,6 +6,42 @@ import { requireAuth, requireRole, requireTenantId } from '@/lib/auth'
 import Employee from '@/models/Employee'
 import SalaryStructure from '@/models/SalaryStructure'
 import Attendance from '@/models/Attendance'
+import Payslip from '@/models/Payslip'
+
+const LOCKED_PAYSLIP_STATUSES = ['PROCESSING', 'REVIEW', 'APPROVED', 'FINALIZED', 'PAID']
+
+function getPayrollWindow(month, year) {
+  const periodStart = new Date(year, month - 1, 1)
+  const monthEnd = new Date(year, month, 0)
+  const today = new Date()
+  const periodEnd = today.getFullYear() === year && today.getMonth() === month - 1
+    ? new Date(year, month - 1, today.getDate())
+    : monthEnd
+  periodEnd.setHours(23, 59, 59, 999)
+  return { periodStart, periodEnd }
+}
+
+function employeeActiveDuringPeriodQuery(periodStart, periodEnd) {
+  return {
+    status: { $in: ['ACTIVE', 'PROBATION', 'NOTICE_PERIOD'] },
+    $and: [
+      {
+        $or: [
+          { joiningDate: { $lte: periodEnd } },
+          { joiningDate: null },
+          { joiningDate: { $exists: false } },
+        ],
+      },
+      {
+        $or: [
+          { lastWorkingDate: { $gte: periodStart } },
+          { lastWorkingDate: null },
+          { lastWorkingDate: { $exists: false } },
+        ],
+      },
+    ],
+  }
+}
 
 export const GET = withApi(async (req) => {
   const session = await requireAuth()
@@ -20,11 +56,13 @@ export const GET = withApi(async (req) => {
     return fail('Valid month and year are required', 400)
   }
 
-  // 1. Get all active employees
+  const { periodStart, periodEnd } = getPayrollWindow(month, year)
+
+  // 1. Get employees who were active during this payroll period
   const employees = await Employee.find({
     tenantId,
     deleted: false,
-    status: { $in: ['ACTIVE', 'PROBATION', 'NOTICE_PERIOD'] }
+    ...employeeActiveDuringPeriodQuery(periodStart, periodEnd),
   }).select('firstName lastName employeeCode ctc')
 
   const employeeIds = employees.map(e => e._id)
@@ -51,8 +89,8 @@ export const GET = withApi(async (req) => {
   })
 
   // 3. Find missing attendance (employees with 0 attendance records for the month)
-  const monthStart = new Date(year, month - 1, 1)
-  const monthEnd = new Date(year, month, 0, 23, 59, 59, 999)
+  const monthStart = periodStart
+  const monthEnd = periodEnd
   
   const attendanceRecords = await Attendance.aggregate([
     {
@@ -79,10 +117,45 @@ export const GET = withApi(async (req) => {
     }
   })
 
+  const existingPayslips = await Payslip.find({
+    tenantId,
+    month,
+    year,
+    deleted: false,
+    employee: { $in: employeeIds },
+    status: { $in: LOCKED_PAYSLIP_STATUSES },
+  })
+    .select('employee status netSalary updatedAt paymentDate')
+    .lean()
+
+  const employeeById = new Map(employees.map((employee) => [employee._id.toString(), employee]))
+  const lockedEmployeeIds = new Set(existingPayslips.map((payslip) => payslip.employee.toString()))
+  const missingSalaryIds = new Set(missingSalary.map((employee) => employee._id.toString()))
+  const blockedPayslips = existingPayslips.map((payslip) => {
+    const employee = employeeById.get(payslip.employee.toString())
+    return {
+      employeeId: payslip.employee,
+      name: employee ? `${employee.firstName} ${employee.lastName}` : 'Employee',
+      code: employee?.employeeCode || '',
+      status: payslip.status,
+      netSalary: payslip.netSalary || 0,
+      paymentDate: payslip.paymentDate || null,
+      updatedAt: payslip.updatedAt || null,
+    }
+  })
+
+  const totalSalaryEligible = employees.length - missingSalary.length
+  const totalProcessable = employees.filter((employee) => (
+    !missingSalaryIds.has(employee._id.toString())
+    && !lockedEmployeeIds.has(employee._id.toString())
+  )).length
+
   return ok({
     totalEmployees: employees.length,
-    totalEligible: Math.max(0, employees.length - missingSalary.length),
+    totalEligible: Math.max(0, totalSalaryEligible),
+    totalProcessable: Math.max(0, totalProcessable),
     missingSalary,
-    missingAttendance
+    missingAttendance,
+    blockedPayslips,
   })
 })

@@ -18,7 +18,7 @@ export function RolesPermissionsSection() {
 
   function load() {
     setLoading(true)
-    Promise.all([employeeApi.getAll({ size: 500 }), permissionApi.getAll()])
+    Promise.all([employeeApi.getAll({ size: 50 }), permissionApi.getAll()])
       .then(([empRes, permRes]) => {
         setEmployees(empRes.data.data.content)
         setPermissions(permRes.data.data)
@@ -62,11 +62,12 @@ export function RolesPermissionsSection() {
           else if (role === 'EMPLOYEE') { bg = 'bg-purple-50 dark:bg-purple-500/10'; color = 'text-purple-600 dark:text-purple-400' }
           
           return (
-            <div key={role} className="max-h-[90dvh] overflow-y-auto group relative overflow-hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 rounded-2xl shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300">
-              <div className={`absolute top-0 right-0 w-24 h-24 rounded-full ${bg} -mr-8 -mt-8 transition-transform group-hover:scale-150 duration-500 ease-out`}></div>
-              <div className="relative z-10">
-                <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">{role.replace(/_/g, ' ')}</p>
-                <h3 className={`text-2xl font-bold tracking-tight ${color}`}>{employees.filter((e) => e.role === role).length}</h3>
+            <div key={role} className="flex items-center justify-between bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-4 py-3 rounded-2xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300">
+              <div>
+                <h3 className={`text-xl font-black leading-none ${color}`}>{employees.filter((e) => e.role === role).length}</h3>
+                <p className="mt-1 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{role.replace(/_/g, ' ')}</p>
+              </div>
+              <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${bg}`}>
               </div>
             </div>
           )

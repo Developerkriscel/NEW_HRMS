@@ -21,6 +21,15 @@ export const PUT = withApi(async (req, { params }) => {
     return ok({ message: 'Asset is not currently assigned' }, 400)
   }
 
+  if (asset.assignedTo && asset.assignedDate) {
+    asset.assignmentHistory.push({
+      employeeId: asset.assignedTo,
+      assignedDate: asset.assignedDate,
+      recoveredDate: new Date(),
+      conditionOnRecovery: condition || asset.condition
+    })
+  }
+
   asset.assignedTo = null
   asset.assignedDate = null
   asset.status = status || 'AVAILABLE'

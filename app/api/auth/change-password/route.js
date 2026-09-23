@@ -7,13 +7,14 @@ import { findUserByEmail } from '@/lib/userLookup'
 import PlatformOperator from '@/models/PlatformOperator'
 import Employee from '@/models/Employee'
 import { revokeOtherAccountSessions } from '@/lib/accountSessions'
+import { isDevAuthAllowed } from '@/lib/devLogin'
 
 export const POST = withApi(async (req) => {
   const session = await requireAuth()
   const { currentPassword, newPassword } = await req.json()
   if (!currentPassword || !newPassword) return fail('Current and new password are required', 400)
 
-  if (session.devLogin && process.env.NODE_ENV !== 'production') {
+  if (session.devLogin && isDevAuthAllowed(req)) {
     const strength = validatePasswordStrength(newPassword)
     if (!strength.valid) return fail(strength.message, 400, 'WEAK_PASSWORD')
     return ok(null, 'Password changed successfully in test mode')

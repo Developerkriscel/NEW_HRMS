@@ -5,14 +5,15 @@ import { NextResponse } from 'next/server'
 import { ok, fail } from '@/lib/apiResponse'
 import { ApiError, blacklistToken, clearAuthCookies, decodeJwt, revokePlatformSession, ACCESS_COOKIE, REFRESH_COOKIE } from '@/lib/auth'
 import { revokeAccountSession } from '@/lib/accountSessions'
+import { isDevAuthAllowed } from '@/lib/devLogin'
 
-export async function POST() {
+export async function POST(req) {
   try {
     const cookieStore = cookies()
     const accessToken = cookieStore.get(ACCESS_COOKIE)?.value
     const refreshToken = cookieStore.get(REFRESH_COOKIE)?.value
     const decoded = decodeJwt(accessToken)
-    const isDevLogin = decoded?.devLogin && process.env.NODE_ENV !== 'production'
+    const isDevLogin = decoded?.devLogin && isDevAuthAllowed(req)
 
     if (!isDevLogin) {
       if (accessToken) await blacklistToken(accessToken)

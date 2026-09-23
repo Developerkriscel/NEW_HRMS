@@ -1,629 +1,482 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Check, Database, Download, Loader2, RotateCw, ShieldCheck } from 'lucide-react'
-import { Badge } from '@/components/common/Badge'
-import { PageLoader } from '@/components/common/LoadingSpinner'
-import { PermissionDenied } from '@/components/common/PermissionDenied'
-import { ConfirmDialog } from '@/components/common/ConfirmDialog'
+import { useEffect, useRef, useState } from 'react'
+import { useRouter, useParams } from 'next/navigation'
+import {
+  ArrowLeft,
+  Building2,
+  CheckCircle2,
+  ImagePlus,
+  Loader2,
+  Mail,
+  ShieldCheck,
+  Upload,
+} from 'lucide-react'
 import { platformApi } from '@/services/platformApi'
 import { tenantApi } from '@/services/tenantApi'
-import { formatDate, formatCurrency } from '@/lib/utils'
-import { useAuthStore } from '@/store/authStore'
+import { cn } from '@/lib/utils'
 
-const TABS = ['Overview', 'Subscription', 'Modules', 'Usage', 'Primary Admin', 'Provisioning', 'Security', 'Billing', 'Audit History', 'Data Management']
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
-const TRANSITIONS = {
-  TRIAL: ['ACTIVE', 'GRACE', 'SUSPENDED', 'ARCHIVED'],
-  ACTIVE: ['GRACE', 'SUSPENDED', 'ARCHIVED'],
-  GRACE: ['ACTIVE', 'SUSPENDED', 'ARCHIVED'],
-  SUSPENDED: ['ACTIVE', 'ARCHIVED'],
-  ARCHIVED: ['ACTIVE', 'PURGE_SCHEDULED'],
-  PURGE_SCHEDULED: ['ARCHIVED'],
-  PURGED: [],
+const BUSINESS_TYPES = ['Restaurant', 'Cafe', 'Cloud Kitchen', 'Bakery', 'QSR', 'Bar & Restaurant', 'Food Court', 'Other']
+const INDIAN_STATES = [
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Delhi', 'Goa', 'Gujarat', 'Haryana',
+  'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya',
+  'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+  'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+]
+
+function defaultForm() {
+  return {
+    companyName: '',
+    legalBusinessName: '',
+    tenantCode: '',
+    industryType: 'Restaurant',
+    logoUrl: '',
+    logoPreview: '',
+    website: '',
+    gstNumber: '',
+    panNumber: '',
+    businessRegistrationNumber: '',
+    email: '',
+    phone: '+91 ',
+    address: '',
+    country: 'India',
+    state: '',
+    city: '',
+    pincode: '',
+    timezone: 'Asia/Kolkata',
+    currency: 'INR',
+  }
 }
 
-function InfoRow({ label, value }) {
+function isEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim())
+}
+
+function isUrl(value) {
+  if (!value) return true
+  try {
+    const parsed = new URL(value)
+    return ['http:', 'https:'].includes(parsed.protocol)
+  } catch {
+    return false
+  }
+}
+
+function isPhone(value) {
+  return /^\+\d{1,4}[\d\s-]{7,18}$/.test(String(value || '').trim())
+}
+
+function isGstin(value) {
+  return !value || /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(String(value).trim().toUpperCase())
+}
+
+function isPan(value) {
+  return !value || /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(String(value).trim().toUpperCase())
+}
+
+function isIndianPin(country, value) {
+  return country !== 'India' || /^[1-9][0-9]{5}$/.test(String(value || '').trim())
+}
+
+function Field({ label, required, error, hint, children }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-bold text-slate-700 dark:text-slate-300">
+        {label}{required && <span className="text-rose-500"> *</span>}
+      </span>
+      {children}
+      {error ? <span className="mt-1 block text-xs font-semibold text-rose-500">{error}</span> : null}
+      {!error && hint ? <span className="mt-1 block text-[11px] font-medium text-slate-400">{hint}</span> : null}
+    </label>
+  )
+}
+
+const SECTION_COLORS = {
+  blue: {
+    blob: 'bg-blue-500/5 dark:bg-blue-500/10',
+    iconBg: 'from-blue-50 to-indigo-50 dark:from-blue-900/40 dark:to-indigo-900/40 text-blue-600 dark:text-blue-400 ring-blue-100/50 dark:ring-blue-800/50',
+  },
+  emerald: {
+    blob: 'bg-emerald-500/5 dark:bg-emerald-500/10',
+    iconBg: 'from-emerald-50 to-teal-50 dark:from-emerald-900/40 dark:to-teal-900/40 text-emerald-600 dark:text-emerald-400 ring-emerald-100/50 dark:ring-emerald-800/50',
+  },
+  rose: {
+    blob: 'bg-rose-500/5 dark:bg-rose-500/10',
+    iconBg: 'from-rose-50 to-pink-50 dark:from-rose-900/40 dark:to-pink-900/40 text-rose-600 dark:text-rose-400 ring-rose-100/50 dark:ring-rose-800/50',
+  },
+  amber: {
+    blob: 'bg-amber-500/5 dark:bg-amber-500/10',
+    iconBg: 'from-amber-50 to-orange-50 dark:from-amber-900/40 dark:to-orange-900/40 text-amber-600 dark:text-amber-400 ring-amber-100/50 dark:ring-amber-800/50',
+  },
+}
+
+function Section({ title, description, icon: Icon, color = 'blue', children }) {
+  const theme = SECTION_COLORS[color] || SECTION_COLORS.blue
+  return (
+    <section className="relative overflow-hidden rounded-[24px] border border-slate-200/60 bg-white/80 p-6 shadow-sm backdrop-blur-xl transition-all hover:shadow-md dark:border-slate-800/60 dark:bg-slate-900/80">
+      <div className={cn("absolute -right-20 -top-20 h-40 w-40 rounded-full blur-[80px] pointer-events-none", theme.blob)} />
+      <div className="relative mb-6 flex items-center gap-4 border-b border-slate-100/80 pb-5 dark:border-slate-800/80">
+        <div className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br shadow-sm ring-1", theme.iconBg)}>
+          <Icon className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-base font-black tracking-tight text-slate-900 dark:text-white">{title}</h2>
+          {description ? <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{description}</p> : null}
+        </div>
+      </div>
+      <div className="relative">{children}</div>
+    </section>
+  )
+}
+
+function ImageUploader({ label, value, uploading, error, onFile, onRemove }) {
+  const inputRef = useRef(null)
+
   return (
     <div>
-      <p className="text-xs text-slate-400 mb-0.5">{label}</p>
-      <p className="text-sm text-slate-800 dark:text-slate-200 font-medium truncate">{value ?? '—'}</p>
-    </div>
-  )
-}
-
-function Panel({ title, action, children }) {
-  return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5">
-      {(title || action) && (
-        <div className="flex items-center justify-between mb-4">
-          {title && <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{title}</h3>}
-          {action}
-        </div>
-      )}
-      {children}
-    </div>
-  )
-}
-
-function EmptyModule({ message }) {
-  return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-8 text-center">
-      <p className="text-sm text-slate-400">{message}</p>
-    </div>
-  )
-}
-
-export default function TenantDetailPage() {
-  const { id } = useParams()
-  const router = useRouter()
-  const hasPermission = useAuthStore((s) => s.hasPermission)
-
-  const [tab, setTab] = useState('Overview')
-  const [tenant, setTenant] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [forbidden, setForbidden] = useState(false)
-
-  function load() {
-    setLoading(true)
-    setForbidden(false)
-    tenantApi.getById(id)
-      .then((res) => setTenant(res.data.data))
-      .catch((err) => { if (err.response?.status === 403) setForbidden(true) })
-      .finally(() => setLoading(false))
-  }
-  useEffect(load, [id])
-
-  if (forbidden) return <PermissionDenied requiredPermission="tenant.view" message="You don't have permission to view this company." />
-  if (loading) return <PageLoader />
-  if (!tenant) return <div className="text-center text-slate-400 py-12">Company not found</div>
-
-  return (
-    <div className="animate-fade-in space-y-6">
-      <div>
-        <button onClick={() => router.push('/super-admin/tenants')} className="flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 mb-3">
-          <ArrowLeft className="w-4 h-4" /> Back to companies
-        </button>
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white">{tenant.companyName}</h1>
-          <Badge>{tenant.status}</Badge>
-          <Badge>{tenant.provisioningStatus}</Badge>
-        </div>
-        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">{tenant.tenantCode} · {tenant.email}</p>
-      </div>
-
-      <div className="flex gap-1 border-b border-slate-100 dark:border-slate-800 overflow-x-auto">
-        {TABS.map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px whitespace-nowrap flex-shrink-0 transition-colors ${tab === t ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'Overview' && <OverviewTab tenant={tenant} hasPermission={hasPermission} onChanged={load} />}
-      {tab === 'Subscription' && <SubscriptionTab tenant={tenant} />}
-      {tab === 'Modules' && <ModulesTab tenant={tenant} hasPermission={hasPermission} onChanged={load} />}
-      {tab === 'Usage' && <UsageTab tenant={tenant} hasPermission={hasPermission} />}
-      {tab === 'Primary Admin' && <PrimaryAdminTab tenant={tenant} hasPermission={hasPermission} />}
-      {tab === 'Provisioning' && <ProvisioningTab tenant={tenant} hasPermission={hasPermission} />}
-      {tab === 'Security' && <SecurityTab tenant={tenant} />}
-      {tab === 'Billing' && <BillingTab tenant={tenant} hasPermission={hasPermission} />}
-      {tab === 'Audit History' && <AuditHistoryTab tenant={tenant} />}
-      {tab === 'Data Management' && <DataManagementTab tenant={tenant} hasPermission={hasPermission} />}
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-
-function OverviewTab({ tenant, hasPermission, onChanged }) {
-  const [events, setEvents] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState(false)
-  const [dialog, setDialog] = useState(null)
-  const [purgeDate, setPurgeDate] = useState('')
-  const [actionLoading, setActionLoading] = useState(false)
-  const [actionError, setActionError] = useState('')
-
-  function load() {
-    setLoading(true)
-    setLoadError(false)
-    platformApi.getTenantLifecycle(tenant._id).then((res) => setEvents(res.data.data || [])).catch(() => setLoadError(true)).finally(() => setLoading(false))
-  }
-  useEffect(load, [tenant._id])
-
-  const availableTransitions = TRANSITIONS[tenant.status] || []
-
-  async function handleTransition(reason) {
-    setActionLoading(true)
-    setActionError('')
-    try {
-      await platformApi.changeTenantStatus(tenant._id, { toStatus: dialog, reason, purgeScheduledFor: dialog === 'PURGE_SCHEDULED' ? purgeDate : undefined })
-      setDialog(null)
-      setPurgeDate('')
-      load()
-      onChanged()
-    } catch (err) {
-      setActionError(err.response?.data?.message || 'Failed to change status')
-    } finally {
-      setActionLoading(false)
-    }
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="stat-card !p-4"><p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Employee Limit</p><p className="text-xl font-bold text-slate-900 dark:text-white">{tenant.employeeLimit}</p></div>
-        <div className="stat-card !p-4"><p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Storage</p><p className="text-xl font-bold text-slate-900 dark:text-white">{tenant.storageUsedMb} / {tenant.storageLimitMb} MB</p></div>
-        <div className="stat-card !p-4"><p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Tenant Database</p><div className="flex items-center gap-2 mt-0.5"><Database className="h-4 w-4 text-slate-400" /><Badge>{tenant.databaseStatus}</Badge></div></div>
-        <div className="stat-card !p-4"><p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Created</p><p className="text-sm font-semibold text-slate-800 dark:text-slate-200 mt-1.5">{formatDate(tenant.createdAt)}</p></div>
-      </div>
-
-      <Panel title="Company Details">
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
-          <InfoRow label="Subdomain" value={tenant.subdomain} />
-          <InfoRow label="Phone" value={tenant.phone} />
-          <InfoRow label="Primary Admin" value={tenant.adminEmail} />
-          <InfoRow label="Industry" value={tenant.industryType} />
-          <InfoRow label="Country / State" value={[tenant.country, tenant.state].filter(Boolean).join(' / ') || null} />
-          <InfoRow label="Timezone / Currency" value={`${tenant.timezone} / ${tenant.currency}`} />
-          <InfoRow label="GST" value={tenant.gstNumber} />
-          <InfoRow label="PAN" value={tenant.panNumber} />
-          {tenant.suspensionReason && <InfoRow label="Last status reason" value={tenant.suspensionReason} />}
-        </div>
-      </Panel>
-
-      {hasPermission('tenant.suspend') && (
-        <Panel title="Change Status">
-          {availableTransitions.length === 0 ? (
-            <p className="text-sm text-slate-400">This tenant has no available status transitions.</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {availableTransitions.map((s) => (
-                <button key={s} className="btn-secondary" onClick={() => setDialog(s)}>Move to {s.replace('_', ' ')}</button>
-              ))}
-            </div>
-          )}
-        </Panel>
-      )}
-
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800"><p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Lifecycle History</p></div>
-        <div className="divide-y divide-slate-50 dark:divide-slate-800">
-          {loading ? <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>
-            : loadError ? <p className="p-6 text-center text-sm text-red-500">Failed to load lifecycle history — <button onClick={load} className="underline">retry</button></p>
-            : events.length === 0 ? <p className="p-6 text-center text-sm text-slate-400">No status changes recorded yet</p>
-            : events.map((event) => (
-              <div key={event._id} className="p-4">
-                <div className="flex items-center gap-2 text-sm">
-                  <Badge>{event.fromStatus}</Badge><span className="text-slate-400">→</span><Badge>{event.toStatus}</Badge>
-                  <span className="text-xs text-slate-400 ml-auto">{formatDate(event.createdAt)}</span>
-                </div>
-                <p className="text-sm text-slate-600 dark:text-slate-400 mt-1.5">{event.reason}</p>
-                <p className="text-xs text-slate-400 mt-0.5">by {event.performedByEmail}</p>
-              </div>
-            ))}
-        </div>
-      </div>
-
-      <ConfirmDialog
-        open={!!dialog}
-        title={`Move to ${dialog?.replace('_', ' ')}?`}
-        description={dialog === 'SUSPENDED' ? "The tenant's data is preserved — this only blocks access." : dialog === 'PURGE_SCHEDULED' ? 'Purging is scheduled, not immediate — it can still be cancelled before the date.' : undefined}
-        confirmLabel={`Move to ${dialog?.replace('_', ' ')}`}
-        variant={dialog === 'SUSPENDED' || dialog === 'ARCHIVED' || dialog === 'PURGE_SCHEDULED' ? 'danger' : 'default'}
-        loading={actionLoading}
-        error={actionError}
-        onConfirm={handleTransition}
-        onClose={() => { setDialog(null); setActionError(''); setPurgeDate('') }}
+      <span className="mb-1.5 block text-xs font-bold text-slate-700 dark:text-slate-300">{label}</span>
+      <div
+        className={cn(
+          'group relative flex min-h-[140px] flex-col items-center justify-center rounded-2xl border-2 border-dashed p-4 text-center transition-all duration-300',
+          error 
+            ? 'border-rose-300 bg-rose-50/60 dark:border-rose-900 dark:bg-rose-950/20' 
+            : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100 hover:border-blue-400/50 dark:border-slate-800 dark:bg-slate-900/40 dark:hover:bg-slate-800/80 dark:hover:border-blue-500/50'
+        )}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault()
+          const file = event.dataTransfer.files?.[0]
+          if (file) onFile(file)
+        }}
       >
-        {dialog === 'PURGE_SCHEDULED' && (
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">Purge Date (minimum 14 days out) <span className="text-red-500">*</span></span>
-            <input type="date" className="input-field" value={purgeDate} onChange={(e) => setPurgeDate(e.target.value)} />
-          </label>
-        )}
-      </ConfirmDialog>
-    </div>
-  )
-}
-
-function SubscriptionTab({ tenant }) {
-  const router = useRouter()
-  const [subscription, setSubscription] = useState(undefined)
-
-  useEffect(() => {
-    platformApi.getSubscriptions({ tenant: tenant._id, size: 1 })
-      .then((res) => setSubscription(res.data.data.content[0] || null))
-      .catch(() => setSubscription(null))
-  }, [tenant._id])
-
-  if (subscription === undefined) return <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>
-  if (!subscription) return <EmptyModule message="No subscription on record for this tenant." />
-
-  return (
-    <Panel title="Subscription" action={<button className="btn-secondary" onClick={() => router.push(`/super-admin/subscriptions/${subscription._id}`)}>Manage Subscription</button>}>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-        <InfoRow label="Plan" value={subscription.plan?.name} />
-        <InfoRow label="Status" value={<Badge>{subscription.status}</Badge>} />
-        <InfoRow label="Start Date" value={formatDate(subscription.startDate)} />
-        <InfoRow label="Trial End" value={formatDate(subscription.trialEndDate)} />
-        <InfoRow label="Auto Renew" value={subscription.autoRenew ? 'Yes' : 'No'} />
-      </div>
-    </Panel>
-  )
-}
-
-function ModulesTab({ tenant, hasPermission, onChanged }) {
-  const [features, setFeatures] = useState(tenant.features instanceof Object ? { ...tenant.features } : {})
-  const [reason, setReason] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-
-  async function toggle(key) {
-    setFeatures((f) => ({ ...f, [key]: !f[key] }))
-  }
-
-  async function save() {
-    setSaving(true)
-    setError('')
-    try {
-      await tenantApi.updateFeatures(tenant._id, { features, reason })
-      setReason('')
-      onChanged()
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update modules')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const canManage = hasPermission('tenant.update')
-
-  return (
-    <Panel title="Enabled Modules">
-      {error && <div className="mb-4 text-sm text-red-600 bg-red-50 dark:bg-red-900/20 rounded-lg p-3">{error}</div>}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-        {Object.keys(features).length === 0 && <p className="text-sm text-slate-400 col-span-full">No modules configured</p>}
-        {Object.entries(features).map(([key, enabled]) => (
-          <button
-            key={key}
-            type="button"
-            disabled={!canManage}
-            onClick={() => toggle(key)}
-            className={`min-h-10 rounded-xl border px-3 text-left text-xs font-medium transition-colors ${enabled ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300' : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400'}`}
-          >
-            <span className="flex items-center gap-2">{enabled && <Check className="h-3.5 w-3.5" />}{key}</span>
-          </button>
-        ))}
-      </div>
-      {canManage && (
-        <div className="flex flex-col sm:flex-row gap-2">
-          <input className="input-field" placeholder="Reason for module change" value={reason} onChange={(e) => setReason(e.target.value)} />
-          <button className="btn-primary flex-shrink-0" onClick={save} disabled={saving || !reason.trim()}>{saving ? 'Saving...' : 'Save'}</button>
-        </div>
-      )}
-    </Panel>
-  )
-}
-
-function UsageTab({ tenant, hasPermission }) {
-  const [data, setData] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState(false)
-  const [recomputing, setRecomputing] = useState(false)
-
-  function load() {
-    setLoading(true)
-    setLoadError(false)
-    platformApi.getTenantUsage(tenant._id).then((res) => setData(res.data.data)).catch(() => setLoadError(true)).finally(() => setLoading(false))
-  }
-  useEffect(load, [tenant._id])
-
-  async function recompute() {
-    setRecomputing(true)
-    try {
-      await platformApi.recomputeTenantUsage(tenant._id)
-      load()
-    } finally {
-      setRecomputing(false)
-    }
-  }
-
-  if (loading) return <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>
-  if (loadError) return <p className="text-sm text-red-500 py-8 text-center">Failed to load usage data — <button onClick={load} className="underline">retry</button></p>
-  const latest = data?.latest
-
-  return (
-    <Panel title="Usage" action={hasPermission('tenant.view') && (
-      <button className="btn-secondary" onClick={recompute} disabled={recomputing}><RotateCw className={`w-4 h-4 ${recomputing ? 'animate-spin' : ''}`} /> Recompute</button>
-    )}>
-      {!latest ? (
-        <p className="text-sm text-slate-400">No usage snapshot yet — click Recompute to take one.</p>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <UsageMeter label="Employees" used={latest.employeeCount} limit={latest.employeeLimit} />
-          <UsageMeter label="Storage (MB)" used={latest.storageUsedMb} limit={latest.storageLimitMb} />
-          <UsageMeter label="API Calls / mo" used={latest.apiCallsThisMonth} limit={latest.apiQuota} note="Not yet instrumented" />
-          <UsageMeter label="Integrations" used={latest.integrationCount} limit={latest.integrationLimit} note="No integrations built yet" />
-        </div>
-      )}
-      {latest && <p className="text-xs text-slate-400 mt-4">Snapshot taken {formatDate(latest.snapshotAt)}</p>}
-    </Panel>
-  )
-}
-
-function UsageMeter({ label, used, limit, note }) {
-  const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0
-  return (
-    <div className="rounded-xl border border-slate-100 dark:border-slate-800 p-3">
-      <p className="text-xs text-slate-400 mb-1">{label}</p>
-      <p className="text-lg font-bold text-slate-900 dark:text-white">{used} <span className="text-xs font-normal text-slate-400">/ {limit === -1 ? '∞' : limit}</span></p>
-      {limit > 0 && (
-        <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden mt-2">
-          <div className={`h-full rounded-full ${pct > 90 ? 'bg-red-500' : 'bg-blue-600'}`} style={{ width: `${pct}%` }} />
-        </div>
-      )}
-      {note && <p className="text-xs text-amber-500 mt-1">{note}</p>}
-    </div>
-  )
-}
-
-function PrimaryAdminTab({ tenant, hasPermission }) {
-  const [admin, setAdmin] = useState(undefined)
-  const [showReset, setShowReset] = useState(false)
-  const [resetting, setResetting] = useState(false)
-  const [resetError, setResetError] = useState('')
-  const [newTempPassword, setNewTempPassword] = useState('')
-  const [copied, setCopied] = useState(false)
-
-  useEffect(() => {
-    platformApi.getTenantPrimaryAdmin(tenant._id).then((res) => setAdmin(res.data.data)).catch(() => setAdmin(null))
-  }, [tenant._id])
-
-  async function handleReset(reason) {
-    setResetting(true)
-    setResetError('')
-    try {
-      const { data } = await platformApi.resetTenantAdminPassword(tenant._id, reason)
-      setNewTempPassword(data.data.tempPassword)
-      setShowReset(false)
-    } catch (err) {
-      setResetError(err.response?.data?.message || 'Failed to reset password')
-    } finally {
-      setResetting(false)
-    }
-  }
-
-  function copyPassword() {
-    navigator.clipboard?.writeText(newTempPassword)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  if (admin === undefined) return <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>
-  if (!admin) return <EmptyModule message="Primary administrator record not found — the tenant database may not be provisioned yet." />
-
-  return (
-    <Panel
-      title="Primary Administrator"
-      action={hasPermission?.('tenant.update') && (
-        <button className="btn-secondary" onClick={() => { setShowReset(true); setResetError(''); setNewTempPassword('') }}>Reset Password</button>
-      )}
-    >
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-        <InfoRow label="Name" value={`${admin.firstName} ${admin.lastName}`} />
-        <InfoRow label="Email" value={admin.email} />
-        <InfoRow label="Phone" value={admin.phone} />
-        <InfoRow label="Role" value={admin.role} />
-        <InfoRow label="Status" value={<Badge>{admin.status}</Badge>} />
-        <InfoRow label="Joined" value={formatDate(admin.joiningDate)} />
-        <InfoRow label="MFA" value={admin.twoFactorEnabled ? 'Enabled' : 'Not enabled'} />
-      </div>
-      <p className="text-xs text-slate-400 mt-4">Only account/contact fields are shown here — salary, bank and identity-document fields are never exposed to platform operators.</p>
-
-      {newTempPassword && (
-        <div className="mt-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 p-4 text-sm text-emerald-700 dark:text-emerald-300">
-          <p>New password set for {admin.email}. Copy it now — it will not be shown again.</p>
-          <div className="mt-2 flex items-center gap-2">
-            <div className="flex-1 bg-white dark:bg-slate-900 rounded-lg p-3 font-mono text-center">{newTempPassword}</div>
-            <button className="btn-secondary flex-shrink-0" onClick={copyPassword}>{copied ? 'Copied' : 'Copy'}</button>
+        {value ? (
+          <div className="flex w-full items-center gap-4">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <div className="relative overflow-hidden rounded-2xl border-4 border-white bg-white shadow-xl dark:border-slate-800">
+              <img src={value} alt="" className="h-24 w-24 object-cover" />
+            </div>
+            <div className="min-w-0 flex-1 text-left">
+              <p className="truncate text-sm font-black text-slate-900 dark:text-white">Image ready</p>
+              <p className="mt-0.5 text-xs font-semibold text-slate-500 dark:text-slate-400">Looking great!</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" className="btn-secondary !rounded-xl !px-3 !py-1.5 !text-xs !shadow-sm" onClick={() => inputRef.current?.click()} disabled={uploading}>
+                  Replace
+                </button>
+                <button type="button" className="btn-secondary !rounded-xl !px-3 !py-1.5 !text-xs !text-rose-600 hover:!bg-rose-50 dark:hover:!bg-rose-900/30" onClick={onRemove} disabled={uploading}>
+                  Remove
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
-      )}
-
-      <ConfirmDialog
-        open={showReset}
-        title="Reset primary admin password?"
-        description={`This immediately invalidates ${admin.email}'s current password and issues a new one-time password shown only once.`}
-        confirmLabel="Reset Password"
-        variant="danger"
-        loading={resetting}
-        error={resetError}
-        onConfirm={handleReset}
-        onClose={() => setShowReset(false)}
+        ) : (
+          <>
+            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-[20px] bg-white text-slate-400 shadow-md ring-1 ring-slate-100 transition-transform duration-300 group-hover:-translate-y-1 group-hover:text-blue-500 group-hover:shadow-lg dark:bg-slate-800 dark:text-slate-500 dark:ring-slate-700 dark:group-hover:text-blue-400">
+              {uploading ? <Loader2 className="h-6 w-6 animate-spin text-blue-500" /> : <ImagePlus className="h-6 w-6" />}
+            </div>
+            <p className="text-sm font-bold text-slate-800 dark:text-slate-100">Drop image here or browse</p>
+            <p className="mt-1 text-xs font-semibold text-slate-400">JPG, PNG, WEBP up to 2 MB</p>
+            <button type="button" className="btn-secondary mt-4 !rounded-xl !px-4 !py-2 !text-xs !font-bold !shadow-sm" onClick={() => inputRef.current?.click()} disabled={uploading}>
+              <Upload className="h-3.5 w-3.5" /> Browse file
+            </button>
+          </>
+        )}
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          event.target.value = ''
+          if (file) onFile(file)
+        }}
       />
-    </Panel>
+      {error ? <p className="mt-1.5 text-xs font-semibold text-rose-500">{error}</p> : null}
+    </div>
   )
 }
 
-function ProvisioningTab({ tenant, hasPermission }) {
-  const [data, setData] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState(false)
-  const [retrying, setRetrying] = useState(false)
-  const [error, setError] = useState('')
-
-  function load() {
-    if (!tenant.provisioningJob) { setLoading(false); return }
-    setLoading(true)
-    setLoadError(false)
-    platformApi.getProvisioningJob(tenant.provisioningJob).then((res) => setData(res.data.data)).catch(() => setLoadError(true)).finally(() => setLoading(false))
-  }
-  useEffect(load, [tenant.provisioningJob])
-
-  async function retry() {
-    setRetrying(true)
-    setError('')
-    try {
-      await platformApi.retryProvisioningJob(tenant.provisioningJob)
-      load()
-    } catch (err) {
-      setError(err.response?.data?.message || 'Retry failed')
-      load()
-    } finally {
-      setRetrying(false)
-    }
-  }
-
-  if (!tenant.provisioningJob) return <EmptyModule message="No provisioning job on record for this company." />
-  if (loading) return <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>
-  if (loadError) return <p className="text-sm text-red-500 py-8 text-center">Failed to load provisioning status — <button onClick={load} className="underline">retry</button></p>
-
-  const job = data?.job
-  const steps = data?.steps || []
-
-  return (
-    <Panel title="Provisioning" action={(job?.status === 'FAILED' || job?.status === 'PARTIALLY_COMPLETED') && hasPermission('tenant.create') && (
-      <button className="btn-secondary" onClick={retry} disabled={retrying}><RotateCw className={`w-4 h-4 ${retrying ? 'animate-spin' : ''}`} /> Retry</button>
-    )}>
-      <div className="flex items-center gap-2 mb-4">
-        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Status:</span>
-        <Badge>{job?.status}</Badge>
-        <span className="text-xs text-slate-400">{job?.attempts} attempt(s)</span>
-      </div>
-      {error && <div className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 rounded-lg p-3 mb-3">{error}</div>}
-      {job?.error && <div className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 rounded-lg p-3 mb-3">{job.error}</div>}
-      <ol className="space-y-2">
-        {steps.map((s) => (
-          <li key={s.stepKey} className="flex items-center gap-3 text-sm">
-            {s.status === 'COMPLETED' ? <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" /> : <div className="w-4 h-4 rounded-full border-2 border-slate-200 dark:border-slate-700 flex-shrink-0" />}
-            <span className="text-slate-700 dark:text-slate-300 flex-1">{s.stepKey.replace(/_/g, ' ')}</span>
-            <span className="text-xs text-slate-400">{s.attempts} attempt(s)</span>
-            {s.error && <span className="text-xs text-red-500">{s.error}</span>}
-          </li>
-        ))}
-      </ol>
-    </Panel>
-  )
-}
-
-function SecurityTab({ tenant }) {
-  return (
-    <Panel title="Security Configuration">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-        <InfoRow label="Allowed Email Domains" value={(tenant.securityDefaults?.allowedEmailDomains || []).join(', ') || 'Any domain'} />
-        <InfoRow label="Session Timeout" value={`${tenant.securityDefaults?.sessionTimeoutMinutes || 60} minutes`} />
-      </div>
-      <p className="text-xs text-slate-400 mt-4 flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5" /> No secrets, keys or credentials are stored on the tenant profile — there is nothing sensitive to redact here. Live enforcement of these settings is a future phase.</p>
-    </Panel>
-  )
-}
-
-function BillingTab({ tenant, hasPermission }) {
+export default function EditOrganizationPage() {
   const router = useRouter()
-  const [data, setData] = useState(undefined)
+  const params = useParams()
+  const tenantId = params?.id
+  const [loading, setLoading] = useState(true)
+  const [form, setForm] = useState(defaultForm)
+  const [errors, setErrors] = useState({})
+  const [submitError, setSubmitError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [success, setSuccess] = useState(false)
+  const [logoUploading, setLogoUploading] = useState(false)
 
   useEffect(() => {
-    platformApi.getTenantBilling(tenant._id).then((res) => setData(res.data.data)).catch(() => setData(null))
-  }, [tenant._id])
+    let active = true
+    async function fetchTenant() {
+      try {
+        const { data } = await tenantApi.getById(tenantId)
+        if (active && data?.data) {
+          const t = data.data
+          setForm({
+            companyName: t.companyName || '',
+            legalBusinessName: t.legalBusinessName || '',
+            tenantCode: t.tenantCode || '',
+            industryType: t.industryType || 'Restaurant',
+            logoUrl: t.logoUrl || '',
+            logoPreview: '',
+            website: t.website || '',
+            gstNumber: t.gstNumber || '',
+            panNumber: t.panNumber || '',
+            businessRegistrationNumber: t.businessRegistrationNumber || '',
+            email: t.email || '',
+            phone: t.phone || '',
+            address: t.address || '',
+            country: t.country || 'India',
+            state: t.state || '',
+            city: t.city || '',
+            pincode: t.pincode || '',
+            timezone: t.timezone || 'Asia/Kolkata',
+            currency: t.currency || 'INR',
+          })
+        }
+      } catch (error) {
+        console.error('Failed to load tenant', error)
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    fetchTenant()
+    return () => { active = false }
+  }, [tenantId])
 
-  if (data === undefined) return <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>
-  if (!data?.subscription) return <EmptyModule message="No subscription — nothing to bill yet." />
+  function update(field, value) {
+    setForm((current) => ({ ...current, [field]: value }))
+    setErrors((current) => ({ ...current, [field]: '' }))
+  }
 
-  return (
-    <Panel title="Billing" action={hasPermission('subscription.view') && (
-      <button className="btn-secondary" onClick={() => router.push(`/super-admin/subscriptions/${data.subscription._id}`)}>Manage Invoices</button>
-    )}>
-      <div className="divide-y divide-slate-50 dark:divide-slate-800">
-        {data.invoices.length === 0 ? <p className="text-sm text-slate-400 py-4">No invoices recorded</p> : data.invoices.map((inv) => (
-          <div key={inv._id} className="py-3 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{inv.invoiceNumber}</p>
-              <p className="text-xs text-slate-400">{formatCurrency(inv.amount)} {inv.currency} · {inv.payments.length} payment(s)</p>
-            </div>
-            <Badge>{inv.status}</Badge>
-          </div>
-        ))}
-      </div>
-    </Panel>
-  )
-}
+  async function uploadImage(file, purpose) {
+    if (!IMAGE_TYPES.includes(file.type)) throw new Error('Only JPG, PNG and WEBP images are supported')
+    if (file.size > MAX_IMAGE_BYTES) throw new Error('Image must be 2 MB or smaller')
+    const { data } = await platformApi.uploadOnboardingImage(file, purpose)
+    return data.data?.url || data.url
+  }
 
-function AuditHistoryTab({ tenant }) {
-  const [logs, setLogs] = useState(undefined)
-
-  useEffect(() => {
-    tenantApi.getAuditLogs(tenant._id, { size: 50 }).then((res) => setLogs(res.data.data.content)).catch(() => setLogs([]))
-  }, [tenant._id])
-
-  if (logs === undefined) return <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>
-  if (logs.length === 0) return <EmptyModule message="No audit events recorded for this tenant yet." />
-
-  return (
-    <Panel title="Audit History">
-      <div className="divide-y divide-slate-50 dark:divide-slate-800">
-        {logs.map((log) => (
-          <div key={log._id} className="py-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{log.action}</span>
-              <span className="text-xs text-slate-400">{formatDate(log.createdAt)}</span>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">{log.description}</p>
-            <p className="text-xs text-slate-400 mt-0.5">by {log.performerEmail}</p>
-          </div>
-        ))}
-      </div>
-    </Panel>
-  )
-}
-
-function DataManagementTab({ tenant, hasPermission }) {
-  const [exporting, setExporting] = useState(false)
-  const [error, setError] = useState('')
-
-  async function handleExport() {
-    setExporting(true)
-    setError('')
+  async function handleImage(file, purpose) {
+    setLogoUploading(true)
+    setErrors((current) => ({ ...current, logoUrl: '' }))
     try {
-      const { data } = await platformApi.exportTenantMetadata(tenant._id)
-      const blob = new Blob([JSON.stringify(data.data, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${tenant.tenantCode}-metadata-export.json`
-      a.click()
-      URL.revokeObjectURL(url)
+      const preview = URL.createObjectURL(file)
+      const url = await uploadImage(file, purpose)
+      setForm((current) => ({ ...current, logoUrl: url, logoPreview: preview }))
     } catch (err) {
-      setError(err.response?.data?.message || 'Export failed')
+      setErrors((current) => ({ ...current, logoUrl: err.response?.data?.message || err.message || 'Image upload failed' }))
     } finally {
-      setExporting(false)
+      setLogoUploading(false)
     }
   }
 
-  return (
-    <div className="space-y-4">
-      <Panel title="Metadata Export">
-        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Downloads company profile, subscription summary and lifecycle history as JSON. Employee and payroll records are never included.</p>
-        {error && <div className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 rounded-lg p-3 mb-3">{error}</div>}
-        {hasPermission('tenant.export_metadata') && (
-          <button className="btn-primary" onClick={handleExport} disabled={exporting}><Download className="w-4 h-4" /> {exporting ? 'Exporting...' : 'Export Metadata'}</button>
-        )}
-      </Panel>
+  function validate() {
+    const nextErrors = {}
+    if (form.companyName.trim().length < 2) nextErrors.companyName = 'Organization name is required'
+    if (!form.industryType) nextErrors.industryType = 'Business type is required'
+    if (form.website && !isUrl(form.website)) nextErrors.website = 'Enter a valid http or https URL'
+    if (!isGstin(form.gstNumber)) nextErrors.gstNumber = 'Enter a valid GSTIN'
+    if (!isPan(form.panNumber)) nextErrors.panNumber = 'Enter a valid PAN'
+    if (!isEmail(form.email)) nextErrors.email = 'Enter a valid business email'
+    if (!isPhone(form.phone)) nextErrors.phone = 'Enter phone with country code'
+    if (!form.address.trim()) nextErrors.address = 'Address is required'
+    if (!form.country.trim()) nextErrors.country = 'Country is required'
+    if (!form.state.trim()) nextErrors.state = 'State is required'
+    if (!form.city.trim()) nextErrors.city = 'City is required'
+    if (!isIndianPin(form.country, form.pincode)) nextErrors.pincode = 'Enter a valid 6 digit PIN code'
+    if (!form.timezone) nextErrors.timezone = 'Timezone is required'
+    if (!form.currency) nextErrors.currency = 'Currency is required'
+    
+    setErrors(nextErrors)
+    return Object.keys(nextErrors).length === 0
+  }
 
-      <Panel title="Retention & Purge Status">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-          <InfoRow label="Current Status" value={<Badge>{tenant.status}</Badge>} />
-          <InfoRow label="Archived At" value={tenant.archivedAt ? formatDate(tenant.archivedAt) : 'Not archived'} />
-          <InfoRow label="Purge Scheduled For" value={tenant.purgeScheduledFor ? formatDate(tenant.purgeScheduledFor) : 'Not scheduled'} />
+  async function saveOrganization() {
+    if (!validate()) return
+    setSubmitting(true)
+    setSubmitError('')
+    try {
+      const payload = {
+        companyName: form.companyName.trim(),
+        legalBusinessName: form.legalBusinessName.trim(),
+        industryType: form.industryType,
+        logoUrl: form.logoUrl,
+        website: form.website.trim(),
+        gstNumber: form.gstNumber.trim().toUpperCase(),
+        panNumber: form.panNumber.trim().toUpperCase(),
+        businessRegistrationNumber: form.businessRegistrationNumber.trim(),
+        email: form.email.trim().toLowerCase(),
+        phone: form.phone.trim(),
+        address: form.address.trim(),
+        country: form.country.trim(),
+        state: form.state.trim(),
+        city: form.city.trim(),
+        pincode: form.pincode.trim(),
+        timezone: form.timezone,
+        currency: form.currency,
+      }
+      await tenantApi.update(tenantId, payload)
+      setSuccess(true)
+      setTimeout(() => {
+        router.push('/super-admin/tenants')
+      }, 2000)
+    } catch (err) {
+      const message = err.response?.data?.message || 'Update failed. Please try again.'
+      setSubmitError(message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-[400px] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+      </div>
+    )
+  }
+
+  if (success) {
+    return (
+      <div className="animate-fade-in space-y-6 pb-12">
+        <div className="mx-auto max-w-3xl rounded-3xl border border-emerald-200 bg-white p-8 text-center shadow-sm dark:border-emerald-900/60 dark:bg-slate-900">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300">
+            <CheckCircle2 className="h-8 w-8" />
+          </div>
+          <h1 className="mt-5 text-2xl font-black text-slate-900 dark:text-white">Organization Updated Successfully</h1>
+          <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
+            Your changes have been saved. Redirecting you back to the organizations list...
+          </p>
         </div>
-        <p className="text-xs text-slate-400 mt-4">Purging is scheduled-only in this system — no automated deletion runs yet. See the Overview tab to schedule or cancel a purge.</p>
-      </Panel>
+      </div>
+    )
+  }
+
+  return (
+    <div className="animate-fade-in space-y-6 pb-12">
+      <div className="page-header">
+        <div>
+          <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Edit Organization</h1>
+          <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+            Update the organization information and settings.
+          </p>
+        </div>
+        <button type="button" className="btn-secondary" onClick={() => router.push('/super-admin/tenants')}>
+          <ArrowLeft className="h-4 w-4" /> Back to Organizations
+        </button>
+      </div>
+
+      {submitError ? (
+        <div className="mx-auto max-w-6xl rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200">
+          {submitError}
+        </div>
+      ) : null}
+
+      <div className="mx-auto max-w-6xl space-y-6">
+        <div className="space-y-5">
+          <Section title="Organization Information" description="Basic organization identity and branding." icon={Building2} color="blue">
+            <div className="grid gap-5 lg:grid-cols-2">
+              <Field label="Organization Name" required error={errors.companyName}>
+                <input className="input-field" value={form.companyName} onChange={(e) => update('companyName', e.target.value)} placeholder="Enter organization name" />
+              </Field>
+              <Field label="Organization Code" hint="Cannot be modified after provisioning">
+                <input className="input-field uppercase font-bold bg-slate-50 dark:bg-slate-800 text-slate-500 cursor-not-allowed" value={form.tenantCode} disabled />
+              </Field>
+              <Field label="Legal Business Name">
+                <input className="input-field" value={form.legalBusinessName} onChange={(e) => update('legalBusinessName', e.target.value)} placeholder="Enter legal business name" />
+              </Field>
+              <Field label="Business Type" required error={errors.industryType}>
+                <select className="input-field" value={form.industryType} onChange={(e) => update('industryType', e.target.value)}>
+                  {BUSINESS_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+                </select>
+              </Field>
+              <Field label="Website" error={errors.website}>
+                <input className="input-field" value={form.website} onChange={(e) => update('website', e.target.value)} placeholder="https://example.com" />
+              </Field>
+              <ImageUploader
+                label="Organization Logo"
+                value={form.logoPreview || form.logoUrl}
+                uploading={logoUploading}
+                error={errors.logoUrl}
+                onFile={(file) => handleImage(file, 'organization-logo')}
+                onRemove={() => {
+                  update('logoUrl', '')
+                  update('logoPreview', '')
+                }}
+              />
+            </div>
+          </Section>
+
+          <Section title="Business & Tax Information" description="Optional statutory identifiers." icon={ShieldCheck} color="emerald">
+            <div className="grid gap-5 md:grid-cols-3">
+              <Field label="GSTIN" error={errors.gstNumber}>
+                <input className="input-field uppercase" value={form.gstNumber} onChange={(e) => update('gstNumber', e.target.value.toUpperCase())} placeholder="27AAAAA0000A1Z5" />
+              </Field>
+              <Field label="PAN" error={errors.panNumber}>
+                <input className="input-field uppercase" value={form.panNumber} onChange={(e) => update('panNumber', e.target.value.toUpperCase())} placeholder="ABCDE1234F" />
+              </Field>
+              <Field label="Business Registration Number">
+                <input className="input-field" value={form.businessRegistrationNumber} onChange={(e) => update('businessRegistrationNumber', e.target.value)} placeholder="Registration number" />
+              </Field>
+            </div>
+          </Section>
+
+          <Section title="Primary Business Contact" description="Official contact details for the organization." icon={Mail} color="rose">
+            <div className="grid gap-5 md:grid-cols-2">
+              <Field label="Business Email" required error={errors.email}>
+                <input type="email" className="input-field" value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="contact@organization.com" />
+              </Field>
+              <Field label="Business Phone" required error={errors.phone}>
+                <input className="input-field" value={form.phone} onChange={(e) => update('phone', e.target.value)} placeholder="+91 98765 43210" />
+              </Field>
+            </div>
+          </Section>
+
+          <Section title="Business Address" description="Registered location and regional defaults." icon={Building2} color="amber">
+            <div className="grid gap-5 md:grid-cols-2">
+              <Field label="Address" required error={errors.address}>
+                <input className="input-field" value={form.address} onChange={(e) => update('address', e.target.value)} placeholder="Building, street, area" />
+              </Field>
+              <Field label="Country" required error={errors.country}>
+                <input className="input-field" value={form.country} onChange={(e) => update('country', e.target.value)} placeholder="India" />
+              </Field>
+              <Field label="State" required error={errors.state}>
+                {form.country === 'India' ? (
+                  <select className="input-field" value={form.state} onChange={(e) => update('state', e.target.value)}>
+                    <option value="">Select state</option>
+                    {INDIAN_STATES.map((state) => <option key={state} value={state}>{state}</option>)}
+                  </select>
+                ) : (
+                  <input className="input-field" value={form.state} onChange={(e) => update('state', e.target.value)} placeholder="State/Province" />
+                )}
+              </Field>
+              <Field label="City" required error={errors.city}>
+                <input className="input-field" value={form.city} onChange={(e) => update('city', e.target.value)} placeholder="City" />
+              </Field>
+              <Field label="PIN / ZIP Code" required error={errors.pincode}>
+                <input className="input-field" value={form.pincode} onChange={(e) => update('pincode', e.target.value)} placeholder="6 digit code" />
+              </Field>
+            </div>
+          </Section>
+        </div>
+
+        <div className="sticky bottom-4 z-20 flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
+          <button type="button" className="btn-secondary justify-center" onClick={() => router.push('/super-admin/tenants')} disabled={submitting}>
+            Cancel
+          </button>
+          <button type="button" className="btn-primary justify-center bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20" onClick={saveOrganization} disabled={logoUploading || submitting}>
+            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {submitting ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

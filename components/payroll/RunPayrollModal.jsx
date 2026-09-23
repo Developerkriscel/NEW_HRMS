@@ -42,6 +42,7 @@ export function RunPayrollModal({ isOpen, onClose, month, year, onComplete, onOp
 
   if (!isOpen) return null
 
+  const processableCount = eligibility?.totalProcessable ?? eligibility?.totalEligible ?? 0
   const handleNext = () => setStep(2)
   const handleBack = () => setStep(1)
 
@@ -53,8 +54,8 @@ export function RunPayrollModal({ isOpen, onClose, month, year, onComplete, onOp
       const res = await payrollApi.run(selectedMonth, selectedYear, selectedEmpIds.length > 0 ? selectedEmpIds : undefined)
       const result = res.data.data
       setRunResult(result)
-      await onComplete?.()
-      if (!result?.failed) {
+      await onComplete?.(selectedMonth, selectedYear)
+      if (!result?.failed && !result?.skipped && !result?.errors?.length) {
         onClose()
         setStep(1)
       }
@@ -125,9 +126,15 @@ export function RunPayrollModal({ isOpen, onClose, month, year, onComplete, onOp
               )}
 
               {runResult && (
-                <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
+                <div className={`mb-4 rounded-2xl border p-4 text-sm ${
+                  runResult.failed || runResult.skipped
+                    ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300'
+                    : 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300'
+                }`}>
                   <div className="font-bold">Payroll run completed</div>
-                  <div>{runResult.succeeded || 0} payslips created/updated, {runResult.failed || 0} failed.</div>
+                  <div>
+                    {runResult.succeeded || 0} payslips created/updated, {runResult.skipped || 0} skipped, {runResult.failed || 0} failed.
+                  </div>
                   {runResult.errors?.length > 0 && (
                     <div className="mt-2 max-h-24 overflow-y-auto text-xs">
                       {runResult.errors.slice(0, 5).map((item) => (
@@ -139,12 +146,29 @@ export function RunPayrollModal({ isOpen, onClose, month, year, onComplete, onOp
               )}
 
               {/* Step Indicators */}
-              <div className="flex items-center gap-2 mb-8">
+              {!runResult && <div className="flex items-center gap-2 mb-8">
                 <div className={`flex-1 h-2 rounded-full ${step >= 1 ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-slate-800'}`} />
                 <div className={`flex-1 h-2 rounded-full ${step >= 2 ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-slate-800'}`} />
-              </div>
+              </div>}
 
-              {step === 1 && eligibility && (
+              {runResult && (
+                <div className="space-y-5 py-6 text-center">
+                  <div className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full ${
+                    runResult.failed || runResult.skipped ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300' : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300'
+                  }`}>
+                    <CheckCircle2 className="h-8 w-8" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900 dark:text-white">Payroll Generated</h3>
+                    <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+                      Generated payslips are now available in the payroll register for {months[selectedMonth - 1]} {selectedYear}.
+                      {runResult.failed || runResult.skipped ? ' Review the warnings above for employees that were not processed.' : ''}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {!runResult && step === 1 && eligibility && (
                 <div className="space-y-6 animate-in slide-in-from-right-4">
                   <div className="flex items-center justify-between bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-800/30">
                     <div className="flex items-center gap-3">
@@ -158,10 +182,29 @@ export function RunPayrollModal({ isOpen, onClose, month, year, onComplete, onOp
                         </p>
                       </div>
                     </div>
-                    <div className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
-                      {eligibility.totalEligible}
+                  <div className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+                      {processableCount}
                     </div>
                   </div>
+
+                  {eligibility.blockedPayslips?.length > 0 && (
+                    <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-2xl p-4">
+                      <h4 className="font-bold text-red-800 dark:text-red-400 flex items-center gap-2 mb-2">
+                        <AlertTriangle className="w-4 h-4" /> Locked Payslips ({eligibility.blockedPayslips.length})
+                      </h4>
+                      <p className="text-sm text-red-700 dark:text-red-500 mb-3">
+                        These employees already have locked payroll for this period. They will be skipped; paid/finalized payroll cannot be regenerated.
+                      </p>
+                      <div className="max-h-32 overflow-y-auto space-y-2">
+                        {eligibility.blockedPayslips.map(item => (
+                          <div key={item.employeeId} className="flex items-center justify-between gap-3 text-sm bg-white dark:bg-red-900/20 px-3 py-2 rounded-lg border border-red-100 dark:border-red-800/30">
+                            <span><span className="font-medium">{item.name}</span> <span className="text-red-600/70">({item.code})</span></span>
+                            <span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-black text-red-700 dark:bg-red-500/20 dark:text-red-300">{item.status}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {eligibility.missingSalary.length > 0 && (
                     <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-2xl p-4">
@@ -221,14 +264,14 @@ export function RunPayrollModal({ isOpen, onClose, month, year, onComplete, onOp
                 </div>
               )}
 
-              {step === 2 && (
+              {!runResult && step === 2 && (
                 <div className="space-y-6 animate-in slide-in-from-right-4 text-center py-6">
                   <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4">
                     <CheckCircle2 className="w-8 h-8" />
                   </div>
                   <h3 className="text-xl font-black text-slate-900 dark:text-white">Ready to Process</h3>
                   <p className="text-slate-500 max-w-sm mx-auto">
-                    You are about to generate DRAFT payslips for {eligibility?.totalEligible} employees. 
+                    You are about to generate DRAFT payslips for {processableCount} employees. 
                     You can review them before finalizing.
                   </p>
                 </div>
@@ -239,6 +282,15 @@ export function RunPayrollModal({ isOpen, onClose, month, year, onComplete, onOp
 
         {/* Footer Actions */}
         <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex justify-end gap-3">
+          {runResult ? (
+            <button
+              onClick={onClose}
+              className="px-5 py-2.5 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-sm"
+            >
+              View Payroll Register
+            </button>
+          ) : (
+          <>
           <button 
             onClick={step === 1 ? onClose : handleBack}
             className="px-5 py-2.5 rounded-xl font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
@@ -250,7 +302,7 @@ export function RunPayrollModal({ isOpen, onClose, month, year, onComplete, onOp
           {step === 1 ? (
             <button 
               onClick={handleNext}
-              disabled={loading || !eligibility || eligibility.totalEligible === 0}
+              disabled={loading || !eligibility || processableCount === 0}
               className="px-5 py-2.5 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-sm"
             >
               Continue
@@ -264,6 +316,8 @@ export function RunPayrollModal({ isOpen, onClose, month, year, onComplete, onOp
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-current" />}
               Process Payroll
             </button>
+          )}
+          </>
           )}
         </div>
       </div>
