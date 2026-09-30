@@ -18,32 +18,29 @@ export const GET = withApi(async (req) => {
     // Or just fetch from actual tenants since dev uses local mongo now
   }
 
-  const tenants = await Tenant.find({ deleted: false }).lean()
-  const allAdmins = []
-
-  for (const tenant of tenants) {
-    try {
-      const dbName = tenant.databaseName || buildTenantDatabaseName(tenant.tenantCode, tenant._id)
-      const TenantEmployee = getTenantModelForDatabase('Employee', dbName)
-
-      const admins = await TenantEmployee.find({ role: 'COMPANY_ADMIN' })
-        .select('-password -__v')
-        .lean()
-
-      for (const admin of admins) {
-        allAdmins.push({
+  const tenants = await Tenant.find({ deleted: false }).select('companyName tenantCode databaseName _id').lean()
+  const adminLists = await Promise.all(
+    tenants.map(async (tenant) => {
+      try {
+        const dbName = tenant.databaseName || buildTenantDatabaseName(tenant.tenantCode, tenant._id)
+        const TenantEmployee = getTenantModelForDatabase('Employee', dbName)
+        const admins = await TenantEmployee.find({ role: 'COMPANY_ADMIN' })
+          .select('-password -__v')
+          .lean()
+        return admins.map((admin) => ({
           ...admin,
           companyName: tenant.companyName,
           tenantId: tenant._id,
           tenantCode: tenant.tenantCode
-        })
+        }))
+      } catch (e) {
+        console.error('Error fetching admins for tenant', tenant.tenantCode, e)
+        return []
       }
-    } catch (e) {
-      console.error('Error fetching admins for tenant', tenant.tenantCode, e)
-    }
-  }
+    })
+  )
 
-  allAdmins.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+  const allAdmins = adminLists.flat().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
 
   return ok(allAdmins)
 })

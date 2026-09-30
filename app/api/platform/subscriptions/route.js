@@ -22,13 +22,16 @@ export const GET = withApi(async (req) => {
   if (tenant) query.tenant = tenant
   if (plan) query.plan = plan
 
-  const totalElements = await Subscription.countDocuments(query)
-  const content = await Subscription.find(query)
-    .populate('tenant', 'companyName tenantCode status')
-    .populate('plan', 'name billingCycle price')
-    .sort({ createdAt: -1 })
-    .skip(page * size)
-    .limit(size)
+  const [totalElements, content] = await Promise.all([
+    Subscription.countDocuments(query),
+    Subscription.find(query)
+      .populate('tenant', 'companyName tenantCode status')
+      .populate('plan', 'name billingCycle price')
+      .sort({ createdAt: -1 })
+      .skip(page * size)
+      .limit(size)
+      .lean(),
+  ])
 
   return ok(paged(content, page, size, totalElements))
 })

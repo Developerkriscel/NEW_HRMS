@@ -32,36 +32,30 @@ export const GET = withApi(async (req) => {
 
   const since = new Date(Date.now() - days * 86400000)
 
-  const [
+    const [
     statusCountsRaw,
-    totalPlans, recentTenants, failedProvisioning,
+    totalPlans,
+    recentTenants,
+    failedProvisioning,
+    latestUsagePerTenant,
+    subscriptionSummaryRaw,
+    tenantsByStatusRaw,
+    planDistributionRaw,
+    companiesByMonthRaw,
+    subscriptionTrendRaw,
+    storageAgg,
+    employeeTrendRaw,
+    upcomingRenewals
   ] = await Promise.all([
     Tenant.aggregate([{ $match: { deleted: false } }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
     Plan.countDocuments({ deleted: false, active: true }),
     Tenant.find({ deleted: false }).sort({ createdAt: -1 }).limit(10).select('companyName tenantCode status provisioningStatus createdAt').lean(),
     TenantProvisioningJob.find({ status: { $in: ['FAILED', 'PARTIALLY_COMPLETED'] } }).populate('tenant', 'companyName').sort({ updatedAt: -1 }).limit(10).lean(),
-  ])
-
-  const statusMap = Object.fromEntries(statusCountsRaw.map((r) => [r._id, r.count]))
-  const totalCompanies = statusCountsRaw.reduce((acc, r) => acc + r.count, 0)
-  const activeCompanies = statusMap['ACTIVE'] || 0
-  const trialCompanies = statusMap['TRIAL'] || 0
-  const graceCompanies = statusMap['GRACE'] || 0
-  const suspendedCompanies = statusMap['SUSPENDED'] || 0
-
-  // Employee/storage totals are read from the latest cached TenantUsage
-  // snapshot per tenant rather than iterating every tenant's own database
-  // live on every dashboard load — see lib/platformBilling.js's
-  // computeUsageSnapshot for how those snapshots get taken.
-  const latestUsagePerTenant = await TenantUsage.aggregate([
-    { $sort: { tenant: 1, snapshotAt: -1 } },
-    { $group: { _id: '$tenant', employeeCount: { $first: '$employeeCount' }, storageUsedMb: { $first: '$storageUsedMb' } } },
-    { $group: { _id: null, totalEmployees: { $sum: '$employeeCount' }, totalStorageMb: { $sum: '$storageUsedMb' } } },
-  ])
-  const activeEmployees = latestUsagePerTenant[0]?.totalEmployees || 0
-  const storageUsedMbFromSnapshots = latestUsagePerTenant[0]?.totalStorageMb || 0
-
-  const [subscriptionSummaryRaw, tenantsByStatusRaw, planDistributionRaw, companiesByMonthRaw, subscriptionTrendRaw, storageAgg] = await Promise.all([
+    TenantUsage.aggregate([
+      { $sort: { tenant: 1, snapshotAt: -1 } },
+      { $group: { _id: '$tenant', employeeCount: { $first: '$employeeCount' }, storageUsedMb: { $first: '$storageUsedMb' } } },
+      { $group: { _id: null, totalEmployees: { $sum: '$employeeCount' }, totalStorageMb: { $sum: '$storageUsedMb' } } },
+    ]),
     Subscription.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
     Tenant.aggregate([{ $match: { deleted: false } }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
     Tenant.aggregate([
@@ -81,20 +75,25 @@ export const GET = withApi(async (req) => {
       { $sort: { _id: 1 } },
     ]),
     Tenant.aggregate([{ $match: { deleted: false } }, { $group: { _id: null, used: { $sum: '$storageUsedMb' }, limit: { $sum: '$storageLimitMb' } } }]),
+    TenantUsage.aggregate([
+      { $match: { snapshotAt: { $gte: since } } },
+      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$snapshotAt' } }, employees: { $sum: '$employeeCount' }, storage: { $sum: '$storageUsedMb' } } },
+      { $sort: { _id: 1 } },
+    ]),
+    Subscription.find({
+      status: { $in: ['ACTIVE', 'TRIAL', 'GRACE'] },
+      endDate: { $gte: new Date(), $lte: new Date(Date.now() + 30 * 86400000) },
+    }).populate('tenant', 'companyName').populate('plan', 'name').sort({ endDate: 1 }).limit(10).lean(),
   ])
 
-  const employeeTrendRaw = await TenantUsage.aggregate([
-    { $match: { snapshotAt: { $gte: since } } },
-    { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$snapshotAt' } }, employees: { $sum: '$employeeCount' }, storage: { $sum: '$storageUsedMb' } } },
-    { $sort: { _id: 1 } },
-  ])
-
-  const featureBuckets = await Tenant.aggregate([{ $match: { deleted: false } }, { $project: { features: { $objectToArray: '$features' } } }])
-  
-  const upcomingRenewals = await Subscription.find({
-    status: { $in: ['ACTIVE', 'TRIAL', 'GRACE'] },
-    endDate: { $gte: new Date(), $lte: new Date(Date.now() + 30 * 86400000) },
-  }).populate('tenant', 'companyName').populate('plan', 'name').sort({ endDate: 1 }).limit(10).lean()
+  const statusMap = Object.fromEntries(statusCountsRaw.map((r) => [r._id, r.count]))
+  const totalCompanies = statusCountsRaw.reduce((acc, r) => acc + r.count, 0)
+  const activeCompanies = statusMap['ACTIVE'] || 0
+  const trialCompanies = statusMap['TRIAL'] || 0
+  const graceCompanies = statusMap['GRACE'] || 0
+  const suspendedCompanies = statusMap['SUSPENDED'] || 0
+  const activeEmployees = latestUsagePerTenant[0]?.totalEmployees || 0
+  const storageUsedMbFromSnapshots = latestUsagePerTenant[0]?.totalStorageMb || 0
 
   // Format or provide rich baseline trends so charts look vibrant and informative
   const subscriptionTrend = (subscriptionTrendRaw?.length >= 3)

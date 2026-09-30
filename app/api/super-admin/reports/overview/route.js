@@ -27,26 +27,25 @@ export const GET = withApi(async (req) => {
   if (tenantId) match.tenant = new mongoose.Types.ObjectId(tenantId)
   if (planId) match.plan = new mongoose.Types.ObjectId(planId)
 
-  const mrrResult = await Subscription.aggregate([
-    { $match: match },
-    { $lookup: { from: 'plans', localField: 'plan', foreignField: '_id', as: 'planDoc' } },
-    { $unwind: '$planDoc' },
-    { $group: { _id: null, total: { $sum: '$planDoc.price' } } }
+  const [mrrResult, pendingResult, activeCompaniesCount, renewalsCount] = await Promise.all([
+    Subscription.aggregate([
+      { $match: match },
+      { $lookup: { from: 'plans', localField: 'plan', foreignField: '_id', as: 'planDoc' } },
+      { $unwind: '$planDoc' },
+      { $group: { _id: null, total: { $sum: '$planDoc.price' } } }
+    ]),
+    Subscription.aggregate([
+      { $match: { ...match, status: 'GRACE' } },
+      { $lookup: { from: 'plans', localField: 'plan', foreignField: '_id', as: 'planDoc' } },
+      { $unwind: '$planDoc' },
+      { $group: { _id: null, total: { $sum: '$planDoc.price' } } }
+    ]),
+    Subscription.distinct('tenant', match),
+    Subscription.countDocuments({ 
+      ...match, 
+      endDate: { $gte: new Date(), $lte: new Date(Date.now() + 30 * 86400000) } 
+    })
   ])
-
-  const pendingResult = await Subscription.aggregate([
-    { $match: { ...match, status: 'GRACE' } },
-    { $lookup: { from: 'plans', localField: 'plan', foreignField: '_id', as: 'planDoc' } },
-    { $unwind: '$planDoc' },
-    { $group: { _id: null, total: { $sum: '$planDoc.price' } } }
-  ])
-
-  const activeCompaniesCount = await Subscription.distinct('tenant', match)
-  
-  const renewalsCount = await Subscription.countDocuments({ 
-    ...match, 
-    endDate: { $gte: new Date(), $lte: new Date(Date.now() + 30 * 86400000) } 
-  })
 
   return ok({
     collectedRevenue: mrrResult[0]?.total || 0,

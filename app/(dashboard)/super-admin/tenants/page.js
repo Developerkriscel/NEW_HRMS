@@ -10,8 +10,8 @@ import { formatDate, cn } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
 import { TenantDetailsDrawer } from './TenantDetailsDrawer'
 
-const getPlatformApi = async () => (await import('@/services/platformApi')).platformApi
-const getTenantApi = async () => (await import('@/services/tenantApi')).tenantApi
+import { platformApi } from '@/services/platformApi'
+import { tenantApi } from '@/services/tenantApi'
 
 const STATUS_TABS = ['All', 'TRIAL', 'ACTIVE', 'GRACE', 'SUSPENDED', 'ARCHIVED']
 const PAGE_SIZE = 20
@@ -109,7 +109,7 @@ export default function TenantsPage() {
     if (search) params.search = search
 
     try {
-      const platformApi = await getPlatformApi()
+      // static platformApi
       const res = await platformApi.getTenants(params)
       setRows(res.data.data.content)
       setTotalPages(res.data.data.totalPages)
@@ -129,7 +129,7 @@ export default function TenantsPage() {
     let active = true
     const loadPlans = async () => {
       try {
-        const tenantApi = await getTenantApi()
+        // static tenantApi
         const res = await tenantApi.getPlans()
         if (active) setPlans(res.data.data || [])
       } catch {

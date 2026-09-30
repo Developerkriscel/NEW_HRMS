@@ -9,7 +9,7 @@ import { useAuthStore } from '@/store/authStore'
 import { PlanDetailsDrawer } from './PlanDetailsDrawer'
 import { platformApi } from '@/services/platformApi'
 
-const getTenantApi = async () => (await import('@/services/tenantApi')).tenantApi
+import { tenantApi } from '@/services/tenantApi'
 
 const emptyForm = { name: '', description: '', price: 0, billingCycle: 'MONTHLY', employeeLimit: 50, storageLimitMb: 5120, apiQuota: 10000, integrationLimit: 3, gracePeriodDays: 7, trialDays: 14, featuresText: '' }
 
@@ -33,7 +33,7 @@ export default function PlansTab() {
     setLoading(true)
     setForbidden(false)
     try {
-      const tenantApi = await getTenantApi()
+      // static tenantApi
       const [resPlans, resModules] = await Promise.all([
         tenantApi.getPlans(),
         platformApi.getModules().catch(() => ({ data: { data: [] } }))
@@ -55,7 +55,7 @@ export default function PlansTab() {
     setSaving(true)
     setError('')
     try {
-      const tenantApi = await getTenantApi()
+      // static tenantApi
       const payload = {
         ...form,
         price: Number(form.price),
@@ -124,7 +124,7 @@ export default function PlansTab() {
     setActionLoading(plan._id)
     setError('')
     try {
-      const tenantApi = await getTenantApi()
+      // static tenantApi
       if (nextActive) {
         await tenantApi.updatePlan(plan._id, { active: true })
       } else {

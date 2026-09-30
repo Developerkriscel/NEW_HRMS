@@ -9,25 +9,17 @@ import { PermissionDenied } from '@/components/common/PermissionDenied'
 import { Portal } from '@/components/common/Portal'
 import { useAuthStore } from '@/store/authStore'
 import { cn } from '@/lib/utils'
+import api from '@/services/api'
 
 // Since there's no pre-existing tenantApi endpoint for operators, we make direct fetch calls
 const fetchAdmins = async () => {
-  const res = await fetch('/api/super-admin/admins')
-  if (!res.ok) throw new Error('Failed to fetch admins')
-  return res.json()
+  const res = await api.get('/super-admin/admins')
+  return res.data
 }
 
 const updateAdmin = async (id, data) => {
-  const res = await fetch(`/api/super-admin/admins/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  })
-  if (!res.ok) {
-    const err = await res.json()
-    throw new Error(err.message || 'Failed to update admin')
-  }
-  return res.json()
+  const res = await api.put(`/super-admin/admins/${id}`, data)
+  return res.data
 }
 
 export default function AdminsPage() {

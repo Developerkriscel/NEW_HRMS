@@ -25,7 +25,7 @@ import { Badge } from '@/components/common/Badge'
 import { PageLoader } from '@/components/common/LoadingSpinner'
 import { GenericAreaChart, GenericBarChart, DepartmentPieChart, Sparkline } from '@/components/charts/DynamicDashboardCharts'
 
-const getTenantApi = async () => (await import('@/services/tenantApi')).tenantApi
+import { tenantApi } from '@/services/tenantApi'
 import { cn } from '@/lib/utils'
 
 const RANGE_OPTIONS = [
@@ -220,7 +220,7 @@ export default function SuperAdminDashboardPage() {
     setLoading(true)
     setError(null)
     try {
-      const tenantApi = await getTenantApi()
+      // static tenantApi used directly
       const res = await tenantApi.getDashboard({ days })
       setData(res.data.data)
     } catch (err) {

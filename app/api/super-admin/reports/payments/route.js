@@ -38,10 +38,7 @@ export const GET = withApi(async (req) => {
   ]
 
   const countPipeline = [...pipeline, { $count: 'total' }]
-  const countResult = await Subscription.aggregate(countPipeline)
-  const total = countResult[0]?.total || 0
-
-  pipeline = pipeline.concat([
+  const itemsPipeline = pipeline.concat([
     { $sort: { startDate: -1 } },
     { $skip: skip },
     { $limit: limit },
@@ -51,14 +48,18 @@ export const GET = withApi(async (req) => {
         currency: { $literal: 'INR' },
         method: { $literal: 'PLATFORM_SUB' },
         reference: '$_id',
-        paidAt: '$startDate', // Treating subscription start as "paid" for UI representation
-        invoiceNumber: { $concat: ['SUB-', { $substr: ['$_id', 18, -1] }] }, // Fake invoice num
+        paidAt: '$startDate',
+        invoiceNumber: { $concat: ['SUB-', { $substr: ['$_id', 18, -1] }] },
         companyName: '$tenantDoc.companyName',
         planName: '$planDoc.name'
     }}
   ])
 
-  const results = await Subscription.aggregate(pipeline)
+  const [countResult, results] = await Promise.all([
+    Subscription.aggregate(countPipeline),
+    Subscription.aggregate(itemsPipeline),
+  ])
+  const total = countResult[0]?.total || 0
 
   return ok({
     data: results,

@@ -7,7 +7,7 @@ import { PermissionDenied } from '@/components/common/PermissionDenied'
 import { formatCurrency, cn } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
 
-const getTenantApi = async () => (await import('@/services/tenantApi')).tenantApi
+import { tenantApi } from '@/services/tenantApi'
 
 const emptyForm = { name: '', description: '', price: 0, billingCycle: 'MONTHLY', employeeLimit: 50, storageLimitMb: 5120, apiQuota: 10000, integrationLimit: 3, gracePeriodDays: 7, trialDays: 14, featuresText: '' }
 
@@ -27,7 +27,7 @@ export default function PlansPage() {
     setLoading(true)
     setForbidden(false)
     try {
-      const tenantApi = await getTenantApi()
+      // static tenantApi
       const res = await tenantApi.getPlans()
       setPlans(res.data.data)
     } catch (err) {
@@ -45,7 +45,7 @@ export default function PlansPage() {
     setSaving(true)
     setError('')
     try {
-      const tenantApi = await getTenantApi()
+      // static tenantApi
       await tenantApi.createPlan({
         ...form,
         price: Number(form.price),
@@ -75,7 +75,7 @@ export default function PlansPage() {
     setActionLoading(plan._id)
     setError('')
     try {
-      const tenantApi = await getTenantApi()
+      // static tenantApi
       if (nextActive) {
         await tenantApi.updatePlan(plan._id, { active: true })
       } else {
