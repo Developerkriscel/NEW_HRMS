@@ -7,6 +7,7 @@ import { logAction } from '@/lib/audit'
 import { sanitizeForManager } from '@/lib/employeeVisibility'
 import { sanitizeModuleAccess } from '@/lib/moduleAccess'
 import { sendEmployeeInvitationEmail } from '@/lib/mail'
+import { rememberLoginDirectoryEntry } from '@/lib/loginDirectory'
 import Employee from '@/models/Employee'
 import Tenant from '@/models/Tenant'
 import '@/models/Department'
@@ -155,6 +156,7 @@ export const POST = withApi(async (req) => {
     tenantId,
     createdBy: session.sub,
   })
+  await rememberLoginDirectoryEntry({ isSuperAdmin: false, doc: employee, tenant, databaseName: tenant?.databaseName || null })
 
   await logAction(session, {
     action: 'EMPLOYEE_CREATED',

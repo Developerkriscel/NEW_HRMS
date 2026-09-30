@@ -6,6 +6,7 @@ import { AdminModal } from './AdminModal'
 import { AdminDetailsDrawer } from './AdminDetailsDrawer'
 import { KeyRound, CheckCircle2, XCircle, Edit2, ShieldAlert, X, Activity, MoreVertical, Lock, Mail, Smartphone } from 'lucide-react'
 import { PermissionDenied } from '@/components/common/PermissionDenied'
+import { Portal } from '@/components/common/Portal'
 import { useAuthStore } from '@/store/authStore'
 import { cn } from '@/lib/utils'
 
@@ -40,6 +41,7 @@ export default function AdminsPage() {
   const [modalMode, setModalMode] = useState('edit')
   const [editAdminId, setEditAdminId] = useState(null)
   const [selectedAdmin, setSelectedAdmin] = useState(null)
+  const [viewingImage, setViewingImage] = useState(null)
 
   async function load() {
     setLoading(true)
@@ -65,9 +67,9 @@ export default function AdminsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100/80 dark:border-slate-800/60 pb-6">
         <div className="flex-1">
           <div className="flex flex-wrap items-center gap-3 mb-1.5">
-            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-700 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-blue-500 after:to-transparent after:rounded-full">Admins</h1>
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-700 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-blue-500 after:to-transparent after:rounded-full">Company Admins</h1>
           </div>
-          <p className="text-slate-500 dark:text-slate-400 text-sm font-semibold">Manage super administrators</p>
+          <p className="text-slate-500 dark:text-slate-400 text-sm font-semibold">Manage company administrators</p>
         </div>
         {hasPermission('operator.update') && (
           <button 
@@ -88,6 +90,7 @@ export default function AdminsPage() {
               <thead>
                 <tr className="border-b-2 border-slate-100 dark:border-slate-800/80 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
                   <th className="pb-4 px-2">Admin Profile</th>
+                  <th className="pb-4 px-2">Company</th>
                   <th className="pb-4 px-2">Contact Info</th>
                   <th className="pb-4 px-2">Status</th>
                   <th className="pb-4 px-2">Security</th>
@@ -109,23 +112,34 @@ export default function AdminsPage() {
                     >
                       <td className="py-4 px-2">
                         <div className="flex items-center gap-3.5">
-                          {admin.profilePhoto ? (
-                            <img src={admin.profilePhoto} alt={admin.name} className="w-10 h-10 rounded-2xl object-cover border border-slate-200 dark:border-slate-700 shadow-sm" />
+                          {admin.profilePhotoUrl ? (
+                            <img 
+                              src={admin.profilePhotoUrl} 
+                              alt={admin.name || admin.firstName} 
+                              className="w-10 h-10 rounded-2xl object-cover border border-slate-200 dark:border-slate-700 shadow-sm cursor-pointer hover:opacity-80 transition-opacity" 
+                              onClick={() => setViewingImage(admin.profilePhotoUrl)}
+                            />
                           ) : (
                             <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-100 to-indigo-50 dark:from-indigo-900/40 dark:to-indigo-800/20 border border-indigo-200/60 dark:border-indigo-700/50 flex items-center justify-center shrink-0 shadow-sm">
                               <span className="text-sm font-black text-indigo-700 dark:text-indigo-400">
-                                {admin.name ? admin.name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase() : 'A'}
+                                {(admin.name || (admin.firstName && admin.lastName ? `${admin.firstName} ${admin.lastName}` : admin.firstName || admin.lastName || 'Admin')).split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase()}
                               </span>
                             </div>
                           )}
                           <div>
                             <p className="font-extrabold text-slate-900 dark:text-white text-sm">
-                              {admin.name}
+                              {admin.name || (admin.firstName && admin.lastName ? `${admin.firstName} ${admin.lastName}` : admin.firstName || admin.lastName || 'Admin')}
                             </p>
                             <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">
                               {admin.designation || 'Admin'}
                             </p>
                           </div>
+                        </div>
+                      </td>
+                      <td className="py-4 px-2">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-sm font-bold text-slate-900 dark:text-white">{admin.companyName}</span>
+                          <span className="text-[10px] font-bold text-slate-500 uppercase">{admin.tenantCode}</span>
                         </div>
                       </td>
                       <td className="py-4 px-2">
@@ -167,6 +181,7 @@ export default function AdminsPage() {
                           </span>
                         </div>
                       </td>
+                      <td className="py-4 px-2 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button 
                             onClick={() => setSelectedAdmin(admin)}
@@ -183,6 +198,7 @@ export default function AdminsPage() {
                             </button>
                           )}
                         </div>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -197,6 +213,7 @@ export default function AdminsPage() {
         mode={modalMode}
         onClose={() => setModalOpen(false)} 
         adminId={editAdminId} 
+        tenantId={editAdminId ? admins.find(a => a._id === editAdminId)?.tenantId : null} 
         onSuccess={() => { setModalOpen(false); load(); }} 
       />
 
@@ -213,6 +230,31 @@ export default function AdminsPage() {
           }
         }}
       />
+
+      {/* Image Viewer Modal */}
+      {viewingImage && (
+        <Portal>
+          <div 
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+            onClick={() => setViewingImage(null)}
+          >
+            <div className="relative flex flex-col items-center justify-center p-2 rounded-2xl bg-white/10 shadow-2xl ring-1 ring-white/20">
+              <button 
+                onClick={(e) => { e.stopPropagation(); setViewingImage(null); }}
+                className="fixed top-6 right-6 p-2 text-white/70 hover:text-white bg-black/40 hover:bg-black/60 rounded-full transition-all z-[10000]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <img 
+                src={viewingImage} 
+                alt="Preview" 
+                className="w-[90vw] h-[90vh] object-contain rounded-xl"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          </div>
+        </Portal>
+      )}
     </div>
   )
 }

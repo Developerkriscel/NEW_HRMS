@@ -64,8 +64,8 @@ export function SubscriptionModal({ open, onClose, subscriptionId, onSuccess }) 
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-        <div className="bg-slate-50 dark:bg-slate-950 w-full max-w-5xl max-h-[95vh] overflow-y-auto rounded-[32px] shadow-2xl flex flex-col border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200 relative">
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200 p-4">
+        <div className="bg-slate-50 dark:bg-slate-950 w-full max-w-7xl max-h-[95vh] overflow-y-auto rounded-[32px] shadow-2xl flex flex-col border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200 relative">
           
           <button 
             onClick={onClose}
@@ -103,7 +103,7 @@ export function SubscriptionModal({ open, onClose, subscriptionId, onSuccess }) 
                   <p className="text-sm text-slate-500 dark:text-slate-400">Choose a new plan to upgrade or downgrade this organization. Changes will be reflected immediately.</p>
                 </div>
 
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-10">
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 mb-10">
                   {plans.map((plan) => {
                     const selected = fields.planId === plan._id || (!fields.planId && data.subscription.plan?._id === plan._id)
                     const isCurrent = data.subscription.plan?._id === plan._id

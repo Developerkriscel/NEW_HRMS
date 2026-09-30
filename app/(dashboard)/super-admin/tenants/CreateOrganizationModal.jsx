@@ -10,6 +10,8 @@ import {
   CheckCircle2,
   Copy,
   CreditCard,
+  Eye,
+  EyeOff,
   ImagePlus,
   KeyRound,
   Loader2,
@@ -27,7 +29,7 @@ const DRAFT_KEY = 'nexahr_add_organization_draft_v2'
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
-const BUSINESS_TYPES = ['Restaurant', 'Cafe', 'Cloud Kitchen', 'Bakery', 'QSR', 'Bar & Restaurant', 'Food Court', 'Other']
+const BUSINESS_TYPES = ['Technology', 'Healthcare', 'Finance', 'Manufacturing', 'Retail', 'Education', 'Real Estate', 'Consulting', 'Other']
 const INDIAN_STATES = [
   'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Delhi', 'Goa', 'Gujarat', 'Haryana',
   'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya',
@@ -46,7 +48,7 @@ function defaultForm() {
     companyName: '',
     legalBusinessName: '',
     tenantCode: '',
-    industryType: 'Restaurant',
+    industryType: 'Technology',
     logoUrl: '',
     logoPreview: '',
     website: '',
@@ -278,8 +280,16 @@ import { X } from 'lucide-react'
 
 export function CreateOrganizationModal({ isOpen, onClose }) {
   const router = useRouter()
+  const scrollRef = useRef(null)
   const [form, setForm] = useState(defaultForm)
   const [step, setStep] = useState(0)
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }, [step])
+
   const [reviewing, setReviewing] = useState(false)
   const [errors, setErrors] = useState({})
   const [submitError, setSubmitError] = useState('')
@@ -618,7 +628,7 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 sm:p-6 overflow-y-auto">
+      <div ref={scrollRef} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 sm:p-6 overflow-y-auto">
         <div className="bg-slate-50 dark:bg-slate-950 w-full max-w-6xl min-h-[90vh] rounded-[32px] p-6 sm:p-10 relative shadow-2xl animate-fade-in my-auto">
           <button onClick={onClose} className="absolute top-6 right-6 p-2 rounded-full bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors">
             <X className="w-5 h-5 text-slate-600 dark:text-slate-300"/>
@@ -854,6 +864,9 @@ function CompanyStep({ form, errors, codeCheck, logoUploading, update, handleIma
 }
 
 function AdminStep({ form, errors, emailCheck, profileUploading, update, handleImage }) {
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+
   return (
     <div className="space-y-5">
       <Section title="Administrator Information" description="Primary Company Admin account." icon={UserCheck} color="indigo">
@@ -871,7 +884,7 @@ function AdminStep({ form, errors, emailCheck, profileUploading, update, handleI
             <input className="input-field" value={form.adminPhone} onChange={(e) => update('adminPhone', e.target.value)} placeholder="+91 98765 43210" />
           </Field>
           <Field label="Designation">
-            <input className="input-field" value={form.adminDesignation} onChange={(e) => update('adminDesignation', e.target.value)} placeholder="Restaurant Manager" />
+            <input className="input-field" value={form.adminDesignation} onChange={(e) => update('adminDesignation', e.target.value)} placeholder="HR Manager" />
           </Field>
           <ImageUploader
             label="Profile Photo"
@@ -933,10 +946,20 @@ function AdminStep({ form, errors, emailCheck, profileUploading, update, handleI
           {form.passwordMode === 'CUSTOM' ? (
             <div className="grid gap-5 md:grid-cols-2">
               <Field label="Initial Password" required error={errors.adminPassword} hint="Minimum 8 characters with uppercase, lowercase and a number">
-                <input type="password" className="input-field" value={form.adminPassword} onChange={(e) => update('adminPassword', e.target.value)} placeholder="Set initial password" autoComplete="new-password" />
+                <div className="relative">
+                  <input type={showPassword ? 'text' : 'password'} className="input-field pr-10" value={form.adminPassword} onChange={(e) => update('adminPassword', e.target.value)} placeholder="Set initial password" autoComplete="new-password" />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </Field>
               <Field label="Confirm Password" required error={errors.confirmAdminPassword}>
-                <input type="password" className="input-field" value={form.confirmAdminPassword} onChange={(e) => update('confirmAdminPassword', e.target.value)} placeholder="Confirm initial password" autoComplete="new-password" />
+                <div className="relative">
+                  <input type={showConfirmPassword ? 'text' : 'password'} className="input-field pr-10" value={form.confirmAdminPassword} onChange={(e) => update('confirmAdminPassword', e.target.value)} placeholder="Confirm initial password" autoComplete="new-password" />
+                  <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </Field>
             </div>
           ) : null}

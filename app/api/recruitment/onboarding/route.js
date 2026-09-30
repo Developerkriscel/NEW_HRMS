@@ -61,7 +61,8 @@ export const GET = withApi(async (req) => {
       .populate('jobId', 'jobTitle publicTitle')
       .sort({ proposedJoiningDate: 1 })
       .skip(page * size)
-      .limit(size),
+      .limit(size)
+      .lean(),
     Preboarding.aggregate([
       { $match: baseQuery },
       { $group: { _id: '$status', count: { $sum: 1 } } },
@@ -107,7 +108,7 @@ export const GET = withApi(async (req) => {
     const verified = pDocs.filter((d) => ['VERIFIED', 'WAIVED'].includes(d.status)).length
     const version = versionById.get(String(p.offerVersionId)) || {}
     const milestoneState = buildPreboardingMilestones({
-      ...p.toObject(),
+      ...p,
       documents: docsByPreboarding.get(String(p._id)) || [],
       offer: version,
       departmentId: version.departmentId,

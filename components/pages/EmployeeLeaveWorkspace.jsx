@@ -98,27 +98,27 @@ export function EmployeeLeaveWorkspace({ headerAction }) {
 
   async function handleCancelLeave(id) {
     await leaveApi.cancel(id)
-    load()
+    setLeaves(prev => prev.map(item => item._id === id ? { ...item, status: 'CANCELLED' } : item))
   }
 
   async function handleApproveLeave(id) {
     await leaveApi.approve(id, 'Self-approved by admin')
-    load()
+    setLeaves(prev => prev.map(item => item._id === id ? { ...item, status: 'APPROVED' } : item))
   }
 
   async function handleRejectLeave(id) {
     await leaveApi.reject(id, 'Self-rejected by admin')
-    load()
+    setLeaves(prev => prev.map(item => item._id === id ? { ...item, status: 'REJECTED' } : item))
   }
 
   async function handleApproveRequestDirect(id) {
     await teamRequestApi.approve(id, 'Self-approved by admin')
-    load()
+    setRequests(prev => prev.map(item => item._id === id ? { ...item, status: 'APPROVED' } : item))
   }
 
   async function handleRejectRequestDirect(id) {
     await teamRequestApi.reject(id, 'Self-rejected by admin')
-    load()
+    setRequests(prev => prev.map(item => item._id === id ? { ...item, status: 'REJECTED' } : item))
   }
 
   const tabSwitcher = (

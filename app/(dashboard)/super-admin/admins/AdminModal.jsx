@@ -6,7 +6,7 @@ import { Portal } from '@/components/common/Portal'
 import { useAuthStore } from '@/store/authStore'
 import { cn } from '@/lib/utils'
 
-export function AdminModal({ open, onClose, adminId, onSuccess, mode = 'edit' }) {
+export function AdminModal({ open, onClose, adminId, tenantId, onSuccess, mode = 'edit' }) {
   const hasPermission = useAuthStore((s) => s.hasPermission)
   const fileInputRef = useRef(null)
 
@@ -15,6 +15,7 @@ export function AdminModal({ open, onClose, adminId, onSuccess, mode = 'edit' })
 
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
+  const [tenants, setTenants] = useState([])
   const [error, setError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   
@@ -30,10 +31,18 @@ export function AdminModal({ open, onClose, adminId, onSuccess, mode = 'edit' })
   })
 
   useEffect(() => {
+    
+    if (open && !isEdit) {
+      fetch('/api/super-admin/tenants?size=1000')
+        .then(res => res.json())
+        .then(res => setTenants(res.tenants || res))
+        .catch(console.error)
+    }
+
     if (open && isEdit) {
       setLoading(true)
       setError('')
-      fetch(`/api/super-admin/admins/${adminId}`)
+      fetch(`/api/super-admin/admins/${adminId}?tenantId=${tenantId}`)
         .then(res => {
           if (!res.ok) throw new Error('Failed to fetch admin')
           return res.json()
@@ -52,7 +61,7 @@ export function AdminModal({ open, onClose, adminId, onSuccess, mode = 'edit' })
             lastName,
             mobileNumber: data.mobileNumber || '',
             designation: data.designation || '',
-            profilePhoto: data.profilePhoto || '',
+            profilePhoto: data.profilePhotoUrl || data.profilePhoto || '',
             email: data.email || '',
             password: '', // blank for edit unless they want to change
             status: data.status || 'ACTIVE'
@@ -108,7 +117,7 @@ export function AdminModal({ open, onClose, adminId, onSuccess, mode = 'edit' })
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, tenantId: isEdit ? tenantId : form.tenantId }),
       })
       if (!res.ok) {
         const err = await res.json()
@@ -181,6 +190,28 @@ export function AdminModal({ open, onClose, adminId, onSuccess, mode = 'edit' })
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {!isEdit && (
+                      <div className="md:col-span-2">
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">Company (Tenant) <span className="text-red-500">*</span></label>
+                        <select required disabled={isView} className="input-field bg-slate-50 dark:bg-slate-800/50 rounded-xl w-full px-4 py-2.5 border-slate-200/60" value={form.tenantId || ''} onChange={(e) => setForm({ ...form, tenantId: e.target.value })}>
+                          <option value="">Select a company</option>
+                          {tenants.map(t => (
+                            <option key={t._id} value={t._id}>{t.companyName}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    {!isEdit && (
+                      <div className="md:col-span-2">
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">Company (Tenant) <span className="text-red-500">*</span></label>
+                        <select required disabled={isView} className="input-field bg-slate-50 dark:bg-slate-800/50 rounded-xl w-full px-4 py-2.5 border-slate-200/60" value={form.tenantId || ''} onChange={(e) => setForm({ ...form, tenantId: e.target.value })}>
+                          <option value="">Select a company</option>
+                          {tenants.map(t => (
+                            <option key={t._id} value={t._id}>{t.companyName}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">First Name <span className="text-red-500">*</span></label>
                       <input disabled={isView} required placeholder="First name" className="input-field bg-slate-50 dark:bg-slate-800/50 rounded-xl w-full px-4 py-2.5 border-slate-200/60 focus:bg-white" value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} />

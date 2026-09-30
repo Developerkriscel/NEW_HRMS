@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Mail, Lock, Eye, EyeOff, Sparkles, Shield, Building2, UserCheck, Users, Briefcase, DollarSign, Terminal } from 'lucide-react'
+import { useAuthStore } from '@/store/authStore'
 
 const ROLE_DASHBOARDS = {
   SUPER_ADMIN: '/super-admin/dashboard',
@@ -72,9 +73,8 @@ export default function LoginPage() {
     try {
       const data = await postAuth('login', { email: credentials.email, password: credentials.password })
       const user = data.data.user
-      const { useAuthStore } = await import('@/store/authStore')
       useAuthStore.getState().setAuth(user)
-      router.push(ROLE_DASHBOARDS[user.role] || '/login')
+      router.replace(ROLE_DASHBOARDS[user.role] || '/login')
     } catch (err) {
       setError(loginErrorMessage(err, 'Invalid email or password'))
     } finally {
@@ -88,9 +88,8 @@ export default function LoginPage() {
     try {
       const data = await postAuth('dev-login', { role })
       const user = data.data.user
-      const { useAuthStore } = await import('@/store/authStore')
       useAuthStore.getState().setAuth(user)
-      router.push(ROLE_DASHBOARDS[user.role] || '/login')
+      router.replace(ROLE_DASHBOARDS[user.role] || '/login')
     } catch (err) {
       setError(loginErrorMessage(err, 'Dev login is not available'))
     } finally {

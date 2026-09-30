@@ -40,19 +40,17 @@ export default function SupportDashboardPage() {
   if (loading) return <PageLoader />
 
   return (
-    <div className="animate-fade-in space-y-6">
-      <div className="page-header flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <LifeBuoy className="w-6 h-6 text-indigo-500" />
-            Support Center
-          </h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Manage customer requests, conversations, and platform support.</p>
+    <div className="animate-fade-in pb-12">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 mb-4 border-b border-slate-100/80 dark:border-slate-800/60">
+        <div className="flex-1">
+          <div className="flex flex-wrap items-center gap-3 mb-1">
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-700 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-1 after:content-[''] after:absolute after:-bottom-0 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-blue-500 after:to-transparent after:rounded-full">Support Center</h1>
+          </div>
         </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
         <div className="bg-white dark:bg-slate-900 rounded-[24px] p-6 border border-slate-200/60 dark:border-slate-800/80 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-sm font-bold text-slate-500 dark:text-slate-400">Open Tickets</p>

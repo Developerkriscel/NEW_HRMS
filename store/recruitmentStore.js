@@ -4,7 +4,8 @@ import { offerApi } from '@/services/offerApi'
 import { interviewApi } from '@/services/interviewApi'
 import { selectionApi } from '@/services/selectionApi'
 
-const CANDIDATE_PAGE_SIZE = 100
+const CANDIDATE_PAGE_SIZE = 50
+const RECRUITMENT_CACHE_TTL_MS = Number(process.env.NEXT_PUBLIC_RECRUITMENT_CACHE_TTL_MS || 60000)
 
 function displayStatus(application, offer) {
   if (application.status === 'REJECTED' || application.status === 'WITHDRAWN') return 'Rejected'
@@ -70,15 +71,26 @@ export const useRecruitmentStore = create((set, get) => ({
   candidatePage: 0,
   candidateTotal: 0,
   hasMoreCandidates: false,
+  lastFetchedAt: 0,
 
   fetchCandidates: async (params = {}) => {
     const append = !!params.append
     const page = Number(params.page ?? (append ? get().candidatePage + 1 : 0))
     const size = Number(params.size || CANDIDATE_PAGE_SIZE)
+    const current = get()
+    if (
+      !append
+      && !params.force
+      && current.candidates.length
+      && current.lastFetchedAt
+      && Date.now() - current.lastFetchedAt < RECRUITMENT_CACHE_TTL_MS
+    ) {
+      return current.candidates
+    }
     set({ [append ? 'loadingMore' : 'loading']: true, error: null });
     try {
       // Load raw applications from backend
-      const { append: _append, ...requestParams } = params
+      const { append: _append, force: _force, ...requestParams } = params
       const res = await candidateApi.list({ ...requestParams, page, size });
       const data = res.data.data || {}
       const rows = data.content || [];
@@ -130,6 +142,7 @@ export const useRecruitmentStore = create((set, get) => ({
         candidatePage: page,
         candidateTotal: data.totalElements || nextCandidates.length,
         hasMoreCandidates: nextCandidates.length < (data.totalElements || nextCandidates.length),
+        lastFetchedAt: Date.now(),
       });
     } catch (e) {
       console.error(e);

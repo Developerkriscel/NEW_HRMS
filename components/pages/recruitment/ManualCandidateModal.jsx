@@ -3,6 +3,7 @@ import { X, User, Mail, Phone, Briefcase, MapPin, DollarSign, FileText } from 'l
 
 export default function ManualCandidateModal({ position, onClose, onSave }) {
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -25,11 +26,14 @@ export default function ManualCandidateModal({ position, onClose, onSave }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
+    setError('')
     try {
       await onSave({
         ...formData,
         source: 'MANUAL'
       })
+    } catch (err) {
+      setError(err.message || 'Failed to add candidate')
     } finally {
       setLoading(false)
     }
@@ -127,6 +131,11 @@ export default function ManualCandidateModal({ position, onClose, onSave }) {
             </div>
 
           </form>
+          {error ? (
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+              {error}
+            </div>
+          ) : null}
         </div>
 
         <div className="p-6 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3 bg-slate-50/50 dark:bg-slate-900/50 rounded-b-2xl">

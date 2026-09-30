@@ -12,6 +12,43 @@ import { adaptPreboardingRecord } from './onboardingRecordAdapter'
 
 const PAGE_SIZE = 5
 
+function OnboardingTableSkeleton() {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left border-collapse">
+        <thead>
+          <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+            {['Candidate', 'Position', 'Joining Date', 'Progress', 'Assigned To', 'Status', 'Actions'].map((header) => (
+              <th key={header} className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">{header}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <tr key={index} className="animate-pulse">
+              <td className="py-4 px-6">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-700" />
+                  <div className="space-y-2">
+                    <div className="h-4 w-36 rounded bg-slate-200 dark:bg-slate-700" />
+                    <div className="h-3 w-20 rounded bg-slate-100 dark:bg-slate-800" />
+                  </div>
+                </div>
+              </td>
+              <td className="py-4 px-6"><div className="h-4 w-40 rounded bg-slate-200 dark:bg-slate-700" /></td>
+              <td className="py-4 px-6"><div className="h-7 w-28 rounded-lg bg-slate-200 dark:bg-slate-700" /></td>
+              <td className="py-4 px-6"><div className="h-3 w-36 rounded bg-slate-200 dark:bg-slate-700" /></td>
+              <td className="py-4 px-6"><div className="h-4 w-24 rounded bg-slate-200 dark:bg-slate-700" /></td>
+              <td className="py-4 px-6"><div className="h-7 w-24 rounded-full bg-slate-200 dark:bg-slate-700" /></td>
+              <td className="py-4 px-6"><div className="ml-auto h-9 w-20 rounded-lg bg-slate-200 dark:bg-slate-700" /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 export function OnboardingDashboardPage() {
   const router = useRouter()
   const [records, setRecords] = useState([])
@@ -146,7 +183,7 @@ export function OnboardingDashboardPage() {
       {/* Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden">
         {loading ? (
-          <div className="p-12 text-center text-sm font-semibold text-slate-500">Loading onboarding records from database...</div>
+          <OnboardingTableSkeleton />
         ) : error ? (
           <div className="p-12 text-center">
             <p className="text-sm font-bold text-red-600">{error}</p>

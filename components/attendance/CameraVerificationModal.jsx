@@ -1,4 +1,4 @@
-3333333333333333333333333333333333333333'use client'
+'use client'
 
 import React, { useRef, useState, useCallback, useEffect } from 'react'
 import { Camera, X, RefreshCw, CheckCircle2, MapPin } from 'lucide-react'

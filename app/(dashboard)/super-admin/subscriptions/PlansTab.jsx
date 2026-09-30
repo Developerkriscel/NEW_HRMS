@@ -6,6 +6,8 @@ import { Plus, X, CheckCircle2, Layers, Eye, Edit2, Play, Pause, Server, Users, 
 import { PermissionDenied } from '@/components/common/PermissionDenied'
 import { formatCurrency, cn } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
+import { PlanDetailsDrawer } from './PlanDetailsDrawer'
+import { platformApi } from '@/services/platformApi'
 
 const getTenantApi = async () => (await import('@/services/tenantApi')).tenantApi
 
@@ -18,18 +20,26 @@ export default function PlansTab() {
   const [loading, setLoading] = useState(true)
   const [forbidden, setForbidden] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
+  const [editingPlanId, setEditingPlanId] = useState(null)
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [actionLoading, setActionLoading] = useState('')
   const [error, setError] = useState('')
+  const [selectedPlan, setSelectedPlan] = useState(null)
+  const [modules, setModules] = useState([])
+  const [mapping, setMapping] = useState({})
 
   async function load() {
     setLoading(true)
     setForbidden(false)
     try {
       const tenantApi = await getTenantApi()
-      const res = await tenantApi.getPlans()
-      setPlans(res.data.data)
+      const [resPlans, resModules] = await Promise.all([
+        tenantApi.getPlans(),
+        platformApi.getModules().catch(() => ({ data: { data: [] } }))
+      ])
+      setPlans(resPlans.data.data)
+      setModules(resModules.data.data || [])
     } catch (err) {
       if (err.response?.status === 403) setForbidden(true)
     } finally {
@@ -40,13 +50,13 @@ export default function PlansTab() {
     load()
   }, [])
 
-  async function handleCreate(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
     setSaving(true)
     setError('')
     try {
       const tenantApi = await getTenantApi()
-      await tenantApi.createPlan({
+      const payload = {
         ...form,
         price: Number(form.price),
         employeeLimit: Number(form.employeeLimit),
@@ -56,15 +66,54 @@ export default function PlansTab() {
         gracePeriodDays: Number(form.gracePeriodDays),
         trialDays: Number(form.trialDays),
         features: form.featuresText.split(',').map((f) => f.trim()).filter(Boolean),
-      })
+      }
+      let finalPlanId = editingPlanId
+      if (editingPlanId) {
+        await tenantApi.updatePlan(editingPlanId, payload)
+      } else {
+        const res = await tenantApi.createPlan(payload)
+        finalPlanId = res.data.data._id
+      }
+      
+      const mappingsArray = Object.entries(mapping).map(([module, availability]) => ({ module, availability }))
+      if (mappingsArray.length > 0) {
+        await platformApi.setPlanModules(finalPlanId, { mappings: mappingsArray }).catch(console.error)
+      }
+      
       setShowCreate(false)
       setForm(emptyForm)
+      setMapping({})
+      setEditingPlanId(null)
       load()
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to create plan')
+      setError(err.response?.data?.message || `Failed to ${editingPlanId ? 'update' : 'create'} plan`)
     } finally {
       setSaving(false)
     }
+  }
+
+  function openEditModal(plan) {
+    setForm({
+      name: plan.name || '',
+      description: plan.description || '',
+      price: plan.price || 0,
+      billingCycle: plan.billingCycle || 'MONTHLY',
+      employeeLimit: plan.employeeLimit ?? -1,
+      storageLimitMb: plan.storageLimitMb ?? -1,
+      apiQuota: plan.apiQuota ?? -1,
+      integrationLimit: plan.integrationLimit ?? -1,
+      gracePeriodDays: plan.gracePeriodDays ?? 7,
+      trialDays: plan.trialDays ?? 14,
+      featuresText: (plan.features || []).join(', ')
+    })
+    setEditingPlanId(plan._id)
+    setShowCreate(true)
+    setMapping({})
+    platformApi.getPlanModules(plan._id).then(res => {
+      const map = {}
+      for (const row of res.data.data || []) map[row.module._id] = row.availability
+      setMapping(map)
+    }).catch(console.error)
   }
 
   async function handlePlanActiveToggle(plan) {
@@ -96,11 +145,11 @@ export default function PlansTab() {
       <div className="flex justify-between items-center pb-2">
         <div>
           <h2 className="text-xl font-bold text-slate-900 dark:text-white">Active Plans</h2>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Manage subscription plans, limits and module packaging</p>
+
         </div>
         {hasPermission('plan.create') && (
-          <button className="btn-primary" onClick={() => setShowCreate(true)}>
-            <Plus className="w-4 h-4" /> Create Plan
+          <button className="btn-primary" onClick={() => { setForm(emptyForm); setEditingPlanId(null); setMapping({}); setShowCreate(true) }}>
+            <Plus className="w-4 h-4 mr-1.5" /> Create Plan
           </button>
         )}
       </div>
@@ -190,10 +239,10 @@ export default function PlansTab() {
 
               {/* Action Buttons */}
               <div className="flex items-center gap-2 mt-auto">
-                <button onClick={() => router.push(`/super-admin/plans/${plan._id}`)} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700/80 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 transition-colors">
+                <button onClick={() => setSelectedPlan(plan)} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700/80 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 transition-colors">
                   <Eye className="w-3.5 h-3.5" /> View
                 </button>
-                <button onClick={() => router.push(`/super-admin/plans/${plan._id}`)} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700/80 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 transition-colors">
+                <button onClick={() => openEditModal(plan)} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700/80 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 transition-colors">
                   <Edit2 className="w-3.5 h-3.5" /> Edit
                 </button>
                 {hasPermission('plan.archive') && (
@@ -215,42 +264,132 @@ export default function PlansTab() {
 
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-2xl p-8 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Create Plan</h2>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{editingPlanId ? 'Edit Plan' : 'Create Plan'}</h2>
               <button onClick={() => setShowCreate(false)}><X className="w-5 h-5 text-slate-400" /></button>
             </div>
-            <form onSubmit={handleCreate} className="space-y-3">
+            <form onSubmit={handleSubmit} className="space-y-6">
               {error && <div className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 rounded-lg p-3">{error}</div>}
-              <input required placeholder="Plan Name" className="input-field" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              <input placeholder="Description" className="input-field" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-              <div className="grid grid-cols-2 gap-3">
-                <input required type="number" placeholder="Price" className="input-field" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
-                <select className="input-field" value={form.billingCycle} onChange={(e) => setForm({ ...form, billingCycle: e.target.value })}>
-                  <option value="MONTHLY">Monthly</option>
-                  <option value="YEARLY">Yearly</option>
-                </select>
+              
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 border-b border-slate-100 dark:border-slate-800 pb-2">Basic Info</h3>
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">Plan Name</label>
+                    <input required placeholder="e.g. Starter, Premium" className="input-field" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">Description</label>
+                    <input placeholder="Brief description of the plan" className="input-field" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+                  </div>
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <input type="number" placeholder="Employee Limit (-1=unlimited)" className="input-field" value={form.employeeLimit} onChange={(e) => setForm({ ...form, employeeLimit: e.target.value })} />
-                <input type="number" placeholder="Storage (MB)" className="input-field" value={form.storageLimitMb} onChange={(e) => setForm({ ...form, storageLimitMb: e.target.value })} />
+
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 border-b border-slate-100 dark:border-slate-800 pb-2">Pricing & Billing</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">Price</label>
+                    <input required type="number" placeholder="0" className="input-field" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">Billing Cycle</label>
+                    <select className="input-field" value={form.billingCycle} onChange={(e) => setForm({ ...form, billingCycle: e.target.value })}>
+                      <option value="MONTHLY">Monthly</option>
+                      <option value="YEARLY">Yearly</option>
+                    </select>
+                  </div>
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <input type="number" placeholder="API Quota/mo" className="input-field" value={form.apiQuota} onChange={(e) => setForm({ ...form, apiQuota: e.target.value })} />
-                <input type="number" placeholder="Integration Limit" className="input-field" value={form.integrationLimit} onChange={(e) => setForm({ ...form, integrationLimit: e.target.value })} />
+
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 border-b border-slate-100 dark:border-slate-800 pb-2">Limits & Quotas <span className="text-[10px] font-semibold text-slate-400 ml-1">(-1 for unlimited)</span></h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">Employee Limit</label>
+                    <input type="number" placeholder="-1" className="input-field" value={form.employeeLimit} onChange={(e) => setForm({ ...form, employeeLimit: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">Storage (MB)</label>
+                    <input type="number" placeholder="1024" className="input-field" value={form.storageLimitMb} onChange={(e) => setForm({ ...form, storageLimitMb: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">API Quota / Month</label>
+                    <input type="number" placeholder="-1" className="input-field" value={form.apiQuota} onChange={(e) => setForm({ ...form, apiQuota: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">Integrations</label>
+                    <input type="number" placeholder="3" className="input-field" value={form.integrationLimit} onChange={(e) => setForm({ ...form, integrationLimit: e.target.value })} />
+                  </div>
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <input type="number" placeholder="Trial Days" className="input-field" value={form.trialDays} onChange={(e) => setForm({ ...form, trialDays: e.target.value })} />
-                <input type="number" placeholder="Grace Period Days" className="input-field" value={form.gracePeriodDays} onChange={(e) => setForm({ ...form, gracePeriodDays: e.target.value })} />
+
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 border-b border-slate-100 dark:border-slate-800 pb-2">Trial & Grace</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">Trial Days</label>
+                    <input type="number" placeholder="14" className="input-field" value={form.trialDays} onChange={(e) => setForm({ ...form, trialDays: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">Grace Period Days</label>
+                    <input type="number" placeholder="7" className="input-field" value={form.gracePeriodDays} onChange={(e) => setForm({ ...form, gracePeriodDays: e.target.value })} />
+                  </div>
+                </div>
               </div>
-              <input placeholder="Features (comma separated)" className="input-field" value={form.featuresText} onChange={(e) => setForm({ ...form, featuresText: e.target.value })} />
-              <button type="submit" disabled={saving} className="btn-primary w-full justify-center">
-                {saving ? 'Creating...' : 'Create'}
-              </button>
+
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 border-b border-slate-100 dark:border-slate-800 pb-2">Features</h3>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">Included Features <span className="text-[10px] font-semibold text-slate-400 ml-1">(Comma separated)</span></label>
+                  <input placeholder="e.g. Core HR, Payroll, ATS" className="input-field" value={form.featuresText} onChange={(e) => setForm({ ...form, featuresText: e.target.value })} />
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 border-b border-slate-100 dark:border-slate-800 pb-2">Module Access</h3>
+                {modules.length > 0 ? (
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                    {modules.map((mod) => (
+                      <div key={mod._id} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+                        <div>
+                          <p className="text-sm font-bold text-slate-900 dark:text-white">{mod.name}</p>
+                          <p className="text-[10px] text-slate-500 uppercase">{mod.code}</p>
+                        </div>
+                        <select 
+                          className="input-field max-w-[150px] !py-1.5 !text-xs font-semibold"
+                          value={mapping[mod._id] || 'UNAVAILABLE'}
+                          onChange={(e) => setMapping({ ...mapping, [mod._id]: e.target.value })}
+                        >
+                          <option value="UNAVAILABLE">Unavailable</option>
+                          <option value="INCLUDED">Included</option>
+                          <option value="ADD_ON">Add-on</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400">No modules found in the system.</p>
+                )}
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <button type="button" onClick={() => setShowCreate(false)} className="btn-secondary flex-1 justify-center py-3 text-sm">Cancel</button>
+                <button type="submit" disabled={saving} className="btn-primary flex-1 justify-center py-3 text-sm shadow-md shadow-blue-500/20">
+                  {saving ? (editingPlanId ? 'Updating...' : 'Creating...') : (editingPlanId ? 'Update Plan' : 'Create Plan')}
+                </button>
+              </div>
             </form>
           </div>
         </div>
       )}
+
+      <PlanDetailsDrawer 
+        plan={selectedPlan} 
+        isOpen={!!selectedPlan} 
+        onClose={() => setSelectedPlan(null)} 
+      />
     </div>
   )
 }

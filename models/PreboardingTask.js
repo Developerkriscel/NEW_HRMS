@@ -19,5 +19,6 @@ const PreboardingTaskSchema = new mongoose.Schema(
 )
 
 PreboardingTaskSchema.index({ tenantId: 1, preboardingId: 1, deleted: 1 })
+PreboardingTaskSchema.index({ tenantId: 1, preboardingId: 1, deleted: 1, dueDate: 1, createdAt: 1 })
 
 export default model('PreboardingTask', PreboardingTaskSchema)

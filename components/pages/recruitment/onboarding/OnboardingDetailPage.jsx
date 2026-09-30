@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, User, ListTodo, FileText, Settings, Activity, Building, Briefcase, Mail, Phone, Calendar, Clock, CheckCircle2, ChevronRight, PauseCircle, AlertTriangle } from 'lucide-react'
 import { OnboardingStatusBadge } from './components/OnboardingStatusBadge'
@@ -27,23 +27,30 @@ export function OnboardingDetailPage({ id }) {
   const router = useRouter()
   const [record, setRecord] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
   const [activeTab, setActiveTab] = useState('overview')
   const [isConvertModalOpen, setIsConvertModalOpen] = useState(false)
+  const hasLoadedRef = useRef(false)
 
-  const loadRecord = useCallback(async () => {
-    setLoading(true)
+  const loadRecord = useCallback(async ({ silent = false } = {}) => {
+    if (!hasLoadedRef.current && !silent) setLoading(true)
+    else setRefreshing(true)
     setError('')
     try {
       const res = await preboardingApi.get(id)
       setRecord(adaptPreboardingRecord(res.data?.data))
+      hasLoadedRef.current = true
     } catch (err) {
       setError(err.response?.data?.message || 'Record not found')
-      setRecord(null)
+      if (!hasLoadedRef.current) setRecord(null)
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }, [id])
+
+  const refreshRecord = useCallback(() => loadRecord({ silent: true }), [loadRecord])
 
   useEffect(() => {
     loadRecord()
@@ -159,10 +166,15 @@ export function OnboardingDetailPage({ id }) {
           {/* Tab Content */}
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden min-h-[500px]">
             {activeTab === 'overview' && <OnboardingOverview record={record} />}
-            {activeTab === 'employee_details' && <OnboardingEmployeeDetails record={record} onRefresh={loadRecord} />}
+            {refreshing && (
+              <div className="border-b border-blue-100 bg-blue-50 px-5 py-2 text-xs font-bold text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300">
+                Syncing latest onboarding data...
+              </div>
+            )}
+            {activeTab === 'employee_details' && <OnboardingEmployeeDetails record={record} onRefresh={refreshRecord} />}
             {activeTab === 'tasks' && <OnboardingTasks record={record} onNavigate={setActiveTab} onConvert={() => setIsConvertModalOpen(true)} />}
-            {activeTab === 'documents' && <OnboardingDocuments record={record} onRefresh={loadRecord} />}
-            {activeTab === 'joining' && <OnboardingJoiningDetails record={record} onRefresh={loadRecord} />}
+            {activeTab === 'documents' && <OnboardingDocuments record={record} onRefresh={refreshRecord} />}
+            {activeTab === 'joining' && <OnboardingJoiningDetails record={record} onRefresh={refreshRecord} />}
             {activeTab === 'activity' && <OnboardingActivity record={record} />}
           </div>
         </div>
@@ -244,7 +256,7 @@ export function OnboardingDetailPage({ id }) {
 
       <ConvertToEmployeeModal isOpen={isConvertModalOpen} onClose={() => {
         setIsConvertModalOpen(false)
-        loadRecord()
+        refreshRecord()
       }} record={record} />
     </div>
   )

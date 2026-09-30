@@ -24,7 +24,12 @@ export function AiIntegrationSection() {
       if (res.data?.data) {
         const prov = res.data.data.provider || 'GEMINI'
         setProvider(prov)
-        setModel(res.data.data.model || (prov === 'GROK' ? 'grok-2-latest' : prov === 'MISTRAL' ? 'mistral-large-latest' : 'gemini-2.5-flash'))
+        setModel(res.data.data.model || (
+          prov === 'GROK' ? 'grok-2-latest'
+            : prov === 'MISTRAL' ? 'mistral-large-latest'
+              : prov === 'OPENAI' ? 'gpt-4o-mini'
+                : 'gemini-2.5-flash'
+        ))
         setApiKeyPreview(res.data.data.apiKeyPreview)
       }
     } catch (err) {
@@ -81,7 +86,21 @@ export function AiIntegrationSection() {
       <form onSubmit={handleSave} className="space-y-6 relative z-10">
         <div>
           <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">AI Provider</label>
-          <div className="flex gap-4">
+          <div className="flex flex-wrap gap-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input 
+                type="radio" 
+                name="provider" 
+                value="OPENAI" 
+                checked={provider === 'OPENAI'} 
+                onChange={() => {
+                  setProvider('OPENAI')
+                  setModel('gpt-4o-mini')
+                }}
+                className="text-purple-600 focus:ring-purple-500"
+              />
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">OpenAI</span>
+            </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input 
                 type="radio" 
@@ -139,6 +158,11 @@ export function AiIntegrationSection() {
                 <option value="gemini-2.5-flash">Gemini 2.5 Flash (Fast & Cost Effective)</option>
                 <option value="gemini-1.5-pro">Gemini 1.5 Pro (High Reasoning)</option>
                 <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+              </>
+            ) : provider === 'OPENAI' ? (
+              <>
+                <option value="gpt-4o-mini">GPT-4o mini (Fast & Cost Effective)</option>
+                <option value="gpt-4o">GPT-4o (Higher Quality)</option>
               </>
             ) : provider === 'MISTRAL' ? (
               <>

@@ -10,14 +10,13 @@ export default function SubscriptionsAndPlansPage() {
   const [activeTab, setActiveTab] = useState('subscriptions')
 
   return (
-    <div className="animate-fade-in space-y-6 pb-12">
+    <div className="animate-fade-in space-y-2 pb-12">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100/80 dark:border-slate-800/60 pb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex-1">
-          <div className="flex flex-wrap items-center gap-3 mb-1.5">
-            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-700 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-blue-500 after:to-transparent after:rounded-full">Billing & Subscriptions</h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-700 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-blue-500 after:to-transparent after:rounded-full">Plans & Subscriptions</h1>
           </div>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Manage active tenant subscriptions and configure subscription plans</p>
         </div>
       </div>
 

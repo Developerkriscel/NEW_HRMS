@@ -75,5 +75,6 @@ const OfferVersionSchema = new mongoose.Schema(
 )
 
 OfferVersionSchema.index({ tenantId: 1, offerId: 1, version: -1 })
+OfferVersionSchema.index({ tenantId: 1, _id: 1, deleted: 1 })
 
 export default model('OfferVersion', OfferVersionSchema)

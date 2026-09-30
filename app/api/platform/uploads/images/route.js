@@ -38,5 +38,9 @@ export const POST = withApi(async (req) => {
   const buffer = Buffer.from(await file.arrayBuffer())
   await writeFile(path.join(directory, filename), buffer)
 
-  return ok({ url: `/uploads/platform/${folder}/${filename}` }, 'Image uploaded', 201)
+  // Also return base64 so it works without server restarts for dynamic files
+  const base64 = buffer.toString('base64')
+  const dataUri = `data:${file.type};base64,${base64}`
+
+  return ok({ url: dataUri }, 'Image uploaded', 201)
 })

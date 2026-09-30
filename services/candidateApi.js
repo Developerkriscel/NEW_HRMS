@@ -1,7 +1,7 @@
 import api from './api'
 
 export const candidateApi = {
-  list: (params) => api.get('/recruitment/candidates', { params, skipCache: true }),
+  list: (params) => api.get('/recruitment/candidates', { params }),
   get: (id) => api.get(`/recruitment/candidates/${id}`),
   create: (data) => api.post('/recruitment/candidates', data),
   bulkApply: (data) => api.post('/recruitment/candidates/bulk-apply', data),
@@ -47,6 +47,7 @@ export const candidateApi = {
   listResumes: (id) => api.get(`/recruitment/candidates/${id}/resumes`),
   uploadResume: (id, formData) => api.post(`/recruitment/candidates/${id}/resumes`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
   uploadDraftResume: (formData) => api.post('/recruitment/candidates/resumes/draft', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  uploadBulkDraftResumes: (formData) => api.post('/recruitment/candidates/resumes/bulk-draft', formData, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 180000 }),
 
   parseResume: (resumeId) => api.post(`/recruitment/candidate-resumes/${resumeId}/parse`),
   retryParse: (resumeId) => api.post(`/recruitment/candidate-resumes/${resumeId}/retry`),

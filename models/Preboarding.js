@@ -100,5 +100,8 @@ const PreboardingSchema = new mongoose.Schema(
 PreboardingSchema.index({ tenantId: 1, applicationId: 1 }, { unique: true })
 PreboardingSchema.index({ tenantId: 1, offerId: 1 })
 PreboardingSchema.index({ tenantId: 1, status: 1 })
+PreboardingSchema.index({ tenantId: 1, deleted: 1, proposedJoiningDate: 1 })
+PreboardingSchema.index({ tenantId: 1, deleted: 1, status: 1, proposedJoiningDate: 1 })
+PreboardingSchema.index({ tenantId: 1, deleted: 1, confirmedJoiningDate: 1 })
 
 export default model('Preboarding', PreboardingSchema)

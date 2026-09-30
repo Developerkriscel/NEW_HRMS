@@ -20,6 +20,18 @@ import { departmentApi } from '@/services/departmentApi'
 import { attendanceApi } from '@/services/attendanceApi'
 import { leaveApi } from '@/services/leaveApi'
 import { jobApi } from '@/services/jobApi'
+import { useAuthStore } from '@/store/authStore'
+
+const EMPTY_COMPANY_STATS = {
+  totalEmployees: 0,
+  totalDepartments: 0,
+  presentToday: 0,
+  absentToday: 0,
+  pendingLeaves: 0,
+  newJoiners: 0,
+  openPositions: 0,
+  onLeaveToday: 0,
+}
 
 function PremiumStatsCard({ title, value, icon: Icon, gradientFrom, gradientTo, delay }) {
   return (
@@ -63,11 +75,19 @@ function PremiumChartCard({ title, subtitle, icon: Icon, children }) {
 }
 
 export function CompanyDashboardWorkspace({ headerAction }) {
+  const { user } = useAuthStore()
   const [stats, setStats] = useState(null)
   const [report, setReport] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (user?.devLogin) {
+      setStats(EMPTY_COMPANY_STATS)
+      setReport({ months: [], headcount: [], joiners: [] })
+      setLoading(false)
+      return
+    }
+
     const now = new Date()
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
 
@@ -102,7 +122,7 @@ export function CompanyDashboardWorkspace({ headerAction }) {
       })
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [])
+  }, [user])
 
   if (loading) return <PageLoader />
 

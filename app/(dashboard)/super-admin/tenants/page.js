@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronUp, ChevronDown, Plus, Search, Building2, Mail, Users, Database, ShieldCheck, ArrowUpRight, Sparkles } from 'lucide-react'
+import { ChevronUp, ChevronDown, Plus, Search, Building2, Mail, Users, Database, ShieldCheck, ArrowUpRight, Sparkles, X } from 'lucide-react'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { PermissionDenied } from '@/components/common/PermissionDenied'
+import { Portal } from '@/components/common/Portal'
 import { formatDate, cn } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
 import { TenantDetailsDrawer } from './TenantDetailsDrawer'
@@ -92,6 +93,7 @@ export default function TenantsPage() {
   const [sortBy, setSortBy] = useState('createdAt')
   const [sortDir, setSortDir] = useState('desc')
   const [selectedTenant, setSelectedTenant] = useState(null)
+  const [viewingImage, setViewingImage] = useState(null)
 
   useEffect(() => {
     const timer = setTimeout(() => setSearch(searchInput), 350)
@@ -263,9 +265,18 @@ export default function TenantsPage() {
                     {/* Company Column */}
                     <td className="py-4 px-2">
                       <div className="flex items-center gap-3.5">
-                        <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-200/50 dark:border-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 font-black text-sm shrink-0 shadow-sm group-hover:scale-105 group-hover:shadow-md transition-all duration-300">
-                          {row.companyName ? row.companyName.charAt(0).toUpperCase() : 'C'}
-                        </div>
+                        {row.logoUrl || row.logo ? (
+                          <img 
+                            src={row.logoUrl || row.logo} 
+                            alt={row.companyName} 
+                            className="w-10 h-10 rounded-2xl object-cover border border-slate-200 dark:border-slate-700 shadow-sm cursor-pointer hover:opacity-80 transition-opacity"
+                            onClick={(e) => { e.stopPropagation(); setViewingImage(row.logoUrl || row.logo); }}
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-200/50 dark:border-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 font-black text-sm shrink-0 shadow-sm group-hover:scale-105 group-hover:shadow-md transition-all duration-300">
+                            {row.companyName ? row.companyName.charAt(0).toUpperCase() : 'C'}
+                          </div>
+                        )}
                         <div>
                           <p className="font-extrabold text-slate-900 dark:text-white text-sm group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                             {row.companyName}
@@ -371,6 +382,31 @@ export default function TenantsPage() {
         onClose={() => setSelectedTenant(null)} 
         tenant={selectedTenant} 
       />
+
+      {/* Image Viewer Modal */}
+      {viewingImage && (
+        <Portal>
+          <div 
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+            onClick={() => setViewingImage(null)}
+          >
+            <div className="relative flex flex-col items-center justify-center p-2 rounded-2xl bg-white/10 shadow-2xl ring-1 ring-white/20">
+              <button 
+                onClick={(e) => { e.stopPropagation(); setViewingImage(null); }}
+                className="fixed top-6 right-6 p-2 text-white/70 hover:text-white bg-black/40 hover:bg-black/60 rounded-full transition-all z-[10000]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <img 
+                src={viewingImage} 
+                alt="Preview" 
+                className="w-[90vw] h-[90vh] object-contain rounded-xl"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          </div>
+        </Portal>
+      )}
     </div>
   )
 }

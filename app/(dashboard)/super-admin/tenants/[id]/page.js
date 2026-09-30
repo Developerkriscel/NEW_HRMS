@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils'
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
-const BUSINESS_TYPES = ['Restaurant', 'Cafe', 'Cloud Kitchen', 'Bakery', 'QSR', 'Bar & Restaurant', 'Food Court', 'Other']
+const BUSINESS_TYPES = ['Technology', 'Healthcare', 'Finance', 'Manufacturing', 'Retail', 'Education', 'Real Estate', 'Consulting', 'Other']
 const INDIAN_STATES = [
   'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Delhi', 'Goa', 'Gujarat', 'Haryana',
   'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya',
@@ -32,7 +32,7 @@ function defaultForm() {
     companyName: '',
     legalBusinessName: '',
     tenantCode: '',
-    industryType: 'Restaurant',
+    industryType: 'Technology',
     logoUrl: '',
     logoPreview: '',
     website: '',
@@ -223,7 +223,7 @@ export default function EditOrganizationPage() {
             companyName: t.companyName || '',
             legalBusinessName: t.legalBusinessName || '',
             tenantCode: t.tenantCode || '',
-            industryType: t.industryType || 'Restaurant',
+            industryType: t.industryType || 'Technology',
             logoUrl: t.logoUrl || '',
             logoPreview: '',
             website: t.website || '',

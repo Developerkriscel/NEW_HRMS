@@ -149,6 +149,35 @@ function getMatchLabel(score) {
   return 'Low Match'
 }
 
+function CandidateBoardSkeleton() {
+  return (
+    <div className="grid gap-4 lg:grid-cols-3">
+      {Array.from({ length: 3 }).map((_, columnIndex) => (
+        <div key={columnIndex} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="h-4 w-32 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
+            <div className="h-6 w-8 animate-pulse rounded-full bg-slate-200 dark:bg-slate-700" />
+          </div>
+          <div className="space-y-3">
+            {Array.from({ length: 3 }).map((__, cardIndex) => (
+              <div key={cardIndex} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/40">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="space-y-2">
+                    <div className="h-4 w-36 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
+                    <div className="h-3 w-24 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
+                  </div>
+                  <div className="h-6 w-12 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-700" />
+                </div>
+                <div className="h-12 animate-pulse rounded-xl bg-slate-200/80 dark:bg-slate-800" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function analyzeCandidateForPosition(candidate, position) {
   const candidateText = normalizeText([
     candidate.name,
@@ -219,8 +248,9 @@ export default function RecruitmentDashboardPage() {
   
   // Workflow States
   const [candidatePhase, setCandidatePhase] = useState('idle') // idle, upload, processing, uploaded, analyzing, results
-  // Local status map for AI Match table — tracks Add/Reject instantly without waiting for DB
+  // Local status map for AI Match table after save/skip decisions.
   const [localCandidateStatuses, setLocalCandidateStatuses] = useState({}) // { [email]: 'Pipeline' | 'Rejected' }
+  const [candidateActionLoading, setCandidateActionLoading] = useState({})
   // Real parsed candidates from backend API or CSV parsing
   const [parsedCandidates, setParsedCandidates] = useState([])
   const [uploadError, setUploadError] = useState(null)
@@ -234,13 +264,15 @@ export default function RecruitmentDashboardPage() {
   const [emailDraft, setEmailDraft] = useState('')
   const [scheduleSuccess, setScheduleSuccess] = useState(null)
   const [selectedCandidateInfo, setSelectedCandidateInfo] = useState(null)
+  const [positionsLoading, setPositionsLoading] = useState(true)
   
   // Global Store State
   const { candidates: candidatesData, offers: offersList, rejected: rejectedList, updateCandidateStatus, updateCandidateStage, selectCandidate, scheduleInterview, sendOffer, acceptOffer, rejectOffer, fetchCandidates, loading } = useRecruitmentStore()
   
   const fetchPositions = async () => {
+    setPositionsLoading(true)
     try {
-      const res = await jobApi.list()
+      const res = await jobApi.list({ size: 50 })
       const jobs = res.data?.data?.content || res.data?.data || []
       const mappedJobs = jobs.map(job => ({
         id: job._id || job.id,
@@ -273,6 +305,8 @@ export default function RecruitmentDashboardPage() {
       setPositionsList(mappedJobs)
     } catch (e) {
       console.error('Failed to fetch positions', e)
+    } finally {
+      setPositionsLoading(false)
     }
   }
 
@@ -511,6 +545,49 @@ export default function RecruitmentDashboardPage() {
 
 
   // Handle file upload — detects file type and routes to proper handler
+  const isResumeFile = (file) => ['pdf', 'docx', 'doc'].includes((file.name?.split('.').pop() || '').toLowerCase())
+
+  const handleFilesUpload = async (fileList) => {
+    const files = Array.from(fileList || []).filter(Boolean)
+    if (!files.length) return
+    if (files.length === 1) {
+      await handleFileUpload(files[0])
+      return
+    }
+    if (!files.every(isResumeFile)) {
+      setUploadError('Bulk upload supports multiple resume files only. Upload one CSV/Excel file at a time.')
+      setCandidatePhase('upload')
+      return
+    }
+
+    setUploadError(null)
+    setAnalysisError(null)
+    setUploadFileName(`${files.length} resumes`)
+    setCandidatePhase('processing')
+    try {
+      const formData = new FormData()
+      files.forEach((file) => formData.append('resumes', file))
+      const response = await candidateApi.uploadBulkDraftResumes(formData)
+      const data = response.data?.data || {}
+      const candidates = data.candidates || []
+      if (!candidates.length) {
+        setUploadError('No resumes could be parsed. Please check the files and try again.')
+        setCandidatePhase('upload')
+        return
+      }
+      setParsedCandidates(candidates)
+      setLocalCandidateStatuses({})
+      setCandidateActionLoading({})
+      setCandidatePhase('uploaded')
+      if (data.failures?.length) {
+        setAnalysisError(`${data.failures.length} resume${data.failures.length !== 1 ? 's' : ''} could not be parsed and were skipped.`)
+      }
+    } catch (err) {
+      setUploadError(err.response?.data?.message || err.message || 'Failed to upload bulk resumes. Please try again.')
+      setCandidatePhase('upload')
+    }
+  }
+
   const handleFileUpload = async (file) => {
     if (!file) return
     setUploadError(null)
@@ -530,6 +607,7 @@ export default function RecruitmentDashboardPage() {
         }
         setParsedCandidates(candidates)
         setLocalCandidateStatuses({})
+        setCandidateActionLoading({})
         setAnalysisError(null)
         setCandidatePhase('uploaded')
       } catch (err) {
@@ -582,6 +660,7 @@ export default function RecruitmentDashboardPage() {
         }
         setParsedCandidates(candidates)
         setLocalCandidateStatuses({})
+        setCandidateActionLoading({})
         setAnalysisError(null)
         setCandidatePhase('uploaded')
       } catch (err) {
@@ -623,6 +702,7 @@ export default function RecruitmentDashboardPage() {
         }
         setParsedCandidates([candidate])
         setLocalCandidateStatuses({})
+        setCandidateActionLoading({})
         setAnalysisError(null)
         setCandidatePhase('uploaded')
       } catch (err) {
@@ -670,43 +750,97 @@ export default function RecruitmentDashboardPage() {
   }
 
   const handleAddAllToPipeline = async () => {
-    // Update all to Pipeline in local state instantly
-    const newStatuses = {}
-    parsedCandidates.filter(c => c.email).forEach(c => { newStatuses[c.email || c.id] = 'Pipeline' })
-    setLocalCandidateStatuses(newStatuses)
-
-    // Background save to DB
+    setAnalysisError(null)
+    const candidatesToImport = parsedCandidates.filter(cand =>
+      cand.email && !['Pipeline', 'Rejected'].includes(localCandidateStatuses[cand.email || cand.id])
+    )
+    if (candidatesToImport.length === 0) return
+    const loadingPatch = {}
+    candidatesToImport.forEach((cand) => { loadingPatch[cand.email || cand.id] = true })
+    setCandidateActionLoading((prev) => ({ ...prev, ...loadingPatch }))
     try {
-      const candidatesToImport = parsedCandidates.filter(cand => 
-        cand.email && localCandidateStatuses[cand.email || cand.id] !== 'Pipeline'
-      );
-      if (candidatesToImport.length > 0) {
-        const jobId = selectedPositionForCandidates?.id || null;
-        await candidateApi.bulkApply({ candidates: candidatesToImport, jobId, jobTitle: selectedPositionForCandidates?.title });
-        fetchCandidates() // Refresh pipeline after import
-      }
+      const jobId = selectedPositionForCandidates?.id || null;
+      await candidateApi.bulkApply({ candidates: candidatesToImport, jobId, jobTitle: selectedPositionForCandidates?.title });
+      const newStatuses = {}
+      candidatesToImport.forEach(c => { newStatuses[c.email || c.id] = 'Pipeline' })
+      setLocalCandidateStatuses((prev) => ({ ...prev, ...newStatuses }))
+      fetchCandidates()
     } catch (err) {
-      console.warn('Background save failed (Add All):', err.message);
+      setAnalysisError(err.response?.data?.message || err.message || 'Failed to add candidates to pipeline.')
+    } finally {
+      setCandidateActionLoading((prev) => {
+        const next = { ...prev }
+        candidatesToImport.forEach((cand) => { delete next[cand.email || cand.id] })
+        return next
+      })
+    }
+  }
+
+  const handleShortlistGoodMatches = async () => {
+    setAnalysisError(null)
+    const candidatesToShortlist = parsedCandidates.filter(cand => {
+      const key = cand.email || cand.id
+      return cand.email && (cand.score || 0) >= 70 && !['Pipeline', 'Rejected', 'Shortlisted'].includes(localCandidateStatuses[key])
+    })
+    if (candidatesToShortlist.length === 0) {
+      setAnalysisError('No analyzed candidates at 70% or above are available to shortlist.')
+      return
+    }
+    const loadingPatch = {}
+    candidatesToShortlist.forEach((cand) => { loadingPatch[cand.email || cand.id] = true })
+    setCandidateActionLoading((prev) => ({ ...prev, ...loadingPatch }))
+    try {
+      const jobId = selectedPositionForCandidates?.id || null
+      await candidateApi.bulkApply({
+        candidates: candidatesToShortlist,
+        jobId,
+        jobTitle: selectedPositionForCandidates?.title,
+        shortlist: true,
+        minScore: 70,
+      })
+      const newStatuses = {}
+      candidatesToShortlist.forEach(c => { newStatuses[c.email || c.id] = 'Shortlisted' })
+      setLocalCandidateStatuses((prev) => ({ ...prev, ...newStatuses }))
+      fetchCandidates()
+    } catch (err) {
+      setAnalysisError(err.response?.data?.message || err.message || 'Failed to shortlist candidates.')
+    } finally {
+      setCandidateActionLoading((prev) => {
+        const next = { ...prev }
+        candidatesToShortlist.forEach((cand) => { delete next[cand.email || cand.id] })
+        return next
+      })
     }
   }
 
   const handleCandidateStatusChange = async (cand, newStatus) => {
-    // Update UI instantly — no waiting for API
-    setLocalCandidateStatuses(prev => ({ ...prev, [cand.email || cand.id]: newStatus }))
+    setAnalysisError(null)
+    const actionKey = cand.email || cand.id
     
-    // Try to save to DB in background — failure is silent, UI stays correct
     if (newStatus === 'Rejected') {
+      if (!String(cand.id || '').match(/^[0-9a-fA-F]{24}$/)) {
+        setLocalCandidateStatuses(prev => ({ ...prev, [actionKey]: newStatus }))
+        return
+      }
       try {
+        setCandidateActionLoading(prev => ({ ...prev, [actionKey]: true }))
         await updateCandidateStatus(cand, 'Rejected')
+        setLocalCandidateStatuses(prev => ({ ...prev, [actionKey]: newStatus }))
       } catch (err) {
-        console.warn('Reject failed:', err.message)
+        setAnalysisError(err.response?.data?.message || err.message || 'Reject failed.')
+      } finally {
+        setCandidateActionLoading(prev => ({ ...prev, [actionKey]: false }))
       }
     } else if (newStatus === 'Selected') {
       try {
+        setCandidateActionLoading(prev => ({ ...prev, [actionKey]: true }))
         await selectCandidate(cand)
+        setLocalCandidateStatuses(prev => ({ ...prev, [actionKey]: newStatus }))
         setSelectedOfferCandidate({ ...cand, status: 'Selected' })
       } catch (err) {
-        console.warn('Selection failed:', err.message)
+        setAnalysisError(err.response?.data?.message || err.message || 'Selection failed.')
+      } finally {
+        setCandidateActionLoading(prev => ({ ...prev, [actionKey]: false }))
       }
     } else if (newStatus === 'Pipeline') {
       if (!cand.email) {
@@ -714,11 +848,15 @@ export default function RecruitmentDashboardPage() {
         return
       }
       try {
+        setCandidateActionLoading(prev => ({ ...prev, [actionKey]: true }))
         const jobId = selectedPositionForCandidates?.id || null;
         await candidateApi.bulkApply({ candidates: [cand], jobId, jobTitle: selectedPositionForCandidates?.title });
-        fetchCandidates() // Refresh pipeline
+        setLocalCandidateStatuses(prev => ({ ...prev, [actionKey]: newStatus }))
+        fetchCandidates()
       } catch (err) {
-        console.warn('Background save failed (Add to Pipeline):', err.message);
+        setAnalysisError(err.response?.data?.message || err.message || 'Failed to add candidate to pipeline.')
+      } finally {
+        setCandidateActionLoading(prev => ({ ...prev, [actionKey]: false }))
       }
     }
   }
@@ -990,7 +1128,17 @@ export default function RecruitmentDashboardPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300 font-medium">
-                  {positionsList.filter(p => activeKpi === 'positions' ? p.status !== 'Closed' : p.status === 'Closed').map(pos => (
+                  {positionsLoading ? (
+                    Array.from({ length: 4 }).map((_, idx) => (
+                      <tr key={`position-skeleton-${idx}`} className="animate-pulse">
+                        <td className="px-6 py-5"><div className="h-4 w-48 rounded bg-slate-200 dark:bg-slate-700" /></td>
+                        <td className="px-6 py-5"><div className="h-4 w-40 rounded bg-slate-200 dark:bg-slate-700" /></td>
+                        <td className="px-6 py-5"><div className="h-4 w-32 rounded bg-slate-200 dark:bg-slate-700" /></td>
+                        <td className="px-6 py-5"><div className="h-7 w-20 rounded-full bg-slate-200 dark:bg-slate-700" /></td>
+                        <td className="px-6 py-5 text-right"><div className="ml-auto h-8 w-28 rounded bg-slate-200 dark:bg-slate-700" /></td>
+                      </tr>
+                    ))
+                  ) : positionsList.filter(p => activeKpi === 'positions' ? p.status !== 'Closed' : p.status === 'Closed').map(pos => (
                     <tr 
                       key={pos.id} 
                       onClick={async (e) => {
@@ -1089,7 +1237,7 @@ export default function RecruitmentDashboardPage() {
                       </td>
                     </tr>
                   ))}
-                  {positionsList.filter(p => activeKpi === 'positions' ? p.status !== 'Closed' : p.status === 'Closed').length === 0 && (
+                  {!positionsLoading && positionsList.filter(p => activeKpi === 'positions' ? p.status !== 'Closed' : p.status === 'Closed').length === 0 && (
                     <tr>
                       <td colSpan="5" className="px-6 py-12 text-center text-slate-500">
                         No positions found in this category.
@@ -1226,7 +1374,9 @@ export default function RecruitmentDashboardPage() {
                   )}
                 </div>
 
-                {activeCandidateKpi !== 'all' ? (
+                {loading ? (
+                  <CandidateBoardSkeleton />
+                ) : activeCandidateKpi !== 'all' ? (
                   <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
                     <div className="overflow-x-auto">
                       <table className="w-full min-w-[980px] text-left text-sm">
@@ -1674,19 +1824,18 @@ export default function RecruitmentDashboardPage() {
                     onDrop={(e) => { 
                       e.preventDefault()
                       setIsDragging(false)
-                      const file = e.dataTransfer.files?.[0]
-                      if (file) handleFileUpload(file)
+                      if (e.dataTransfer.files?.length) handleFilesUpload(e.dataTransfer.files)
                     }}
                   >
                     <input type="file" ref={fileInputRef} className="hidden" accept=".csv,.xlsx,.xls" onChange={(e) => {
                       if(e.target.files?.[0]) {
-                        handleFileUpload(e.target.files[0])
+                        handleFilesUpload(e.target.files)
                         e.target.value = '' // reset so same file can be re-uploaded
                       }
                     }} />
-                    <input type="file" ref={resumeInputRef} className="hidden" accept=".pdf,.docx,.doc" onChange={(e) => {
+                    <input type="file" ref={resumeInputRef} className="hidden" accept=".pdf,.docx,.doc" multiple onChange={(e) => {
                       if(e.target.files?.[0]) {
-                        handleFileUpload(e.target.files[0])
+                        handleFilesUpload(e.target.files)
                         e.target.value = ''
                       }
                     }} />
@@ -1697,7 +1846,7 @@ export default function RecruitmentDashboardPage() {
                     
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Drag and drop your file here</h3>
                     <p className="text-sm text-slate-500 dark:text-slate-400 text-center max-w-sm mb-8">
-                      Upload bulk candidate data from {uploadSource === 'linkedin' ? 'LinkedIn' : uploadSource === 'naukri' ? 'Naukri.com' : uploadSource === 'indeed' ? 'Indeed' : 'CSV/Excel'} or upload a single Resume to run AI analysis.
+                      Upload bulk candidate data from {uploadSource === 'linkedin' ? 'LinkedIn' : uploadSource === 'naukri' ? 'Naukri.com' : uploadSource === 'indeed' ? 'Indeed' : 'CSV/Excel'} or upload multiple resumes to run AI shortlisting.
                     </p>
                     
                     <div className="flex flex-col sm:flex-row flex-wrap justify-center gap-4 mt-6">
@@ -1706,7 +1855,7 @@ export default function RecruitmentDashboardPage() {
                       </button>
 
                       <button onClick={() => resumeInputRef.current?.click()} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2">
-                        <FileText className="w-4 h-4" /> Upload Resume
+                        <FileText className="w-4 h-4" /> Upload Bulk Resumes
                       </button>
                     </div>
                   </div>
@@ -1733,7 +1882,7 @@ export default function RecruitmentDashboardPage() {
                       </div>
                       <div>
                         <h4 className="font-bold text-lg text-indigo-900 dark:text-indigo-100 mb-1">AI-Powered Resume Parsing</h4>
-                        <p className="text-sm mt-0.5 max-w-lg text-indigo-600 dark:text-indigo-300 font-medium">Upload a resume (PDF/DOCX) to automatically extract candidate details, skills, and experience. Or upload a CSV for bulk import.</p>
+                        <p className="text-sm mt-0.5 max-w-lg text-indigo-600 dark:text-indigo-300 font-medium">Upload one or many resumes (PDF/DOCX) to extract candidate details, then analyze and shortlist against the selected position. CSV/Excel bulk candidate data is also supported.</p>
                       </div>
                     </div>
                   </div>
@@ -1844,8 +1993,19 @@ export default function RecruitmentDashboardPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <button onClick={handleAddAllToPipeline} className="text-sm font-bold text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-                    Add All
+                  <button
+                    onClick={handleShortlistGoodMatches}
+                    disabled={Object.values(candidateActionLoading).some(Boolean)}
+                    className="text-sm font-bold text-emerald-700 dark:text-emerald-300 bg-white dark:bg-slate-800 border border-emerald-200 dark:border-emerald-800 px-4 py-2 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {Object.values(candidateActionLoading).some(Boolean) ? 'Saving...' : 'Shortlist >=70%'}
+                  </button>
+                  <button
+                    onClick={handleAddAllToPipeline}
+                    disabled={Object.values(candidateActionLoading).some(Boolean)}
+                    className="text-sm font-bold text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {Object.values(candidateActionLoading).some(Boolean) ? 'Saving...' : 'Add All'}
                   </button>
                   <button onClick={() => setCandidatePhase('upload')} className="text-sm font-bold text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
                     Upload More
@@ -1872,6 +2032,7 @@ export default function RecruitmentDashboardPage() {
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300 font-medium">
                     {parsedCandidates.map((cand, i) => {
                       const localStatus = localCandidateStatuses[cand.email || cand.id];
+                      const actionLoading = !!candidateActionLoading[cand.email || cand.id];
                       return (
                       <tr key={cand.id || i} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                         <td className="px-6 py-4">
@@ -1926,6 +2087,13 @@ export default function RecruitmentDashboardPage() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="max-w-xs space-y-1">
+                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-black ${
+                              cand.analysisSource === 'AI'
+                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
+                                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                            }`}>
+                              {cand.analysisSource === 'AI' ? 'AI analyzed' : 'Fallback score'}
+                            </span>
                             {cand.analysisSummary && (!cand.strengths || cand.strengths.length === 0) && (!cand.concerns || cand.concerns.length === 0) ? (
                               <div className="text-[11px] text-slate-500 italic">
                                 {cand.analysisSummary}
@@ -1951,6 +2119,10 @@ export default function RecruitmentDashboardPage() {
                             <span className="inline-flex items-center gap-1 text-sm font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 px-4 py-2 rounded-xl">
                               <Users className="w-4 h-4" /> In Pipeline
                             </span>
+                          ) : localStatus === 'Shortlisted' ? (
+                            <span className="inline-flex items-center gap-1 text-sm font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/10 px-4 py-2 rounded-xl">
+                              <CheckCircle2 className="w-4 h-4" /> Shortlisted
+                            </span>
                           ) : localStatus === 'Rejected' ? (
                             <span className="inline-flex items-center gap-1 text-sm font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 px-4 py-2 rounded-xl">
                               <Trash2 className="w-4 h-4" /> Skipped
@@ -1959,16 +2131,17 @@ export default function RecruitmentDashboardPage() {
                             <div className="flex items-center justify-end gap-2">
                               <button 
                                 onClick={() => handleCandidateStatusChange(cand, 'Rejected')}
-                                className="bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50 px-4 py-2 rounded-xl font-bold text-sm shadow-sm transition-colors"
+                                disabled={actionLoading}
+                                className="bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50 px-4 py-2 rounded-xl font-bold text-sm shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                               >
-                                Skip
+                                {actionLoading ? 'Saving...' : 'Skip'}
                               </button>
                               <button 
                                 onClick={() => handleCandidateStatusChange(cand, 'Pipeline')}
-                                disabled={!cand.email}
+                                disabled={!cand.email || actionLoading}
                                 className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-sm transition-colors disabled:cursor-not-allowed disabled:bg-slate-300"
                               >
-                                Add to Pipeline
+                                {actionLoading ? 'Saving...' : 'Add to Pipeline'}
                               </button>
                             </div>
                           )}
@@ -2017,15 +2190,14 @@ export default function RecruitmentDashboardPage() {
                 candidates: [candidateData]
               });
               if (res.data?.success) {
-                toast.success('Candidate added manually!');
                 setShowManualCandidateModal(false);
                 fetchCandidates();
               } else {
-                toast.error(res.data?.message || 'Failed to add candidate');
+                throw new Error(res.data?.message || 'Failed to add candidate');
               }
             } catch (err) {
               const msg = err.response?.data?.message || 'Failed to add candidate';
-              toast.error(msg);
+              throw new Error(msg);
             }
           }}
         />

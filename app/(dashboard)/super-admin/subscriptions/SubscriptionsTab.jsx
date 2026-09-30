@@ -3,8 +3,10 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { SubscriptionModal } from './SubscriptionModal'
+import { StatusModal } from './StatusModal'
 import { Badge } from '@/components/common/Badge'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
+import { SubscriptionDetailsDrawer } from './SubscriptionDetailsDrawer'
 import { PermissionDenied } from '@/components/common/PermissionDenied'
 import { platformApi } from '@/services/platformApi'
 import { formatDate, formatCurrency } from '@/lib/utils'
@@ -22,6 +24,9 @@ export default function SubscriptionsTab() {
   const [totalPages, setTotalPages] = useState(1)
   const [totalElements, setTotalElements] = useState(0)
   const [activeSubscriptionId, setActiveSubscriptionId] = useState(null)
+  const [statusSubscriptionId, setStatusSubscriptionId] = useState(null)
+  const [statusSubscriptionCurrent, setStatusSubscriptionCurrent] = useState(null)
+  const [viewSubscriptionId, setViewSubscriptionId] = useState(null)
 
   function load() {
     setLoading(true)
@@ -114,16 +119,22 @@ export default function SubscriptionsTab() {
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-1.5">
                       <button 
-                        onClick={(e) => { e.stopPropagation(); setActiveSubscriptionId(row._id); }}
+                        onClick={(e) => { e.stopPropagation(); setViewSubscriptionId(row._id); }}
                         className="btn-secondary px-3 py-1.5 text-[11px]"
                       >
                         View
                       </button>
                       <button 
+                        onClick={(e) => { e.stopPropagation(); setStatusSubscriptionId(row._id); setStatusSubscriptionCurrent(row.status); }}
+                        className="btn-secondary px-3 py-1.5 text-[11px]"
+                      >
+                        Status
+                      </button>
+                      <button 
                         onClick={(e) => { e.stopPropagation(); setActiveSubscriptionId(row._id); }}
                         className="btn-primary px-3 py-1.5 text-[11px] bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 rounded-lg font-semibold transition-colors"
                       >
-                        Edit
+                        Edit Plan
                       </button>
                     </div>
                   </td>
@@ -149,6 +160,18 @@ export default function SubscriptionsTab() {
         onClose={() => setActiveSubscriptionId(null)} 
         subscriptionId={activeSubscriptionId} 
         onSuccess={() => { setActiveSubscriptionId(null); load(); }} 
+      />
+      <StatusModal 
+        open={!!statusSubscriptionId} 
+        onClose={() => setStatusSubscriptionId(null)} 
+        subscriptionId={statusSubscriptionId} 
+        currentStatus={statusSubscriptionCurrent} 
+        onSuccess={() => { setStatusSubscriptionId(null); load(); }} 
+      />
+      <SubscriptionDetailsDrawer
+        subscriptionId={viewSubscriptionId}
+        isOpen={!!viewSubscriptionId}
+        onClose={() => setViewSubscriptionId(null)}
       />
     </div>
   )

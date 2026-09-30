@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils'
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
-const BUSINESS_TYPES = ['Restaurant', 'Cafe', 'Cloud Kitchen', 'Bakery', 'QSR', 'Bar & Restaurant', 'Food Court', 'Other']
+const BUSINESS_TYPES = ['Technology', 'Healthcare', 'Finance', 'Manufacturing', 'Retail', 'Education', 'Real Estate', 'Consulting', 'Other']
 const INDIAN_STATES = [
   'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Delhi', 'Goa', 'Gujarat', 'Haryana',
   'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya',
@@ -32,7 +32,7 @@ function defaultForm() {
     companyName: '',
     legalBusinessName: '',
     tenantCode: '',
-    industryType: 'Restaurant',
+    industryType: 'Technology',
     logoUrl: '',
     logoPreview: '',
     website: '',
@@ -201,8 +201,6 @@ function ImageUploader({ label, value, uploading, error, onFile, onRemove }) {
 }
 
 export function EditOrganizationModal({ open, onClose, tenantId, onSuccess }) {
-  if (!open) return null;
-
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(defaultForm)
   const [errors, setErrors] = useState({})
@@ -214,6 +212,7 @@ export function EditOrganizationModal({ open, onClose, tenantId, onSuccess }) {
   useEffect(() => {
     if (!open || !tenantId) return
     let active = true
+    setLoading(true)
     async function fetchTenant() {
       try {
         const { data } = await tenantApi.getById(tenantId)
@@ -223,7 +222,7 @@ export function EditOrganizationModal({ open, onClose, tenantId, onSuccess }) {
             companyName: t.companyName || '',
             legalBusinessName: t.legalBusinessName || '',
             tenantCode: t.tenantCode || '',
-            industryType: t.industryType || 'Restaurant',
+            industryType: t.industryType || 'Technology',
             logoUrl: t.logoUrl || '',
             logoPreview: '',
             website: t.website || '',
@@ -249,7 +248,7 @@ export function EditOrganizationModal({ open, onClose, tenantId, onSuccess }) {
     }
     fetchTenant()
     return () => { active = false }
-  }, [tenantId])
+  }, [tenantId, open])
 
   function update(field, value) {
     setForm((current) => ({ ...current, [field]: value }))
@@ -336,6 +335,8 @@ export function EditOrganizationModal({ open, onClose, tenantId, onSuccess }) {
       setSubmitting(false)
     }
   }
+
+  if (!open) return null
 
   if (loading) {
     return (

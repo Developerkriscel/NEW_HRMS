@@ -14,6 +14,23 @@ import { formatDate } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
 import Link from 'next/link'
 
+const EMPTY_HR_DASHBOARD = {
+  stats: {
+    totalEmployees: 0,
+    present: 0,
+    absent: 0,
+    late: 0,
+    newJoinersThisMonth: 0,
+    pendingLeaveCount: 0,
+    pendingExpensesCount: 0,
+    pendingResignationsCount: 0,
+    pendingApprovalsCount: 0,
+  },
+  newJoiners: [],
+  upcomingHolidays: [],
+  recentAnnouncements: [],
+}
+
 export function HRDashboardWorkspace({ headerAction }) {
   const { user } = useAuthStore()
   const [data, setData] = useState(null)
@@ -21,11 +38,17 @@ export function HRDashboardWorkspace({ headerAction }) {
   const [now, setNow] = useState(new Date())
 
   useEffect(() => {
+    if (user?.devLogin) {
+      setData(EMPTY_HR_DASHBOARD)
+      setLoading(false)
+      return
+    }
+
     dashboardApi.getHrSummary()
       .then((res) => setData(res.data.data))
       .catch((err) => console.error('Failed to load HR dashboard', err))
       .finally(() => setLoading(false))
-  }, [])
+  }, [user])
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000)

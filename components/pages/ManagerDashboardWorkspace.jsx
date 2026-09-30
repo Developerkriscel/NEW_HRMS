@@ -9,6 +9,16 @@ import { managerApi } from '@/services/managerApi'
 import { formatDate } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
 
+const EMPTY_MANAGER_DASHBOARD = {
+  teamSize: 0,
+  presentToday: 0,
+  absentToday: 0,
+  pendingApprovalsCount: 0,
+  upcomingHolidays: [],
+  upcomingBirthdays: [],
+  recentAnnouncements: [],
+}
+
 export function ManagerDashboardWorkspace({ headerAction }) {
   const { user } = useAuthStore()
   const [data, setData] = useState(null)
@@ -16,11 +26,17 @@ export function ManagerDashboardWorkspace({ headerAction }) {
   const [now, setNow] = useState(new Date())
 
   useEffect(() => {
+    if (user?.devLogin) {
+      setData(EMPTY_MANAGER_DASHBOARD)
+      setLoading(false)
+      return
+    }
+
     managerApi.getDashboard()
       .then((res) => setData(res.data.data))
       .catch((err) => console.error('Failed to load manager dashboard', err))
       .finally(() => setLoading(false))
-  }, [])
+  }, [user])
 
   // Precise live timer
   useEffect(() => {

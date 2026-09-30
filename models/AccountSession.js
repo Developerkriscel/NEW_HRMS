@@ -25,6 +25,7 @@ const AccountSessionSchema = new mongoose.Schema(
 )
 
 AccountSessionSchema.index({ email: 1, tenantId: 1, revoked: 1, expiresAt: 1 })
+AccountSessionSchema.index({ email: 1, expiresAt: 1, lastSeenAt: -1, tenantId: 1 })
 AccountSessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 })
 
 export default model('AccountSession', AccountSessionSchema)

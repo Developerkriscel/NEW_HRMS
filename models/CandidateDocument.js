@@ -48,5 +48,6 @@ const CandidateDocumentSchema = new mongoose.Schema(
 
 CandidateDocumentSchema.index({ tenantId: 1, preboardingId: 1 })
 CandidateDocumentSchema.index({ tenantId: 1, preboardingId: 1, requirementId: 1 }, { unique: true })
+CandidateDocumentSchema.index({ tenantId: 1, preboardingId: 1, deleted: 1, isRequired: 1, status: 1 })
 
 export default model('CandidateDocument', CandidateDocumentSchema)

@@ -123,28 +123,34 @@ export const GET = withApi(async (req) => {
     matchByApplication = new Map(matches.map((m) => [String(m.applicationId), m]))
   }
 
-  const offers = await Offer.find({
-    tenantId,
-    applicationId: { $in: pageApplications.map((a) => a._id) },
-    deleted: false,
-  }).select('_id applicationId status sentAt acceptedAt declinedAt expiresAt').lean()
+  const pageApplicationIds = pageApplications.map((a) => a._id)
+  const [offers, interviews, shortlistHistory] = await Promise.all([
+    Offer.find({
+      tenantId,
+      applicationId: { $in: pageApplicationIds },
+      deleted: false,
+    }).select('_id applicationId status sentAt acceptedAt declinedAt expiresAt').lean(),
+    Interview.find({
+      tenantId,
+      applicationId: { $in: pageApplicationIds },
+      deleted: false,
+      status: { $in: ['SCHEDULED', 'CONFIRMED', 'RESCHEDULED', 'IN_PROGRESS', 'FEEDBACK_PENDING'] },
+    })
+      .select('_id applicationId roundName type date startTime endTime timezone mode status meetingUrl location')
+      .sort({ date: -1, startTime: -1 })
+      .lean(),
+    ApplicationStageHistory.find({
+      tenantId,
+      applicationId: { $in: pageApplicationIds },
+      action: STAGE_HISTORY_ACTION.SHORTLISTED,
+    }).sort({ createdAt: 1 }).select('applicationId createdAt').lean(),
+  ])
   const offerByApplication = new Map(offers.map((offer) => [String(offer.applicationId), offer]))
-  const interviews = await Interview.find({
-    tenantId,
-    applicationId: { $in: pageApplications.map((a) => a._id) },
-    deleted: false,
-    status: { $in: ['SCHEDULED', 'CONFIRMED', 'RESCHEDULED', 'IN_PROGRESS', 'FEEDBACK_PENDING'] },
-  }).sort({ date: -1, startTime: -1 }).lean()
   const latestInterviewByApplication = new Map()
   for (const interview of interviews) {
     const key = String(interview.applicationId)
     if (!latestInterviewByApplication.has(key)) latestInterviewByApplication.set(key, interview)
   }
-  const shortlistHistory = await ApplicationStageHistory.find({
-    tenantId,
-    applicationId: { $in: pageApplications.map((a) => a._id) },
-    action: STAGE_HISTORY_ACTION.SHORTLISTED,
-  }).sort({ createdAt: 1 }).select('applicationId createdAt').lean()
   const shortlistedAtByApplication = new Map()
   for (const history of shortlistHistory) {
     const key = String(history.applicationId)

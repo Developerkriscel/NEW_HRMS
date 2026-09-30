@@ -6,6 +6,8 @@ import { Portal } from '@/components/common/Portal'
 import { formatDate, cn } from '@/lib/utils'
 
 export function AdminDetailsDrawer({ isOpen, onClose, admin, onEdit }) {
+  const [viewingImage, setViewingImage] = React.useState(null)
+
   if (!isOpen || !admin) return null
 
   const getStatusColor = (status) => {
@@ -19,17 +21,22 @@ export function AdminDetailsDrawer({ isOpen, onClose, admin, onEdit }) {
   return (
     <Portal>
       <div 
-        className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 transition-opacity animate-in fade-in" 
+        className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[150] transition-opacity animate-in fade-in" 
         onClick={onClose}
       />
       
-      <div className="fixed inset-y-0 right-0 w-full max-w-lg bg-white dark:bg-slate-900 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out border-l border-slate-200 dark:border-slate-800 flex flex-col animate-in slide-in-from-right">
+      <div className="fixed inset-y-0 right-0 w-full max-w-lg bg-white dark:bg-slate-900 shadow-2xl z-[160] transform transition-transform duration-300 ease-in-out border-l border-slate-200 dark:border-slate-800 flex flex-col animate-in slide-in-from-right">
         
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
           <div className="flex items-center gap-3">
-            {admin.profilePhoto ? (
-              <img src={admin.profilePhoto} alt={admin.name} className="w-12 h-12 rounded-2xl object-cover shadow-sm" />
+            {admin.profilePhotoUrl || admin.profilePhoto ? (
+              <img 
+                src={admin.profilePhotoUrl || admin.profilePhoto} 
+                alt={admin.name} 
+                className="w-12 h-12 rounded-2xl object-cover shadow-sm cursor-pointer hover:opacity-80 transition-opacity" 
+                onClick={() => setViewingImage(admin.profilePhotoUrl || admin.profilePhoto)}
+              />
             ) : (
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-200/50 dark:border-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-black text-xl shrink-0 shadow-sm">
                 {admin.name ? admin.name.charAt(0).toUpperCase() : 'A'}
@@ -45,6 +52,10 @@ export function AdminDetailsDrawer({ isOpen, onClose, admin, onEdit }) {
                 </span>
                 <span className="text-slate-500 dark:text-slate-400 font-medium truncate max-w-[200px]">
                   {admin.email}
+                </span>
+                <span className="text-slate-400 dark:text-slate-500">·</span>
+                <span className="text-slate-500 dark:text-slate-400 font-bold truncate max-w-[150px]">
+                  {admin.companyName}
                 </span>
               </div>
             </div>
@@ -103,7 +114,7 @@ export function AdminDetailsDrawer({ isOpen, onClose, admin, onEdit }) {
                 
                 <div className="p-4 col-span-2">
                   <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5"><UserCog className="w-3 h-3"/> Full Name</div>
-                  <div className="text-sm font-bold text-slate-800 dark:text-slate-200">{admin.name || '—'}</div>
+                  <div className="text-sm font-bold text-slate-800 dark:text-slate-200">{admin.name || (admin.firstName && admin.lastName ? `${admin.firstName} ${admin.lastName}` : admin.firstName || admin.lastName) || '—'}</div>
                 </div>
 
                 <div className="p-4">
@@ -123,12 +134,17 @@ export function AdminDetailsDrawer({ isOpen, onClose, admin, onEdit }) {
 
                 <div className="p-4 col-span-2 sm:col-span-1">
                   <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5"><Phone className="w-3 h-3"/> Mobile Number</div>
-                  <div className="text-sm font-bold text-slate-800 dark:text-slate-200">{admin.mobileNumber || '—'}</div>
+                  <div className="text-sm font-bold text-slate-800 dark:text-slate-200">{admin.mobileNumber || admin.phone || '—'}</div>
                 </div>
 
                 <div className="p-4 col-span-2">
                   <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5"><Mail className="w-3 h-3"/> Email Address</div>
                   <div className="text-sm font-bold text-slate-800 dark:text-slate-200">{admin.email || '—'}</div>
+                </div>
+
+                <div className="p-4 col-span-2">
+                  <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5"><Briefcase className="w-3 h-3"/> Company / Tenant</div>
+                  <div className="text-sm font-bold text-slate-800 dark:text-slate-200">{admin.companyName || '—'} <span className="text-slate-400 ml-1 text-xs font-medium">({admin.tenantCode || '—'})</span></div>
                 </div>
 
               </div>
@@ -137,6 +153,29 @@ export function AdminDetailsDrawer({ isOpen, onClose, admin, onEdit }) {
 
         </div>
       </div>
+
+      {/* Image Viewer Modal */}
+      {viewingImage && (
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          onClick={() => setViewingImage(null)}
+        >
+          <div className="relative flex flex-col items-center justify-center p-2 rounded-2xl bg-white/10 shadow-2xl ring-1 ring-white/20">
+            <button 
+              onClick={(e) => { e.stopPropagation(); setViewingImage(null); }}
+              className="fixed top-6 right-6 p-2 text-white/70 hover:text-white bg-black/40 hover:bg-black/60 rounded-full transition-all z-[10000]"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <img 
+              src={viewingImage} 
+              alt="Preview" 
+              className="w-[90vw] h-[90vh] object-contain rounded-xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
     </Portal>
   )
 }

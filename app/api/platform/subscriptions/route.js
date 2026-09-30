@@ -15,10 +15,12 @@ export const GET = withApi(async (req) => {
   const size = Number(searchParams.get('size') || 20)
   const status = searchParams.get('status')
   const tenant = searchParams.get('tenant')
+  const plan = searchParams.get('planId')
 
   const query = { deleted: false }
   if (status) query.status = status
   if (tenant) query.tenant = tenant
+  if (plan) query.plan = plan
 
   const totalElements = await Subscription.countDocuments(query)
   const content = await Subscription.find(query)

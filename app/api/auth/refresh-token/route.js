@@ -4,9 +4,37 @@ import { cookies } from 'next/headers'
 import { withApi } from '@/lib/handler'
 import { ok, fail } from '@/lib/apiResponse'
 import { verifyJwt, generateAccessToken, generateRefreshToken, setAuthCookies, isTokenBlacklisted, isPlatformSessionRevoked, createPlatformSession, ACCESS_TOKEN_EXPIRY_MS } from '@/lib/auth'
-import { findUserByEmail, isAccountUsable, buildUserInfo, toAuthUser } from '@/lib/userLookup'
+import { findUserByEmail, isAccountUsable, toAuthUser } from '@/lib/userLookup'
 import { createAccountSession, isAccountSessionRevoked, touchAccountSession } from '@/lib/accountSessions'
 import { buildDevUserForEmail, isDevAuthAllowed } from '@/lib/devLogin'
+
+function buildTokenUserInfo(authUser, found) {
+  if (authUser.isSuperAdmin) {
+    return {
+      id: String(authUser._id),
+      name: authUser.name,
+      email: authUser.email,
+      role: 'SUPER_ADMIN',
+      tenantId: null,
+      companyName: null,
+      permissions: [],
+      platformRoles: authUser.platformRoles || [],
+      platformPermissions: authUser.platformPermissions || [],
+      mfaEnabled: !!found.doc?.mfaEnabled,
+    }
+  }
+  return {
+    id: String(authUser._id),
+    name: authUser.name,
+    email: authUser.email,
+    role: authUser.role,
+    tenantId: String(authUser.tenantId),
+    companyName: authUser.companyName || null,
+    companySlug: authUser.companySlug || null,
+    permissions: (authUser.permissions || []).map((p) => (typeof p === 'string' ? p : p.name)),
+    moduleAccess: authUser.moduleAccess || [],
+  }
+}
 
 // Fixes a bug present in the original: the Java refresh endpoint validated
 // signature/expiry only, so any still-valid access token could be replayed
@@ -82,6 +110,6 @@ export const POST = withApi(async (req) => {
   const newRefreshToken = generateRefreshToken(authUser)
   setAuthCookies(cookieStore, newAccessToken, newRefreshToken)
 
-  const userInfo = await buildUserInfo(found)
+  const userInfo = buildTokenUserInfo(authUser, found)
   return ok({ user: userInfo, expiresIn: Math.floor(ACCESS_TOKEN_EXPIRY_MS / 1000) }, 'Token refreshed')
 })

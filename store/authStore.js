@@ -4,6 +4,13 @@ import { ROLE_DASHBOARDS } from '@/lib/roleDashboards'
 import api from '@/services/api'
 
 let fetchMePromise = null
+const DEV_LOGIN_STORAGE_KEY = 'nexahr_dev_login'
+
+function rememberDevLogin(user) {
+  if (typeof window === 'undefined') return
+  if (user?.devLogin) window.localStorage.setItem(DEV_LOGIN_STORAGE_KEY, 'true')
+  else window.localStorage.removeItem(DEV_LOGIN_STORAGE_KEY)
+}
 
 // Unlike the original (Zustand + localStorage + a raw JWT held in JS), the
 // actual access/refresh tokens now live only in httpOnly cookies set by the
@@ -15,9 +22,15 @@ export const useAuthStore = create((set, get) => ({
   isLoading: true,
   hydrated: false,
 
-  setAuth: (user) => set({ user, isAuthenticated: true, isLoading: false, hydrated: true }),
+  setAuth: (user) => {
+    rememberDevLogin(user)
+    set({ user, isAuthenticated: true, isLoading: false, hydrated: true })
+  },
 
-  setUser: (user) => set({ user }),
+  setUser: (user) => {
+    rememberDevLogin(user)
+    set({ user })
+  },
 
   fetchMe: async () => {
     const current = get()
@@ -28,10 +41,12 @@ export const useAuthStore = create((set, get) => ({
     fetchMePromise = api.get('/auth/me')
       .then(({ data }) => {
         const user = data.data
+        rememberDevLogin(user)
         set({ user, isAuthenticated: true, isLoading: false, hydrated: true })
         return user
       })
       .catch(() => {
+        rememberDevLogin(null)
         set({ user: null, isAuthenticated: false, isLoading: false, hydrated: true })
         return null
       })
@@ -48,6 +63,7 @@ export const useAuthStore = create((set, get) => ({
     } catch {
       // ignore — we're logging out regardless
     }
+    rememberDevLogin(null)
     set({ user: null, isAuthenticated: false })
     window.location.href = '/login'
   },

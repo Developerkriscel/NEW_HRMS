@@ -186,7 +186,6 @@ export const POST = withApi(async (req, { params }) => {
     candidate.resumeUrl = resumeRecord.fileUrl
     candidate.activityLog.push({ type: 'RESUME_UPLOADED', message: `Resume uploaded: ${resumeRecord.originalFileName || resumeRecord.fileName}` })
     await candidate.save()
-    triggerBackgroundParse(resumeRecord._id, tenant._id)
 
     if (screeningQuestions.length) {
       await ApplicationAnswer.insertMany(screeningQuestions.map((q) => ({
@@ -200,6 +199,7 @@ export const POST = withApi(async (req, { params }) => {
         answer: data.screeningAnswers[String(q._id)] ?? null,
       })))
     }
+    triggerBackgroundParse(resumeRecord._id, tenant._id)
 
     // "Notify HR" — there's no email/push infra in this codebase (see the
     // same limitation noted in company/settings), so this lands where HR

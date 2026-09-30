@@ -191,7 +191,8 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
     try {
       if (approved) await assetApi.approveRequest(id, 'Approved')
       else await assetApi.rejectRequest(id, 'Rejected')
-      load()
+      setRequests(prev => prev.map(item => item._id === id ? { ...item, status: approved ? 'APPROVED' : 'REJECTED' } : item))
+      setMessage(`Asset request ${approved ? 'approved' : 'rejected'}`)
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to update request')
     } finally {

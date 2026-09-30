@@ -1,7 +1,7 @@
 import api from './api'
 
 export const jobApi = {
-  list: (params) => api.get('/recruitment/jobs', { params, skipCache: true }),
+  list: (params) => api.get('/recruitment/jobs', { params }),
   create: (data) => api.post('/recruitment/jobs', data),
   get: (id) => api.get(`/recruitment/jobs/${id}`),
   update: (id, data) => api.patch(`/recruitment/jobs/${id}`, data),

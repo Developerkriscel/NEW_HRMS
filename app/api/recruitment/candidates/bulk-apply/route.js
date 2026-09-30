@@ -4,10 +4,12 @@ import { withApi } from '@/lib/handler'
 import { ok, fail } from '@/lib/apiResponse'
 import { requireAuth, requireRole, requireTenantId } from '@/lib/auth'
 import { logAction } from '@/lib/audit'
-import { APPLICATION_SOURCE, CANDIDATE_MANAGE_ROLES } from '@/lib/candidateConstants'
-import { generateCandidateCode, findExistingCandidate, generateApplicationCode } from '@/lib/candidateHelpers'
+import { APPLICATION_SOURCE, CANDIDATE_MANAGE_ROLES, APPLICATION_STATUS } from '@/lib/candidateConstants'
+import { generateCandidateCode, findExistingCandidate, generateApplicationCode, getActorName } from '@/lib/candidateHelpers'
 import { syncPipelineStages } from '@/lib/jobHelpers'
 import { JOB_STATUS } from '@/lib/jobConstants'
+import { STAGE_HISTORY_ACTION } from '@/lib/pipelineConstants'
+import { applyStageMove, findShortlistStage, recordStageHistory } from '@/lib/pipelineHelpers'
 import Candidate from '@/models/Candidate'
 import Application from '@/models/Application'
 import Job from '@/models/Job'
@@ -17,6 +19,8 @@ import CandidateSkill from '@/models/CandidateSkill'
 import CandidateExperience from '@/models/CandidateExperience'
 import CandidateEducation from '@/models/CandidateEducation'
 import { MATCHING_MODEL_VERSION, MATCHING_RULES_VERSION, getMatchLabel } from '@/lib/matchingConstants'
+import { claimDraftResume } from '@/lib/candidateProfileHelpers'
+import { triggerBackgroundMatch } from '@/lib/matchHelpers'
 
 function normalizeBulkSource(source) {
   const normalized = String(source || '').trim().toUpperCase()
@@ -116,10 +120,12 @@ export const POST = withApi(async (req) => {
   const tenantId = requireTenantId(session)
   const body = await req.json()
 
-  const { candidates, jobId, jobTitle } = body
+  const { candidates, jobId, jobTitle, shortlist, minScore } = body
   if (!Array.isArray(candidates) || candidates.length === 0) {
     return fail('Candidates array is required and cannot be empty', 400, 'VALIDATION_ERROR')
   }
+  const shouldShortlist = shortlist === true
+  const shortlistMinScore = Number.isFinite(Number(minScore)) ? Number(minScore) : 70
 
   // Ensure there's a valid job to link these applications to. If not specified or invalid, try to find one.
   let activeJobId = jobId
@@ -131,22 +137,13 @@ export const POST = withApi(async (req) => {
 
   try {
     if (!activeJobId) {
-      const fallbackTitle = String(jobTitle || candidates.find((cand) => cand.role)?.role || 'Senior Frontend Developer').trim()
+      const fallbackTitle = String(jobTitle || candidates.find((cand) => cand.role)?.role || '').trim()
       let job = await Job.findOne({ tenantId, status: JOB_STATUS.OPEN, jobTitle: fallbackTitle }).select('_id')
       if (!job) {
         job = await Job.findOne({ tenantId, status: JOB_STATUS.OPEN }).select('_id')
       }
       if (!job) {
-        // Create a fallback job so the UI doesn't break when using dummy data
-        job = await Job.create({
-          jobCode: `JOB-DUMMY-${Date.now()}`,
-          jobTitle: fallbackTitle,
-          employmentType: 'FULL_TIME',
-          status: JOB_STATUS.OPEN,
-          tenantId,
-          createdBy: session.sub
-        });
-        await syncPipelineStages(tenantId, job._id, null, 'DEFAULT_HIRING')
+        return fail('Select an open job before importing candidates', 400, 'JOB_REQUIRED')
       } else {
         const stageCount = await JobPipelineStage.countDocuments({ tenantId, jobId: job._id, isActive: true })
         if (stageCount === 0) await syncPipelineStages(tenantId, job._id, null, 'DEFAULT_HIRING')
@@ -160,6 +157,7 @@ export const POST = withApi(async (req) => {
     const appliedStage = await JobPipelineStage.findOne({ tenantId, jobId: activeJobId, isActive: true })
       .sort({ order: 1 })
       .select('_id name')
+    const actorName = await getActorName(session)
     for (const cand of candidates) {
       if (!cand.firstName?.trim() && !cand.name?.trim()) continue
       if (!cand.email?.trim()) continue
@@ -249,8 +247,14 @@ export const POST = withApi(async (req) => {
         })
       }
 
+      if (cand.draftResumeId) {
+        await claimDraftResume(cand.draftResumeId, tenantId, candidateDoc._id, applicationDoc._id)
+      }
+
       const analyzedScore = Number(cand.score ?? cand.matchScore)
       if (Number.isFinite(analyzedScore) && analyzedScore > 0) {
+        const previewRequiredMatches = cand.analysisSource === 'FALLBACK' ? cand.matchedSkills || [] : []
+        const previewRequiredMissing = cand.analysisSource === 'FALLBACK' ? cand.missingSkills || [] : []
         await CandidateJobMatch.findOneAndUpdate(
           { tenantId, applicationId: applicationDoc._id },
           {
@@ -267,11 +271,13 @@ export const POST = withApi(async (req) => {
               noticeScore: 50,
               screeningScore: Math.round(Math.max(0, Math.min(100, analyzedScore))),
               matchLabel: getMatchLabel(Math.round(Math.max(0, Math.min(100, analyzedScore)))),
-              matchedSkills: { required: cand.matchedSkills || [], preferred: [] },
-              missingSkills: { required: cand.missingSkills || [], preferred: [] },
+              matchedSkills: { required: previewRequiredMatches, preferred: [] },
+              missingSkills: { required: previewRequiredMissing, preferred: [] },
               strengths: cand.strengths || [],
               concerns: (cand.concerns || []).map((text) => ({ severity: 'MODERATE', text })),
               summary: cand.analysisSummary || `Imported candidate analyzed at ${Math.round(analyzedScore)}% match.`,
+              aiMatchScore: cand.analysisSource === 'AI' ? Math.round(Math.max(0, Math.min(100, analyzedScore))) : null,
+              aiMatchReasoning: cand.analysisSource === 'AI' ? cand.analysisSummary || null : null,
               modelVersion: MATCHING_MODEL_VERSION,
               rulesVersion: MATCHING_RULES_VERSION,
               generatedAt: new Date(),
@@ -284,13 +290,43 @@ export const POST = withApi(async (req) => {
         )
       }
 
+      triggerBackgroundMatch(applicationDoc._id, tenantId)
+
+      if (shouldShortlist && applicationDoc.status === APPLICATION_STATUS.ACTIVE && Number.isFinite(analyzedScore) && analyzedScore >= shortlistMinScore) {
+        const stages = await JobPipelineStage.find({ tenantId, jobId: activeJobId, isActive: true }).lean()
+        const target = findShortlistStage(stages, applicationDoc.currentStage)
+        if (target && String(target._id) !== String(applicationDoc.currentStage)) {
+          const { fromStageId, fromStageName } = applyStageMove(applicationDoc, target, {
+            comment: `Bulk shortlisted from AI analysis (${Math.round(analyzedScore)}%)`,
+            actorName,
+          })
+          await applicationDoc.save()
+          await recordStageHistory({
+            tenantId,
+            application: applicationDoc,
+            fromStageId,
+            toStageId: target._id,
+            fromStageName,
+            toStageName: target.name,
+            action: STAGE_HISTORY_ACTION.SHORTLISTED,
+            comment: `Bulk shortlisted from AI analysis (${Math.round(analyzedScore)}%)`,
+            session,
+          })
+          await logAction(session, {
+            action: 'APPLICATION_SHORTLISTED',
+            entityType: 'Application',
+            entityId: applicationDoc._id,
+            description: `Bulk shortlisted ${applicationDoc.applicationCode}`,
+            req,
+          })
+        }
+      }
+
       results.push(applicationDoc)
     }
 
     return ok(results, `Successfully imported ${results.length} candidates.`, 201)
   } catch (error) {
-    const fs = require('fs')
-    fs.writeFileSync('bulk-apply-error.log', error.stack || error.message)
     return fail(`Bulk apply failed: ${error.message}`, 400, 'VALIDATION_ERROR')
   }
 })

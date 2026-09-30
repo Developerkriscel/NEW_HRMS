@@ -16,6 +16,17 @@ import { CameraVerificationModal } from '@/components/attendance/CameraVerificat
 import { GenericAreaChart, DepartmentPieChart, AttendanceBarChart, GenericLineChart } from '@/components/charts/DashboardCharts'
 import { formatDate } from '@/lib/utils'
 
+const EMPTY_DASHBOARD_STATE = {
+  todayRecord: null,
+  attendanceHistory: [],
+  leaveBalances: [],
+  upcomingLeaves: [],
+  pendingRequests: 0,
+  recentRequests: [],
+  announcements: [],
+  latestPayslip: null,
+}
+
 export function EmployeeDashboardWorkspace({ headerAction }) {
   const { user } = useAuthStore()
   const [loading, setLoading] = useState(true)
@@ -43,6 +54,18 @@ export function EmployeeDashboardWorkspace({ headerAction }) {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
+      if (user?.devLogin) {
+        setTodayRecord(EMPTY_DASHBOARD_STATE.todayRecord)
+        setAttendanceHistory(EMPTY_DASHBOARD_STATE.attendanceHistory)
+        setLeaveBalances(EMPTY_DASHBOARD_STATE.leaveBalances)
+        setUpcomingLeaves(EMPTY_DASHBOARD_STATE.upcomingLeaves)
+        setPendingRequests(EMPTY_DASHBOARD_STATE.pendingRequests)
+        setRecentRequests(EMPTY_DASHBOARD_STATE.recentRequests)
+        setAnnouncements(EMPTY_DASHBOARD_STATE.announcements)
+        setLatestPayslip(EMPTY_DASHBOARD_STATE.latestPayslip)
+        return
+      }
+
       const currentMonth = new Date().getMonth() + 1
       const currentYear = new Date().getFullYear()
 

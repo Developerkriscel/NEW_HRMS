@@ -32,13 +32,18 @@ export const PUT = withApi(async (req) => {
   const body = await req.json()
   const { provider, apiKey, model } = body
 
-  if (!['GEMINI', 'GROK', 'MISTRAL'].includes(provider)) {
+  if (!['GEMINI', 'OPENAI', 'GROK', 'MISTRAL'].includes(provider)) {
     return ok(null, 'Invalid provider', 400)
   }
 
   const updatePayload = {
     'aiSettings.provider': provider,
-    'aiSettings.model': model || (provider === 'GROK' ? 'grok-2-latest' : 'gemini-2.5-flash')
+    'aiSettings.model': model || (
+      provider === 'GROK' ? 'grok-2-latest'
+        : provider === 'MISTRAL' ? 'mistral-large-latest'
+          : provider === 'OPENAI' ? 'gpt-4o-mini'
+            : 'gemini-2.5-flash'
+    )
   }
 
   if (apiKey) {

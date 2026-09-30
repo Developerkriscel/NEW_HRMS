@@ -2,7 +2,83 @@ import { withApi } from '@/lib/handler'
 import { ok, fail } from '@/lib/apiResponse'
 import { requireAuth, requireTenantId } from '@/lib/auth'
 import Job from '@/models/Job'
+import JobSkill from '@/models/JobSkill'
 import { evaluateCandidateMatchWithAi } from '@/lib/aiService'
+
+function skillNames(rows, type) {
+  return rows.filter((skill) => skill.type === type).map((skill) => skill.skillName).filter(Boolean)
+}
+
+function splitRequirementSkills(value) {
+  return String(value || '')
+    .split(/[,;|\n]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function parseYears(value) {
+  if (value === null || value === undefined || value === '') return null
+  const match = String(value).match(/(\d+(?:\.\d+)?)/)
+  return match ? Number(match[1]) : null
+}
+
+function candidateSkillNames(cand) {
+  if (!Array.isArray(cand.skills)) return splitRequirementSkills(cand.skills)
+  return cand.skills
+    .map((skill) => typeof skill === 'string' ? skill : skill?.skillName)
+    .map((skill) => String(skill || '').trim())
+    .filter(Boolean)
+}
+
+function matchLabel(score) {
+  return score >= 85 ? 'Strong Match' : score >= 70 ? 'Good Match' : score >= 50 ? 'Potential Match' : 'Low Match'
+}
+
+function buildFallbackAnalysis(cand, jobData, reason = 'AI was unavailable') {
+  const requiredSkills = jobData.requiredSkills?.length
+    ? jobData.requiredSkills
+    : splitRequirementSkills(jobData.requiredQualifications)
+  const preferredSkills = jobData.preferredSkills || []
+  const skills = candidateSkillNames(cand)
+  const candidateText = `${cand.role || ''} ${skills.join(' ')}`.toLowerCase()
+  const jobTitle = String(jobData.title || jobData.jobTitle || '').toLowerCase()
+  const candidateRole = String(cand.role || '').toLowerCase()
+  const matchedRequired = requiredSkills.filter((skill) => candidateText.includes(String(skill).toLowerCase()))
+  const missingRequired = requiredSkills.filter((skill) => !matchedRequired.includes(skill))
+  const matchedPreferred = preferredSkills.filter((skill) => candidateText.includes(String(skill).toLowerCase()))
+  const skillScore = requiredSkills.length
+    ? Math.round((matchedRequired.length / requiredSkills.length) * 60)
+    : Math.min(35, skills.length * 7)
+  const roleScore = candidateRole && jobTitle && (jobTitle.includes(candidateRole) || candidateRole.includes(jobTitle)) ? 20 : 0
+  const minExperience = parseYears(jobData.minExperience)
+  const candidateExperience = parseYears(cand.totalExperience ?? cand.exp)
+  const experienceScore = minExperience == null
+    ? (candidateExperience == null ? 8 : 20)
+    : candidateExperience == null
+      ? 5
+      : Math.max(0, Math.min(20, Math.round((candidateExperience / Math.max(minExperience, 1)) * 20)))
+  const score = Math.max(0, Math.min(100, skillScore + roleScore + experienceScore))
+  const strengths = [
+    ...matchedRequired.slice(0, 4).map((skill) => `${skill} matched`),
+    ...matchedPreferred.slice(0, 2).map((skill) => `${skill} preferred skill matched`),
+  ]
+  if (roleScore) strengths.push('Role/title aligns with job')
+  if (candidateExperience != null && minExperience != null && candidateExperience >= minExperience) strengths.push(`${candidateExperience} years meets minimum experience`)
+  const concerns = missingRequired.slice(0, 4).map((skill) => `${skill} not found`)
+  if (candidateExperience == null) concerns.push('Experience years not clearly available')
+  else if (minExperience != null && candidateExperience < minExperience) concerns.push(`Experience below requirement (${candidateExperience} vs ${minExperience}+ years)`)
+  return {
+    ...cand,
+    score,
+    matchLabel: matchLabel(score),
+    analysisSummary: `${reason}, so this score was calculated using deterministic skill, role, and experience matching.`,
+    matchedSkills: matchedRequired,
+    missingSkills: missingRequired,
+    strengths,
+    concerns,
+    analysisSource: 'FALLBACK',
+  }
+}
 
 export const POST = withApi(async (req) => {
   const session = await requireAuth()
@@ -22,15 +98,22 @@ export const POST = withApi(async (req) => {
   }
 
   if (activeJobId && !jobData) {
-    const position = await Job.findOne({ _id: activeJobId, tenantId }).lean()
+    const [position, jobSkills] = await Promise.all([
+      Job.findOne({ _id: activeJobId, tenantId }).lean(),
+      JobSkill.find({ jobId: activeJobId, tenantId }).lean(),
+    ])
     if (position) {
+      const requiredSkillNames = skillNames(jobSkills, 'REQUIRED')
+      const preferredSkillNames = skillNames(jobSkills, 'PREFERRED')
       jobData = {
         title: position.jobTitle || position.title,
         description: position.jobSummary || position.description,
         responsibilities: position.responsibilities,
         requiredQualifications: position.requiredQualifications,
         preferredQualifications: position.preferredQualifications,
-        minExperience: position.minExperience
+        minExperience: position.minExperience,
+        requiredSkills: requiredSkillNames,
+        preferredSkills: preferredSkillNames,
       }
     }
   }
@@ -59,7 +142,7 @@ export const POST = withApi(async (req) => {
       const candidateData = {
         firstName: cand.name?.split(' ')[0] || '',
         lastName: cand.name?.split(' ').slice(1).join(' ') || '',
-        totalExperience: cand.exp || '',
+        totalExperience: parseYears(cand.totalExperience ?? cand.exp) ?? '',
         currentDesignation: cand.role || ''
       }
 
@@ -67,53 +150,20 @@ export const POST = withApi(async (req) => {
         const aiMatch = await evaluateCandidateMatchWithAi(jobData, candidateData, resumeParsedData, tenantId)
         
         if (!aiMatch) {
-          // Fallback heuristic if AI is rate limited
-          const candText = `${cand.role || ''} ${(cand.skills || []).join(' ')}`.toLowerCase()
-          const reqString = jobData.requiredQualifications || ''
-          const requiredSkills = reqString.split(',').map(s => s.trim()).filter(Boolean)
-          
-          const jobText = `${jobData.title || ''} ${reqString}`.toLowerCase()
-          let matchCount = 50 // Start at a fair baseline of 50
-          
-          if (cand.role) {
-            const cRole = cand.role.toLowerCase()
-            const jTitle = (jobData.title || '').toLowerCase()
-            if (jTitle.includes(cRole) || cRole.includes(jTitle)) matchCount += 15 // Bonus for matching title
-          }
-
-          let skillMatches = 0
-          if (requiredSkills.length > 0) {
-            for (const s of requiredSkills) {
-              if (candText.includes(s.toLowerCase())) skillMatches++
-            }
-            // Add up to 30 points for matching required skills perfectly
-            matchCount += Math.round((skillMatches / requiredSkills.length) * 30)
-          } else {
-            matchCount += 15 // General boost if no required skills listed
-          }
-
-          // Generate a deterministic variation based on candidate name length to look natural without randomness
-          const nameHash = cand.name ? cand.name.length % 5 : 0 // 0 to 4
-          const variation = nameHash - 2 // -2 to +2
-          const score = Math.max(0, Math.min(100, matchCount + variation))
-          
-          analyzedCandidates.push({
-            ...cand,
-            score: score,
-            matchLabel: score >= 85 ? 'Strong Match' : score >= 70 ? 'Good Match' : score >= 50 ? 'Potential Match' : 'Low Match',
-            analysisSummary: 'AI rate limit exceeded (API quota). Score calculated using enhanced matching heuristic.',
-            matchedSkills: [],
-            missingSkills: []
-          })
+          analyzedCandidates.push(buildFallbackAnalysis(cand, jobData))
         } else {
+          const score = Math.max(0, Math.min(100, Math.round(Number(aiMatch.aiMatchScore) || 0)))
           analyzedCandidates.push({
             ...cand,
-            score: aiMatch.aiMatchScore || 0,
-            matchLabel: aiMatch.aiMatchScore >= 85 ? 'Strong Match' : aiMatch.aiMatchScore >= 70 ? 'Good Match' : aiMatch.aiMatchScore >= 50 ? 'Potential Match' : 'Low Match',
+            score,
+            matchLabel: matchLabel(score),
             analysisSummary: aiMatch.aiMatchReasoning || 'Analysis complete.',
             matchedSkills: aiMatch.strengths || [],
             missingSkills: aiMatch.concerns || [],
-            aiMatchDetails: aiMatch
+            strengths: aiMatch.strengths || [],
+            concerns: aiMatch.concerns || [],
+            aiMatchDetails: aiMatch,
+            analysisSource: 'AI',
           })
         }
         
@@ -121,42 +171,9 @@ export const POST = withApi(async (req) => {
         await new Promise(resolve => setTimeout(resolve, 1500))
         
       } catch (err) {
-        const candText = `${cand.role || ''} ${(cand.skills || []).join(' ')}`.toLowerCase()
-        const reqString = jobData.requiredQualifications || ''
-        const requiredSkills = reqString.split(',').map(s => s.trim()).filter(Boolean)
-        
-        const jobText = `${jobData.title || ''} ${reqString}`.toLowerCase()
-        let matchCount = 35 // Generous baseline
-        
-        if (cand.role) {
-          const cRole = cand.role.toLowerCase()
-          const jTitle = (jobData.title || '').toLowerCase()
-          if (jTitle.includes(cRole) || cRole.includes(jTitle)) matchCount += 25
-          else if (jobText.includes(cRole)) matchCount += 15
-        }
-        
-        let skillMatches = 0
-        if (requiredSkills.length > 0) {
-          requiredSkills.forEach(s => {
-            if (candText.includes(s.toLowerCase())) skillMatches++
-          })
-          matchCount += Math.round((skillMatches / requiredSkills.length) * 40)
-        } else if (cand.skills && cand.skills.length > 0) {
-          matchCount += 20 // Bonus for having any skills
-        }
-
-        // Use a deterministic variation based on name length
-        const nameHash = cand.name ? cand.name.length % 11 : 5
-        const variation = nameHash - 5
-        const score = Math.max(0, Math.min(100, Math.round(matchCount + variation)))
-        
         analyzedCandidates.push({
-          ...cand,
-          score: score,
-          matchLabel: score >= 85 ? 'Strong Match' : score >= 70 ? 'Good Match' : score >= 50 ? 'Potential Match' : 'Low Match',
-          analysisSummary: 'AI rate limit exceeded (API quota). Score calculated using enhanced matching heuristic.',
-          matchedSkills: [],
-          missingSkills: []
+          ...buildFallbackAnalysis(cand, jobData, 'AI analysis failed'),
+          analysisError: err.message || 'AI analysis failed',
         })
       }
     }

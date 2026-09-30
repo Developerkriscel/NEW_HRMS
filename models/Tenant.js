@@ -65,7 +65,7 @@ const TenantSchema = new mongoose.Schema(
       sessionTimeoutMinutes: { type: Number, default: 60, min: 5 },
     },
     aiSettings: {
-      provider: { type: String, enum: ['GEMINI', 'GROK', 'MISTRAL'], default: 'GEMINI' },
+      provider: { type: String, enum: ['GEMINI', 'OPENAI', 'GROK', 'MISTRAL'], default: 'GEMINI' },
       model: { type: String },
       apiKeyCiphertext: { type: String, select: false },
       apiKeyIv: { type: String, select: false },

@@ -50,9 +50,9 @@ const SUPER_ADMIN_NAV = [
   { label: 'Companies', icon: 'Building2', path: '/super-admin/tenants' },
   { label: 'Admins', icon: 'KeyRound', path: '/super-admin/admins', permission: 'operator.view' },
   { label: 'Subscriptions', icon: 'Repeat', path: '/super-admin/subscriptions', permission: 'subscription.view' },
-  { label: 'Billing', icon: 'Receipt', path: '/super-admin/billing' },
   { label: 'Support Center', icon: 'LifeBuoy', path: '/super-admin/support' },
   { label: 'Audit Logs', icon: 'ScrollText', path: '/super-admin/audit-logs' },
+  { label: 'Reports', icon: 'BarChart2', path: '/super-admin/reports' },
   { label: 'Settings', icon: 'Settings', path: '/super-admin/settings' },
 ]
 

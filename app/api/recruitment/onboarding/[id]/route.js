@@ -32,25 +32,26 @@ export const GET = withApi(async (req, { params }) => {
 
   const preboarding = await Preboarding.findOne({ _id: params.id, tenantId, deleted: false })
     .populate('candidateId').populate('jobId', 'jobCode jobTitle publicTitle')
+    .lean()
   if (!preboarding) throw new ApiError(404, 'Preboarding profile not found', 'NOT_FOUND')
   await ensureDefaultPreboardingTasks(tenantId, preboarding)
 
   const [personal, emergencyContact, employmentHistory, education, documents, tasks, version] = await Promise.all([
-    PreboardingPersonalDetails.findOne({ tenantId, preboardingId: preboarding._id }),
-    PreboardingEmergencyContact.findOne({ tenantId, preboardingId: preboarding._id }),
-    PreboardingEmploymentHistory.find({ tenantId, preboardingId: preboarding._id, deleted: false }).sort({ order: 1 }),
-    PreboardingEducation.find({ tenantId, preboardingId: preboarding._id, deleted: false }).sort({ order: 1 }),
-    CandidateDocument.find({ tenantId, preboardingId: preboarding._id, deleted: false }).populate('currentVersionId'),
-    PreboardingTask.find({ tenantId, preboardingId: preboarding._id, deleted: false }).sort({ dueDate: 1, createdAt: 1 }),
-    OfferVersion.findOne({ tenantId, _id: preboarding.offerVersionId }),
+    PreboardingPersonalDetails.findOne({ tenantId, preboardingId: preboarding._id }).lean(),
+    PreboardingEmergencyContact.findOne({ tenantId, preboardingId: preboarding._id }).lean(),
+    PreboardingEmploymentHistory.find({ tenantId, preboardingId: preboarding._id, deleted: false }).sort({ order: 1 }).lean(),
+    PreboardingEducation.find({ tenantId, preboardingId: preboarding._id, deleted: false }).sort({ order: 1 }).lean(),
+    CandidateDocument.find({ tenantId, preboardingId: preboarding._id, deleted: false }).populate('currentVersionId').lean(),
+    PreboardingTask.find({ tenantId, preboardingId: preboarding._id, deleted: false }).sort({ dueDate: 1, createdAt: 1 }).lean(),
+    OfferVersion.findOne({ tenantId, _id: preboarding.offerVersionId }).lean(),
   ])
 
   let bank = null, statutory = null
   const sensitive = canViewSensitivePreboardingData(session)
   if (sensitive) {
     [bank, statutory] = await Promise.all([
-      PreboardingBankDetails.findOne({ tenantId, preboardingId: preboarding._id }),
-      PreboardingStatutoryDetails.findOne({ tenantId, preboardingId: preboarding._id }),
+      PreboardingBankDetails.findOne({ tenantId, preboardingId: preboarding._id }).lean(),
+      PreboardingStatutoryDetails.findOne({ tenantId, preboardingId: preboarding._id }).lean(),
     ])
   }
 
@@ -63,7 +64,7 @@ export const GET = withApi(async (req, { params }) => {
   ])
 
   return ok({
-    ...preboarding.toObject(),
+    ...preboarding,
     personal, emergencyContact, employmentHistory, education, bank, statutory, documents, tasks,
     canViewSensitive: sensitive,
     candidateCode: preboarding.candidateId?.candidateCode,
