@@ -1,5 +1,14 @@
 import net from 'node:net'
 
+if (
+  process.env.RENDER ||
+  process.env.CI ||
+  process.env.NODE_ENV === 'production' ||
+  process.platform !== 'win32'
+) {
+  process.exit(0)
+}
+
 const cwd = process.cwd()
 const normalized = cwd.toLowerCase()
 const expected = 'c:\\projects\\nexahr'
