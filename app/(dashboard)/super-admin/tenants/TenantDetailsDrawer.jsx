@@ -42,7 +42,7 @@ export function TenantDetailsDrawer({ isOpen, onClose, tenant }) {
                 onClick={() => setViewingImage(tenant.logoUrl || tenant.logo)}
               />
             ) : (
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-200/50 dark:border-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 font-black text-xl shrink-0 shadow-sm">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-200/50 dark:border-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-lg shrink-0 shadow-sm">
                 {tenant.companyName ? tenant.companyName.charAt(0).toUpperCase() : 'C'}
               </div>
             )}
@@ -63,7 +63,7 @@ export function TenantDetailsDrawer({ isOpen, onClose, tenant }) {
           <div className="flex items-center gap-2">
             <button 
               onClick={() => { onClose(); router.push(`/super-admin/tenants/${tenant._id}`); }}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-bold text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50 transition-colors"
             >
               <Edit2 className="w-4 h-4" /> Edit
             </button>
@@ -86,7 +86,7 @@ export function TenantDetailsDrawer({ isOpen, onClose, tenant }) {
                 <Users className="w-4 h-4 text-blue-500" />
                 Employee Limit
               </div>
-              <div className="text-2xl font-black text-slate-900 dark:text-white mt-auto">
+              <div className="text-2xl font-bold text-slate-900 dark:text-white mt-auto">
                 {tenant.employeeLimit || 250}
               </div>
             </div>

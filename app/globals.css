@@ -54,6 +54,14 @@
   * {
     @apply border-border;
   }
+  html {
+    zoom: 0.9;
+  }
+  @media (max-width: 640px) {
+    html {
+      zoom: 1;
+    }
+  }
   body {
     @apply bg-background text-foreground font-sans antialiased;
   }

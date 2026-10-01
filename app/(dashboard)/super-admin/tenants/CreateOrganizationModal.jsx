@@ -219,8 +219,8 @@ function Section({ title, description, icon: Icon, color = 'blue', children }) {
           <Icon className="h-5 w-5" />
         </div>
         <div>
-          <h2 className="text-base font-black tracking-tight text-slate-900 dark:text-white">{title}</h2>
-          {description ? <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{description}</p> : null}
+          <h2 className="text-base font-bold tracking-tight text-slate-900 dark:text-white">{title}</h2>
+          {description ? <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{description}</p> : null}
         </div>
       </div>
       <div className="relative">{children}</div>
@@ -233,7 +233,7 @@ function ImageUploader({ label, value, uploading, error, onFile, onRemove }) {
 
   return (
     <div>
-      <span className="mb-1.5 block text-xs font-bold text-slate-700 dark:text-slate-300">{label}</span>
+      <span className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">{label}</span>
       <div
         className={cn(
           'group relative flex min-h-[140px] flex-col items-center justify-center rounded-2xl border-2 border-dashed p-4 text-center transition-all duration-300',
@@ -255,7 +255,7 @@ function ImageUploader({ label, value, uploading, error, onFile, onRemove }) {
               <img src={value} alt="" className="h-24 w-24 object-cover" />
             </div>
             <div className="min-w-0 flex-1 text-left">
-              <p className="truncate text-sm font-black text-slate-900 dark:text-white">Image ready</p>
+              <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">Image ready</p>
               <p className="mt-0.5 text-xs font-semibold text-slate-500 dark:text-slate-400">Looking great!</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button type="button" className="btn-secondary !rounded-xl !px-3 !py-1.5 !text-xs !shadow-sm" onClick={() => inputRef.current?.click()} disabled={uploading}>
@@ -643,7 +643,7 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300">
             <CheckCircle2 className="h-8 w-8" />
           </div>
-          <h1 className="mt-5 text-2xl font-black text-slate-900 dark:text-white">Organization Created Successfully</h1>
+          <h1 className="mt-5 text-2xl font-bold text-slate-900 dark:text-white">Organization Created Successfully</h1>
           <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
             {success.organizationName} has been provisioned and linked to its primary administrator.
           </p>
@@ -653,9 +653,9 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
             <SummaryRow label="Login Email" value={success.adminEmail} />
             {success.tempPassword ? (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/20">
-                <p className="text-xs font-black uppercase tracking-wider text-amber-700 dark:text-amber-300">One-time Login Password</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">One-time Login Password</p>
                 <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <div className="min-w-0 flex-1 rounded-xl border border-amber-200 bg-white px-3 py-2 font-mono text-sm font-black text-slate-900 dark:border-amber-900/60 dark:bg-slate-900 dark:text-white">
+                  <div className="min-w-0 flex-1 rounded-xl border border-amber-200 bg-white px-3 py-2 font-mono text-sm font-bold text-slate-900 dark:border-amber-900/60 dark:bg-slate-900 dark:text-white">
                     {success.tempPassword}
                   </div>
                   <button type="button" className="btn-secondary justify-center !px-3 !py-2 !text-xs" onClick={() => copyPassword(success.tempPassword)}>
@@ -698,7 +698,7 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
           <div className="space-y-6 pb-12">
       <div className="page-header">
         <div>
-          <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Create Organization</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Create Organization</h1>
           <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
             Set up a new organization, assign its primary administrator, and activate a subscription plan.
           </p>
@@ -797,12 +797,12 @@ function Stepper({ step }) {
             <div key={item.title} className={cn('group relative overflow-hidden rounded-[24px] border p-5 transition-all duration-500 ease-out', active ? 'border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50/50 shadow-md shadow-blue-500/10 dark:border-blue-800/50 dark:from-blue-950/50 dark:to-indigo-950/30 dark:shadow-blue-900/20 transform scale-[1.02]' : complete ? 'border-emerald-200/70 bg-gradient-to-br from-emerald-50/70 to-teal-50/30 dark:border-emerald-800/40 dark:from-emerald-950/30 dark:to-teal-950/10 hover:border-emerald-300 hover:bg-emerald-50' : 'border-slate-200/60 bg-white/40 dark:border-slate-800/60 dark:bg-slate-900/40 opacity-70')}>
               {active && <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-blue-500/10 blur-[40px] pointer-events-none" />}
               <div className="relative flex items-center gap-4">
-                <div className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-sm font-black transition-all duration-500', active ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30 ring-4 ring-blue-600/20' : complete ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20' : 'bg-slate-100 text-slate-400 dark:bg-slate-800')}>
+                <div className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-sm font-bold transition-all duration-500', active ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30 ring-4 ring-blue-600/20' : complete ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20' : 'bg-slate-100 text-slate-400 dark:bg-slate-800')}>
                   {complete ? <Check className="h-5 w-5" /> : <Icon className="h-5 w-5" />}
                 </div>
                 <div>
-                  <p className={cn("text-[10px] font-black uppercase tracking-widest", active ? "text-blue-600 dark:text-blue-400" : complete ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400")}>0{index + 1}</p>
-                  <p className="text-base font-black tracking-tight text-slate-900 dark:text-white mt-0.5">{item.title}</p>
+                  <p className={cn("text-[10px] font-bold uppercase tracking-widest", active ? "text-blue-600 dark:text-blue-400" : complete ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400")}>0{index + 1}</p>
+                  <p className="text-base font-bold tracking-tight text-slate-900 dark:text-white mt-0.5">{item.title}</p>
                   <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">{item.description}</p>
                 </div>
               </div>
@@ -964,7 +964,7 @@ function AdminStep({ form, errors, emailCheck, profileUploading, update, handleI
 
       <Section title="Admin Access" description="Role assignment for the primary administrator." icon={ShieldCheck} color="emerald">
         <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 dark:border-blue-900/60 dark:bg-blue-950/30">
-          <p className="text-sm font-black text-blue-900 dark:text-blue-100">Company Admin</p>
+          <p className="text-sm font-bold text-blue-900 dark:text-blue-100">Company Admin</p>
           <p className="mt-1 text-xs font-medium text-blue-700 dark:text-blue-200">Primary administrator responsible for managing this organization.</p>
         </div>
       </Section>
@@ -973,7 +973,7 @@ function AdminStep({ form, errors, emailCheck, profileUploading, update, handleI
         <div className="space-y-4">
           <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/40">
             <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Login Email</p>
-            <p className="mt-1 break-all text-sm font-black text-slate-900 dark:text-white">{form.adminEmail || 'Enter admin work email above'}</p>
+            <p className="mt-1 break-all text-sm font-semibold text-slate-900 dark:text-white">{form.adminEmail || 'Enter admin work email above'}</p>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
@@ -987,7 +987,7 @@ function AdminStep({ form, errors, emailCheck, profileUploading, update, handleI
               )}
               onClick={() => update('passwordMode', 'GENERATE')}
             >
-              <p className="text-sm font-black text-slate-900 dark:text-white">Generate one-time password</p>
+              <p className="text-sm font-bold text-slate-900 dark:text-white">Generate one-time password</p>
               <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">Recommended. The password is shown once after organization creation.</p>
             </button>
             <button
@@ -1000,7 +1000,7 @@ function AdminStep({ form, errors, emailCheck, profileUploading, update, handleI
               )}
               onClick={() => update('passwordMode', 'CUSTOM')}
             >
-              <p className="text-sm font-black text-slate-900 dark:text-white">Set custom one-time password</p>
+              <p className="text-sm font-bold text-slate-900 dark:text-white">Set custom one-time password</p>
               <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">Use when you need to share a known initial password manually.</p>
             </button>
           </div>
@@ -1035,7 +1035,7 @@ function AdminStep({ form, errors, emailCheck, profileUploading, update, handleI
           onClick={() => update('sendLoginInvitation', !form.sendLoginInvitation)}
         >
           <span>
-            <span className="block text-sm font-black text-slate-900 dark:text-white">Send Invitation Email</span>
+            <span className="block text-sm font-bold text-slate-900 dark:text-white">Send Invitation Email</span>
             <span className="mt-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
               When mail delivery is configured, send account access details to the administrator.
             </span>
@@ -1093,7 +1093,7 @@ function PlanStep({ form, errors, plans, selectedPlan, loading, loadError, onRet
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-lg font-black text-slate-900 dark:text-white">{plan.name}</p>
+                  <p className="text-lg font-bold text-slate-900 dark:text-white">{plan.name}</p>
                   <p className="mt-1 line-clamp-2 text-xs font-medium text-slate-500 dark:text-slate-400">{plan.description || 'Subscription plan'}</p>
                 </div>
                 <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-full border', selected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 text-slate-300 dark:border-slate-700')}>
@@ -1101,7 +1101,7 @@ function PlanStep({ form, errors, plans, selectedPlan, loading, loadError, onRet
                 </span>
               </div>
               <div className="mt-5">
-                <p className="text-2xl font-black text-slate-900 dark:text-white">{formatCurrency(plan.price, 'INR')}</p>
+                <p className="text-2xl font-bold text-slate-900 dark:text-white">{formatCurrency(plan.price, 'INR')}</p>
                 <p className="text-xs font-bold uppercase tracking-wider text-slate-400">per {String(plan.billingCycle || 'MONTHLY').toLowerCase()}</p>
               </div>
               <div className="mt-5 space-y-2 text-sm font-semibold text-slate-600 dark:text-slate-300">
@@ -1118,7 +1118,7 @@ function PlanStep({ form, errors, plans, selectedPlan, loading, loadError, onRet
                   ))}
                 </div>
               ) : null}
-              <span className={cn('mt-auto pt-5 text-center text-sm font-black', selected ? 'text-blue-700 dark:text-blue-300' : 'text-slate-500')}>
+              <span className={cn('mt-auto pt-5 text-center text-sm font-semibold', selected ? 'text-blue-700 dark:text-blue-300' : 'text-slate-500')}>
                 {selected ? 'Selected' : 'Select Plan'}
               </span>
             </button>
@@ -1193,8 +1193,8 @@ function ReviewCard({ title, action, onAction, children }) {
   return (
     <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-4 flex items-center justify-between gap-3 border-b border-slate-100 pb-3 dark:border-slate-800">
-        <h2 className="text-sm font-black text-slate-900 dark:text-white">{title}</h2>
-        <button type="button" className="text-xs font-black text-blue-600 hover:text-blue-700 dark:text-blue-300" onClick={onAction}>{action}</button>
+        <h2 className="text-sm font-bold text-slate-900 dark:text-white">{title}</h2>
+        <button type="button" className="text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-300" onClick={onAction}>{action}</button>
       </div>
       <div className="space-y-2">{children}</div>
     </div>

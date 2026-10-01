@@ -31,7 +31,7 @@ function TenantStatusPill({ status }) {
   const s = String(status || '').toUpperCase()
   if (s === 'ACTIVE') {
     return (
-      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/40">
+      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/40">
         <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
         Active
       </span>
@@ -39,14 +39,14 @@ function TenantStatusPill({ status }) {
   }
   if (s === 'TRIAL' || s === 'GRACE') {
     return (
-      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40">
+      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40">
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
         {s === 'TRIAL' ? 'Free Trial' : 'Grace Period'}
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-900/40">
+    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-900/40">
       <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
       Suspended
     </span>
@@ -59,7 +59,7 @@ function PlanBadge({ planName }) {
   const isPro = name.toLowerCase().includes('pro')
   return (
     <span className={cn(
-      "inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold tracking-tight",
+      "inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium tracking-tight",
       isEnterprise ? "bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-300 border border-purple-100 dark:border-purple-900/40" :
       isPro ? "bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-300 border border-blue-100 dark:border-blue-900/40" :
       "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
@@ -166,9 +166,9 @@ export default function TenantsPage() {
       {/* Top Header Card */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100/80 dark:border-slate-800/60 pb-3 mb-5">
         <div className="flex-1">
-          <div className="flex flex-wrap items-center gap-3 mb-1.5">
-            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-700 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-blue-500 after:to-transparent after:rounded-full">Organizations</h1>
-            <span className="px-3 py-1 rounded-full text-[11px] font-black bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60 uppercase tracking-widest shadow-sm">
+          <div className="flex flex-wrap items-center gap-3 mb-1">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-700 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 relative w-fit pb-1.5 after:content-[''] after:absolute after:-bottom-0.5 after:left-0 after:w-1/3 after:h-0.5 after:bg-gradient-to-r after:from-blue-500 after:to-transparent after:rounded-full">Organizations</h1>
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60 uppercase tracking-wider shadow-sm">
               {totalElements} Total
             </span>
           </div>
@@ -176,10 +176,10 @@ export default function TenantsPage() {
 
         {hasPermission('tenant.create') && (
           <button 
-            className="shrink-0 inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 text-white font-extrabold text-xs shadow-[0_8px_20px_-6px_rgba(79,70,229,0.4)] transition-all duration-300 active:scale-95 mt-2 sm:mt-0"
+            className="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 text-white font-semibold text-xs shadow-sm transition-all duration-300 active:scale-95 mt-2 sm:mt-0"
             onClick={() => setShowCreateModal(true)}
           >
-            <Plus className="w-4 h-4 stroke-[3]" /> 
+            <Plus className="w-4 h-4 stroke-[2.5]" /> 
             <span>Create Organization</span>
           </button>
         )}
@@ -189,7 +189,7 @@ export default function TenantsPage() {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-5">
         {/* Status Filter Dropdown */}
         <select 
-          className="bg-white dark:bg-slate-900 rounded-2xl px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer w-full lg:w-48"
+          className="bg-white dark:bg-slate-900 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer w-full lg:w-48"
           value={status} 
           onChange={(e) => handleStatusTab(e.target.value)}
         >
@@ -201,10 +201,10 @@ export default function TenantsPage() {
         {/* Search & Plan Selector */}
         <div className="flex items-center gap-3">
           <div className="relative flex-1 sm:w-80 group">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
             <input
               type="text"
-              className="w-full bg-white dark:bg-slate-900 rounded-2xl pl-10 pr-4 py-2.5 text-xs font-bold text-slate-800 dark:text-slate-200 border border-slate-200/80 dark:border-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:font-semibold placeholder:text-slate-400"
+              className="w-full bg-white dark:bg-slate-900 rounded-xl pl-9 pr-4 py-2 text-xs font-normal text-slate-800 dark:text-slate-200 border border-slate-200/80 dark:border-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:font-normal placeholder:text-slate-400"
               placeholder="Search by company, code, or domain..."
               value={searchInput}
               onChange={(e) => { setSearchInput(e.target.value); setPage(0) }}
@@ -212,7 +212,7 @@ export default function TenantsPage() {
           </div>
 
           <select 
-            className="bg-white dark:bg-slate-900 rounded-2xl px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
+            className="bg-white dark:bg-slate-900 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
             value={planFilter} 
             onChange={(e) => { setPlanFilter(e.target.value); setPage(0) }}
           >
@@ -223,16 +223,16 @@ export default function TenantsPage() {
       </div>
 
       {/* Main Companies Table Card */}
-      <div className="relative bg-white dark:bg-slate-900 rounded-[26px] p-5 border border-slate-200/60 dark:border-slate-800/80 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)] overflow-hidden">
+      <div className="relative bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/60 dark:border-slate-800/80 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b-2 border-slate-100 dark:border-slate-800/80 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+              <tr className="border-b border-slate-100 dark:border-slate-800/80 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                 {COLUMNS.map((col) => (
                   <th
                     key={col.key}
                     onClick={() => col.sortable && handleSort(col.key)}
-                    className={cn("pb-4 px-2 font-black", col.sortable && "cursor-pointer select-none hover:text-slate-800 dark:hover:text-slate-200 transition-colors")}
+                    className={cn("pb-3 px-2.5 font-semibold", col.sortable && "cursor-pointer select-none hover:text-slate-800 dark:hover:text-slate-200 transition-colors")}
                   >
                     <div className="flex items-center gap-1.5">
                       {col.label}
@@ -251,7 +251,7 @@ export default function TenantsPage() {
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={COLUMNS.length} className="py-20 text-center text-sm font-semibold text-slate-400">
+                  <td colSpan={COLUMNS.length} className="py-20 text-center text-sm font-medium text-slate-400">
                     No organizations match these filters.
                   </td>
                 </tr>
@@ -263,25 +263,25 @@ export default function TenantsPage() {
                     className="group cursor-pointer hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-all duration-200"
                   >
                     {/* Company Column */}
-                    <td className="py-4 px-2">
-                      <div className="flex items-center gap-3.5">
+                    <td className="py-3.5 px-2.5">
+                      <div className="flex items-center gap-3">
                         {row.logoUrl || row.logo ? (
                           <img 
                             src={row.logoUrl || row.logo} 
                             alt={row.companyName} 
-                            className="w-10 h-10 rounded-2xl object-cover border border-slate-200 dark:border-slate-700 shadow-sm cursor-pointer hover:opacity-80 transition-opacity"
+                            className="w-9 h-9 rounded-xl object-cover border border-slate-200 dark:border-slate-700 shadow-sm cursor-pointer hover:opacity-80 transition-opacity"
                             onClick={(e) => { e.stopPropagation(); setViewingImage(row.logoUrl || row.logo); }}
                           />
                         ) : (
-                          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-200/50 dark:border-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 font-black text-sm shrink-0 shadow-sm group-hover:scale-105 group-hover:shadow-md transition-all duration-300">
+                          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-200/50 dark:border-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 font-semibold text-sm shrink-0 shadow-sm group-hover:scale-105 transition-all duration-300">
                             {row.companyName ? row.companyName.charAt(0).toUpperCase() : 'C'}
                           </div>
                         )}
                         <div>
-                          <p className="font-extrabold text-slate-900 dark:text-white text-sm group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                          <p className="font-semibold text-slate-900 dark:text-white text-sm group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                             {row.companyName}
                           </p>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold mt-0.5">
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 font-normal mt-0.5">
                             {row.tenantCode} {row.subdomain ? <span className="opacity-60">· {row.subdomain}.nexahr.io</span> : ''}
                           </p>
                         </div>
@@ -289,8 +289,8 @@ export default function TenantsPage() {
                     </td>
 
                     {/* Primary Admin */}
-                    <td className="py-4 px-2">
-                      <div className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 font-semibold">
+                    <td className="py-3.5 px-2.5">
+                      <div className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 font-normal">
                         <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
                           <Mail className="w-3 h-3 text-slate-500" />
                         </div>
@@ -299,48 +299,48 @@ export default function TenantsPage() {
                     </td>
 
                     {/* Plan */}
-                    <td className="py-4 px-2">
+                    <td className="py-3.5 px-2.5">
                       <PlanBadge planName={row.plan?.name} />
                     </td>
 
                     {/* Employee Limit */}
-                    <td className="py-4 px-2">
-                      <div className="flex items-center gap-1.5 text-xs font-black text-slate-700 dark:text-slate-200">
+                    <td className="py-3.5 px-2.5">
+                      <div className="flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-200">
                         <Users className="w-3.5 h-3.5 text-slate-400" />
                         <span>{row.employeeLimit || 250} seats</span>
                       </div>
                     </td>
 
                     {/* Status */}
-                    <td className="py-4 px-2">
+                    <td className="py-3.5 px-2.5">
                       <TenantStatusPill status={row.status} />
                     </td>
 
                     {/* Provisioning */}
-                    <td className="py-4 px-2">
-                      <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60 shadow-sm">
+                    <td className="py-3.5 px-2.5">
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 text-[11px] font-medium text-slate-700 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60 shadow-sm">
                         <Database className="w-3 h-3 text-emerald-500" />
                         <span>{row.provisioningStatus || 'COMPLETED'}</span>
                       </div>
                     </td>
 
                     {/* Created */}
-                    <td className="py-4 px-2 text-[11px] font-bold text-slate-400 dark:text-slate-500 tracking-wide">
+                    <td className="py-3.5 px-2.5 text-[11px] font-normal text-slate-400 dark:text-slate-500 tracking-wide">
                       {formatDate(row.createdAt)}
                     </td>
 
                     {/* Actions */}
-                    <td className="py-4 px-2 text-right">
+                    <td className="py-3.5 px-2.5 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button 
                           onClick={(e) => { e.stopPropagation(); setSelectedTenant(row); }}
-                          className="btn-secondary px-3 py-1.5 text-[11px]"
+                          className="btn-secondary px-2.5 py-1 text-xs"
                         >
                           View
                         </button>
                         <button 
                           onClick={(e) => { e.stopPropagation(); setEditingTenantId(row._id); }}
-                          className="btn-primary px-3 py-1.5 text-[11px] bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 rounded-lg font-semibold transition-colors"
+                          className="btn-primary px-2.5 py-1 text-xs bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 rounded-lg font-medium transition-colors"
                         >
                           Edit
                         </button>

@@ -123,8 +123,8 @@ function Section({ title, description, icon: Icon, color = 'blue', children }) {
           <Icon className="h-5 w-5" />
         </div>
         <div>
-          <h2 className="text-base font-black tracking-tight text-slate-900 dark:text-white">{title}</h2>
-          {description ? <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{description}</p> : null}
+          <h2 className="text-base font-bold tracking-tight text-slate-900 dark:text-white">{title}</h2>
+          {description ? <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{description}</p> : null}
         </div>
       </div>
       <div className="relative">{children}</div>
@@ -159,8 +159,8 @@ function ImageUploader({ label, value, uploading, error, onFile, onRemove }) {
               <img src={value} alt="" className="h-24 w-24 object-cover" />
             </div>
             <div className="min-w-0 flex-1 text-left">
-              <p className="truncate text-sm font-black text-slate-900 dark:text-white">Image ready</p>
-              <p className="mt-0.5 text-xs font-semibold text-slate-500 dark:text-slate-400">Looking great!</p>
+              <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">Image ready</p>
+              <p className="mt-0.5 text-xs font-medium text-slate-500 dark:text-slate-400">Looking great!</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button type="button" className="btn-secondary !rounded-xl !px-3 !py-1.5 !text-xs !shadow-sm" onClick={() => inputRef.current?.click()} disabled={uploading}>
                   Replace
@@ -350,7 +350,7 @@ export default function EditOrganizationPage() {
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300">
             <CheckCircle2 className="h-8 w-8" />
           </div>
-          <h1 className="mt-5 text-2xl font-black text-slate-900 dark:text-white">Organization Updated Successfully</h1>
+          <h1 className="mt-5 text-2xl font-bold text-slate-900 dark:text-white">Organization Updated Successfully</h1>
           <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
             Your changes have been saved. Redirecting you back to the organizations list...
           </p>
@@ -363,7 +363,7 @@ export default function EditOrganizationPage() {
     <div className="animate-fade-in space-y-6 pb-12">
       <div className="page-header">
         <div>
-          <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Edit Organization</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Edit Organization</h1>
           <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
             Update the organization information and settings.
           </p>
