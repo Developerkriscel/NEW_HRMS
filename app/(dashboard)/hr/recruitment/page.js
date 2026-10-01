@@ -240,7 +240,6 @@ export default function RecruitmentDashboardPage() {
   const [selectedPositionForCandidates, setSelectedPositionForCandidates] = useState(null)
   
   // Candidate Data State
-  const [uploadSource, setUploadSource] = useState('linkedin')
   const [isDragging, setIsDragging] = useState(false)
   const [aiAnalysisEnabled, setAiAnalysisEnabled] = useState(true)
   const fileInputRef = useRef(null)
@@ -1782,37 +1781,14 @@ export default function RecruitmentDashboardPage() {
               >
                 <X className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
               </button>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-6">Import Candidate Data</h2>
-              
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-1 space-y-6">
-                  <div>
-                    <label className="text-sm font-bold text-slate-700 dark:text-slate-300 block mb-3">Select Data Source</label>
-                    <div className="space-y-3">
-                      {[
-                        { id: 'linkedin', name: 'LinkedIn', color: 'bg-[#0077b5]/10 text-[#0077b5] border-[#0077b5]/30' },
-                        { id: 'naukri', name: 'Naukri.com', color: 'bg-[#0033cc]/10 text-[#0033cc] border-[#0033cc]/30' },
-                        { id: 'indeed', name: 'Indeed', color: 'bg-[#003a9b]/10 text-[#003a9b] border-[#003a9b]/30' },
-                        { id: 'other', name: 'Other CSV/Excel', color: 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30' }
-                      ].map(src => (
-                        <label 
-                          key={src.id} 
-                          className={`flex items-center p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                            uploadSource === src.id 
-                              ? `${src.color} border-current shadow-sm ring-1 ring-current` 
-                              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600'
-                          }`}
-                        >
-                          <input type="radio" className="hidden" checked={uploadSource === src.id} onChange={() => setUploadSource(src.id)} />
-                          <span className="font-bold text-sm ml-2">{src.name}</span>
-                          {uploadSource === src.id && <div className="ml-auto w-2 h-2 rounded-full bg-current"></div>}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+              <div className="mb-6">
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white">Import Candidate Data</h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-normal">
+                  Upload candidate spreadsheets (.xlsx, .csv) or multiple resumes (.pdf, .docx) for automated parsing and candidate matching.
+                </p>
+              </div>
 
-                <div className="lg:col-span-2 flex flex-col">
+              <div className="flex flex-col">
                   <div 
                     className={`flex-1 border-2 border-dashed rounded-3xl flex flex-col items-center justify-center p-8 transition-all relative ${
                       isDragging 
@@ -1844,18 +1820,18 @@ export default function RecruitmentDashboardPage() {
                       <UploadCloud className="w-10 h-10 text-indigo-500" />
                     </div>
                     
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Drag and drop your file here</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 text-center max-w-sm mb-8">
-                      Upload bulk candidate data from {uploadSource === 'linkedin' ? 'LinkedIn' : uploadSource === 'naukri' ? 'Naukri.com' : uploadSource === 'indeed' ? 'Indeed' : 'CSV/Excel'} or upload multiple resumes to run AI shortlisting.
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Drag and drop your files here</h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 text-center max-w-md mb-8 font-normal">
+                      Upload candidate spreadsheets (.xlsx, .csv) or multiple resumes (.pdf, .docx, .doc) to run automated parsing and AI shortlisting.
                     </p>
                     
                     <div className="flex flex-col sm:flex-row flex-wrap justify-center gap-4 mt-6">
-                      <button onClick={() => fileInputRef.current?.click()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg shadow-indigo-500/20 transition-all flex items-center justify-center gap-2">
-                        <UploadCloud className="w-4 h-4" /> Upload Candidate Data
+                      <button onClick={() => fileInputRef.current?.click()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-semibold text-xs shadow-md shadow-indigo-500/20 transition-all flex items-center justify-center gap-2">
+                        <UploadCloud className="w-4 h-4" /> Upload Candidate Spreadsheet (.xlsx / .csv)
                       </button>
 
-                      <button onClick={() => resumeInputRef.current?.click()} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2">
-                        <FileText className="w-4 h-4" /> Upload Bulk Resumes
+                      <button onClick={() => resumeInputRef.current?.click()} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-semibold text-xs shadow-md shadow-emerald-500/20 transition-all flex items-center justify-center gap-2">
+                        <FileText className="w-4 h-4" /> Upload Bulk Resumes (.pdf / .docx)
                       </button>
                     </div>
                   </div>
@@ -1887,7 +1863,6 @@ export default function RecruitmentDashboardPage() {
                     </div>
                   </div>
                 </div>
-              </div>
             </div>
           )}
 
