@@ -289,6 +289,7 @@ function mockPayloadForPath(path, params = {}) {
   if (path === '/super-admin/admins') return []
   if (path === '/super-admin/support/tickets') return []
   if (path === '/super-admin/settings') return platformSettingsData()
+  if (path === '/super-admin/settings/ai') return { provider: 'GEMINI', model: 'gemini-2.5-flash', apiKeyPreview: null, isConfigured: false }
   if (path === '/super-admin/reports/overview') return reportOverviewData()
   if (path === '/super-admin/reports/revenue-trend') return []
   if (path === '/super-admin/reports/revenue-by-company') return []

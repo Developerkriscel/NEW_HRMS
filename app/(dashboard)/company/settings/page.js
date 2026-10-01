@@ -25,7 +25,7 @@ const MENU = [
   { id: 'holidays', label: 'Holidays', icon: CalendarDays },
   { id: 'modules', label: 'Modules & Features', icon: Settings },
   { id: 'security', label: 'Security', icon: Lock },
-  { id: 'integrations', label: 'Integrations', icon: Sparkles },
+  { id: 'integrations', label: 'Email Integration', icon: Mail },
 ]
 
 export default function CompanySettingsPage() {

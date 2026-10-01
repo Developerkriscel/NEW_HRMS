@@ -10,7 +10,7 @@ import { ShiftsSection } from '@/components/pages/ShiftsSection'
 import { SecuritySettingsSection } from '@/components/pages/SecuritySettingsSection'
 import { IntegrationsSection } from '@/components/pages/IntegrationsSection'
 import { PageLoader } from '@/components/common/LoadingSpinner'
-import { Building, Clock, Layers, MapPin, Clock3, CalendarDays, Lock, CheckCircle2, Sparkles } from 'lucide-react'
+import { Building, Clock, Layers, MapPin, Clock3, CalendarDays, Lock, CheckCircle2, Mail } from 'lucide-react'
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
@@ -21,7 +21,7 @@ const MENU = [
   { id: 'shifts', label: 'Working Hours & Shifts', icon: Clock3 },
   { id: 'holidays', label: 'Holidays', icon: CalendarDays },
   { id: 'security', label: 'Security', icon: Lock },
-  { id: 'integrations', label: 'Integrations', icon: Sparkles },
+  { id: 'integrations', label: 'Email Integration', icon: Mail },
 ]
 
 export default function HRSettingsPage() {

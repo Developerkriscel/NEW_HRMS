@@ -1,11 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Building2, CheckCircle2, Database, RefreshCw, Save, ShieldCheck, UserCircle2 } from 'lucide-react'
+import { Building2, CheckCircle2, Database, RefreshCw, Save, ShieldCheck, Sparkles, UserCircle2 } from 'lucide-react'
 import api from '@/services/api'
 import { authApi } from '@/services/authApi'
 import { useAuthStore } from '@/store/authStore'
 import { SecuritySettingsSection } from '@/components/pages/SecuritySettingsSection'
+import { SuperAdminAiIntegrationSection } from '@/components/pages/SuperAdminAiIntegrationSection'
 import { cn } from '@/lib/utils'
 
 const defaultSettings = {
@@ -22,6 +23,7 @@ const defaultSettings = {
 const tabs = [
   { id: 'organization', label: 'Organization Form', icon: Building2 },
   { id: 'provisioning', label: 'Provisioning', icon: Database },
+  { id: 'ai', label: 'AI Integration', icon: Sparkles },
   { id: 'security', label: 'My Security', icon: ShieldCheck },
 ]
 
@@ -145,7 +147,7 @@ export default function SuperAdminSettingsPage() {
             <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
             Refresh
           </button>
-          {active !== 'security' ? (
+          {active !== 'security' && active !== 'ai' ? (
             <button onClick={saveSettings} disabled={!canManage || saving || loading} className="btn-primary disabled:cursor-not-allowed disabled:opacity-60">
               <Save className="h-4 w-4" />
               {saving ? 'Saving...' : 'Save Settings'}
@@ -213,16 +215,18 @@ export default function SuperAdminSettingsPage() {
         </aside>
 
         <main className="space-y-6">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {summary.map((item) => (
-              <div key={item.label} className="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                <p className="text-xs font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">{item.label}</p>
-                <p className="mt-1.5 truncate text-base font-semibold text-slate-800 dark:text-slate-200">{item.value}</p>
-              </div>
-            ))}
-          </div>
+          {(active === 'organization' || active === 'provisioning') && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {summary.map((item) => (
+                <div key={item.label} className="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <p className="text-xs font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">{item.label}</p>
+                  <p className="mt-1.5 truncate text-base font-semibold text-slate-800 dark:text-slate-200">{item.value}</p>
+                </div>
+              ))}
+            </div>
+          )}
 
-          {!canManage && active !== 'security' ? (
+          {!canManage && active !== 'security' && active !== 'ai' ? (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
               You can view these settings, but saving requires platform.settings.manage permission.
             </div>
@@ -257,6 +261,8 @@ export default function SuperAdminSettingsPage() {
               </div>
             </section>
           )}
+
+          {active === 'ai' && <SuperAdminAiIntegrationSection />}
 
           {active === 'security' && <SecuritySettingsSection onSignOut={logout} />}
         </main>
