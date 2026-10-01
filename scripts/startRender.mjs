@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { spawn } from 'node:child_process'
 
 // Render sets HOSTNAME to the container name. Next standalone may bind to that
@@ -14,7 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const standalonePath = path.resolve(__dirname, '../.next/standalone/server.js')
 
 if (fs.existsSync(standalonePath)) {
-  await import(standalonePath)
+  await import(pathToFileURL(standalonePath).href)
 } else {
   console.log('Standalone server.js not found, falling back to next start...')
   const nextBin = path.resolve(__dirname, '../node_modules/next/dist/bin/next')
