@@ -49,7 +49,7 @@ export const GET = withApi(async (req) => {
         method: { $literal: 'PLATFORM_SUB' },
         reference: '$_id',
         paidAt: '$startDate',
-        invoiceNumber: { $concat: ['SUB-', { $substr: ['$_id', 18, -1] }] },
+        invoiceNumber: { $concat: ['SUB-', { $substr: [{ $toString: '$_id' }, 18, -1] }] },
         companyName: '$tenantDoc.companyName',
         planName: '$planDoc.name'
     }}
