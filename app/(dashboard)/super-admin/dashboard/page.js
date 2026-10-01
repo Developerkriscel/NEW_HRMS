@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { 
   Building2, 
@@ -92,6 +92,16 @@ function TableCard({ title, subtitle, icon: Icon, count, children, onViewAll }) 
       </div>
       <div className="overflow-x-auto">{children}</div>
     </div>
+  )
+}
+
+function EmptyTableRow({ colSpan, message }) {
+  return (
+    <tr>
+      <td colSpan={colSpan} className="py-8 text-center text-xs font-semibold text-slate-400">
+        {message}
+      </td>
+    </tr>
   )
 }
 
@@ -216,7 +226,7 @@ export default function SuperAdminDashboardPage() {
   const [days, setDays] = useState(90)
   const [refreshing, setRefreshing] = useState(false)
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -229,11 +239,11 @@ export default function SuperAdminDashboardPage() {
       setLoading(false)
       setRefreshing(false)
     }
-  }
+  }, [days])
 
   useEffect(() => {
     load()
-  }, [days])
+  }, [load])
 
   if (loading && !data) return <PageLoader />
   if (error && !data) {
@@ -329,7 +339,7 @@ export default function SuperAdminDashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           
           <TableCard 
-            title="Recent Order" 
+            title="Recent Organizations" 
             subtitle="Latest registered organizations" 
             count={tables.recentCompanies.length}
             icon={Building2}
@@ -338,10 +348,10 @@ export default function SuperAdminDashboardPage() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-800 text-[11px] font-semibold text-slate-400">
-                  <th className="pb-2 font-medium">Tracking ID</th>
-                  <th className="pb-2 font-medium">Products name</th>
+                  <th className="pb-2 font-medium">Organization ID</th>
+                  <th className="pb-2 font-medium">Organization</th>
                   <th className="pb-2 font-medium text-center">Status</th>
-                  <th className="pb-2 font-medium text-right">Price</th>
+                  <th className="pb-2 font-medium text-right">Registered</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
@@ -368,10 +378,13 @@ export default function SuperAdminDashboardPage() {
                       <StatusPill status={t.status} />
                     </td>
                     <td className="py-2.5 text-right text-xs font-bold text-slate-900 dark:text-white">
-                      {t.mrr || '$2,400'}
+                      {formatDate(t.createdAt)}
                     </td>
                   </tr>
                 ))}
+                {tables.recentCompanies.length === 0 && (
+                  <EmptyTableRow colSpan={4} message="No organizations have been created yet." />
+                )}
               </tbody>
             </table>
           </TableCard>
@@ -393,21 +406,10 @@ export default function SuperAdminDashboardPage() {
               </thead>
               <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
                 {tables.failedProvisioning.length === 0 ? (
-                  [
-                    { id: '#9812567', name: 'Acme Cluster', status: 'COMPLETE', log: 'Synced' },
-                    { id: '#9812411', name: 'Tenant Replica', status: 'PENDING', log: 'Syncing' },
-                    { id: '#9812556', name: 'Legacy Cluster', status: 'CANCELED', log: 'Archived' },
-                  ].map((j, i) => (
-                    <tr key={i} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="py-2.5 text-xs font-semibold text-slate-500">{j.id}</td>
-                      <td className="py-2.5 text-xs font-bold text-slate-800 dark:text-slate-200">{j.name}</td>
-                      <td className="py-2.5 text-center"><StatusPill status={j.status} /></td>
-                      <td className="py-2.5 text-right text-xs font-semibold text-slate-500">{j.log}</td>
-                    </tr>
-                  ))
+                  <EmptyTableRow colSpan={4} message="No provisioning alerts." />
                 ) : (
                   tables.failedProvisioning.slice(0, 5).map((j, idx) => (
-                    <tr key={j._id || idx} onClick={() => router.push(`/super-admin/tenants/${j.tenant?._id}`)} className="cursor-pointer hover:bg-slate-50/80">
+                    <tr key={j._id || idx} onClick={() => j.tenant?._id && router.push(`/super-admin/tenants/${j.tenant._id}`)} className="cursor-pointer hover:bg-slate-50/80">
                       <td className="py-2.5 text-xs font-semibold text-slate-500">#{String(j._id || idx).slice(-7)}</td>
                       <td className="py-2.5 text-xs font-bold text-slate-800 dark:text-slate-200">{j.tenant?.companyName || '—'}</td>
                       <td className="py-2.5 text-center"><StatusPill status={j.status} /></td>
@@ -437,25 +439,14 @@ export default function SuperAdminDashboardPage() {
               </thead>
               <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
                 {tables.upcomingRenewals.length === 0 ? (
-                  [
-                    { id: '#9812619', name: 'iPhone 12 Fleet', status: 'COMPLETE', price: '$4,022' },
-                    { id: '#9812567', name: 'Acme Enterprise', status: 'COMPLETE', price: '$1,299' },
-                    { id: '#9812411', name: 'Starlight Tech', status: 'PENDING', price: '$850' },
-                  ].map((s, i) => (
-                    <tr key={i} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="py-2.5 text-xs font-semibold text-slate-500">{s.id}</td>
-                      <td className="py-2.5 text-xs font-bold text-slate-800 dark:text-slate-200">{s.name}</td>
-                      <td className="py-2.5 text-center"><StatusPill status={s.status} /></td>
-                      <td className="py-2.5 text-right text-xs font-bold text-slate-900 dark:text-white">{s.price}</td>
-                    </tr>
-                  ))
+                  <EmptyTableRow colSpan={4} message="No renewals are due in the next 30 days." />
                 ) : (
                   tables.upcomingRenewals.slice(0, 5).map((s, idx) => (
                     <tr key={s._id || idx} onClick={() => router.push(`/super-admin/subscriptions/${s._id}`)} className="cursor-pointer hover:bg-slate-50/80">
                       <td className="py-2.5 text-xs font-semibold text-slate-500">#{String(s._id || idx).slice(-7)}</td>
                       <td className="py-2.5 text-xs font-bold text-slate-800 dark:text-slate-200">{s.tenant?.companyName}</td>
                       <td className="py-2.5 text-center"><StatusPill status={s.status} /></td>
-                      <td className="py-2.5 text-right text-xs font-bold text-slate-900 dark:text-white">{s.plan?.name || '$999'}</td>
+                      <td className="py-2.5 text-right text-xs font-bold text-slate-900 dark:text-white">{s.plan?.name || '-'}</td>
                     </tr>
                   ))
                 )}

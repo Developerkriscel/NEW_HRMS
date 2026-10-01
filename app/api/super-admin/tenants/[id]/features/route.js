@@ -7,7 +7,6 @@ import { requirePlatformPermission } from '@/lib/platformRbac'
 import { logSuperAdmin } from '@/lib/audit'
 import { validateModuleDependencies, assertModulesAllowedForPlan } from '@/lib/platformCatalogue'
 import Tenant from '@/models/Tenant'
-import { devSuperAdminStore } from '@/lib/devSuperAdminStore'
 
 export const PUT = withApi(async (req, { params }) => {
   const session = await requireAuth()
@@ -16,12 +15,6 @@ export const PUT = withApi(async (req, { params }) => {
   const features = body.features || body
   const reason = body.reason
   if (!reason || !reason.trim()) return fail('A reason is required to change tenant modules', 400, 'REASON_REQUIRED')
-
-  if (session.devLogin && process.env.NODE_ENV !== 'production') {
-    const tenant = devSuperAdminStore.updateFeatures(params.id, features)
-    if (!tenant) return fail('Tenant not found', 404)
-    return ok(tenant, 'Features updated')
-  }
 
   const tenant = await Tenant.findOne({ _id: params.id, deleted: false })
   if (!tenant) return fail('Tenant not found', 404)

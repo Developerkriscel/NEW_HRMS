@@ -5,7 +5,6 @@ import { ok, paged } from '@/lib/apiResponse'
 import { requireAuth } from '@/lib/auth'
 import { requirePlatformPermission } from '@/lib/platformRbac'
 import Tenant from '@/models/Tenant'
-import { devSuperAdminStore } from '@/lib/devSuperAdminStore'
 
 const SORTABLE_FIELDS = new Set(['companyName', 'tenantCode', 'status', 'provisioningStatus', 'createdAt', 'employeeLimit'])
 
@@ -22,10 +21,6 @@ export const GET = withApi(async (req) => {
   const provisioningStatus = searchParams.get('provisioningStatus')
   const sortBy = SORTABLE_FIELDS.has(searchParams.get('sortBy')) ? searchParams.get('sortBy') : 'createdAt'
   const sortDir = searchParams.get('sortDir') === 'asc' ? 1 : -1
-
-  if (session.devLogin && process.env.NODE_ENV !== 'production') {
-    return ok(devSuperAdminStore.listTenants({ page, size, status, search }))
-  }
 
   const query = { deleted: false }
   if (status) query.status = status

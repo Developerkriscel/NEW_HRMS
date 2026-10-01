@@ -13,7 +13,7 @@ import api from '@/services/api'
 
 // Since there's no pre-existing tenantApi endpoint for operators, we make direct fetch calls
 const fetchAdmins = async () => {
-  const res = await api.get('/super-admin/admins')
+  const res = await api.get('/super-admin/admins', { devMock: false, skipCache: true })
   return res.data
 }
 
@@ -38,11 +38,13 @@ export default function AdminsPage() {
   async function load() {
     setLoading(true)
     setForbidden(false)
+    setError('')
     try {
       const res = await fetchAdmins()
       setAdmins(res.data)
     } catch (err) {
-      if (err.message.includes('403') || err.message.includes('Forbidden')) setForbidden(true)
+      if (err.response?.status === 403) setForbidden(true)
+      else setError(err.response?.data?.message || 'Unable to load company admins')
     } finally {
       setLoading(false)
     }
@@ -63,7 +65,7 @@ export default function AdminsPage() {
           </div>
           <p className="text-slate-500 dark:text-slate-400 text-sm font-semibold">Manage company administrators</p>
         </div>
-        {hasPermission('operator.update') && (
+        {hasPermission('operator.create') && (
           <button 
             onClick={() => { setEditAdminId(null); setModalMode('edit'); setModalOpen(true); }}
             className="btn-primary"
@@ -75,6 +77,13 @@ export default function AdminsPage() {
 
       {loading ? (
         <div className="flex justify-center py-20"><p className="text-slate-400 text-sm font-semibold">Loading admins...</p></div>
+      ) : error ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-bold text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
+          <p>{error}</p>
+          <button type="button" onClick={load} className="btn-secondary mt-3 !px-4 !py-2 !text-xs">
+            Retry
+          </button>
+        </div>
       ) : (
         <div className="relative bg-white dark:bg-slate-900 rounded-[26px] p-5 border border-slate-200/60 dark:border-slate-800/80 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)] overflow-hidden">
           <div className="overflow-x-auto">
@@ -93,7 +102,7 @@ export default function AdminsPage() {
                 {admins.length === 0 ? (
                   <tr>
                     <td colSpan="5" className="py-20 text-center text-sm font-semibold text-slate-400">
-                      No admins found.
+                      No company admins found.
                     </td>
                   </tr>
                 ) : (
@@ -181,7 +190,7 @@ export default function AdminsPage() {
                           >
                             View
                           </button>
-                          {hasPermission('operator.update') && (
+                          {hasPermission('operator.update') && !admin.virtual && (
                             <button 
                               onClick={() => { setEditAdminId(admin._id); setModalMode('edit'); setModalOpen(true); }}
                               className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-sm"

@@ -19,6 +19,7 @@ export default function SubscriptionsTab() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [forbidden, setForbidden] = useState(false)
+  const [error, setError] = useState('')
   const [status, setStatus] = useState('All')
   const [page, setPage] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
@@ -31,6 +32,7 @@ export default function SubscriptionsTab() {
   function load() {
     setLoading(true)
     setForbidden(false)
+    setError('')
     const params = { page, size: PAGE_SIZE }
     if (status !== 'All') params.status = status
     platformApi.getSubscriptions(params)
@@ -39,7 +41,10 @@ export default function SubscriptionsTab() {
         setTotalPages(res.data.data.totalPages)
         setTotalElements(res.data.data.totalElements)
       })
-      .catch((err) => { if (err.response?.status === 403) setForbidden(true) })
+      .catch((err) => {
+        if (err.response?.status === 403) setForbidden(true)
+        else setError(err.response?.data?.message || 'Unable to load subscriptions')
+      })
       .finally(() => setLoading(false))
   }
   useEffect(load, [page, status])
@@ -84,6 +89,17 @@ export default function SubscriptionsTab() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
               {loading ? (
                 <tr><td colSpan={7} className="py-16 text-center"><div className="flex justify-center"><LoadingSpinner /></div></td></tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan={7} className="py-14 text-center">
+                    <div className="mx-auto max-w-xl rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-bold text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
+                      <p>{error}</p>
+                      <button type="button" onClick={load} className="btn-secondary mx-auto mt-3 !px-4 !py-2 !text-xs">
+                        Retry
+                      </button>
+                    </div>
+                  </td>
+                </tr>
               ) : rows.length === 0 ? (
                 <tr><td colSpan={7} className="py-16 text-center text-sm font-semibold text-slate-400">No subscriptions found for the selected filter.</td></tr>
               ) : rows.map((row) => (

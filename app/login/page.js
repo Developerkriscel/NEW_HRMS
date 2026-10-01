@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -56,15 +56,33 @@ async function postAuth(path, body) {
 
 export default function LoginPage() {
   const router = useRouter()
+  const formRef = useRef(null)
   const [form, setForm] = useState({ email: '', password: '' })
   const [remember, setRemember] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
+  const [ready, setReady] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  useEffect(() => {
+    setReady(true)
+  }, [])
+
   async function handleSubmit(e) {
     e.preventDefault()
-    await loginWithCredentials(form)
+    await submitCurrentForm(e.currentTarget)
+  }
+
+  async function submitCurrentForm(formElement = formRef.current) {
+    if (!formElement) {
+      await loginWithCredentials(form)
+      return
+    }
+    const formData = new FormData(formElement)
+    await loginWithCredentials({
+      email: String(formData.get('email') || form.email).trim(),
+      password: String(formData.get('password') || form.password),
+    })
   }
 
   async function loginWithCredentials(credentials) {
@@ -150,7 +168,7 @@ export default function LoginPage() {
             )}
 
             {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                   Email Address
@@ -160,6 +178,7 @@ export default function LoginPage() {
                     <Mail className="w-4 h-4" />
                   </div>
                   <input
+                    name="email"
                     type="email"
                     required
                     value={form.email}
@@ -179,6 +198,7 @@ export default function LoginPage() {
                     <Lock className="w-4 h-4" />
                   </div>
                   <input
+                    name="password"
                     type={showPassword ? 'text' : 'password'}
                     required
                     value={form.password}
@@ -212,8 +232,9 @@ export default function LoginPage() {
               </div>
 
               <button
-                type="submit"
-                disabled={loading}
+                type="button"
+                disabled={loading || !ready}
+                onClick={() => submitCurrentForm()}
                 className="w-full mt-2 py-3 px-4 rounded-xl font-semibold text-sm text-white bg-blue-600 hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-500/25 active:scale-[0.99] disabled:opacity-60 transition-all flex items-center justify-center gap-2 shadow-md shadow-blue-500/20"
               >
                 {loading ? (
@@ -228,7 +249,7 @@ export default function LoginPage() {
               <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
-                  disabled={loading}
+                  disabled={loading || !ready}
                   onClick={() => loginWithDevSession('COMPANY_ADMIN')}
                   className="mb-4 w-full rounded-xl border border-dashed border-blue-300 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700 transition-all hover:border-blue-500 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300"
                 >
@@ -245,7 +266,7 @@ export default function LoginPage() {
                       <button
                         key={login.email}
                         type="button"
-                        disabled={loading}
+                        disabled={loading || !ready}
                         title={login.email}
                         onClick={() => loginWithQuickAccount(login)}
                         className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium border transition-all hover:scale-[1.02] hover:shadow-sm ${login.color}`}

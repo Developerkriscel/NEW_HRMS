@@ -6,16 +6,10 @@ import { requireAuth, requireRole } from '@/lib/auth'
 import Tenant from '@/models/Tenant'
 import Employee from '@/models/Employee'
 import { runForTenant } from '@/lib/tenantDb'
-import { devSuperAdminStore } from '@/lib/devSuperAdminStore'
 
 export const GET = withApi(async (_req, { params }) => {
   const session = await requireAuth()
   await requireRole(session, 'SUPER_ADMIN')
-  if (session.devLogin && process.env.NODE_ENV !== 'production') {
-    const usage = devSuperAdminStore.usage(params.id)
-    if (!usage) return fail('Tenant not found', 404)
-    return ok(usage)
-  }
 
   const tenant = await Tenant.findOne({ _id: params.id, deleted: false })
   if (!tenant) return fail('Tenant not found', 404)

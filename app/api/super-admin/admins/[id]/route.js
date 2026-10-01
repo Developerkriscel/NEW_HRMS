@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { withApi } from '@/lib/handler'
-import { ok } from '@/lib/apiResponse'
+import { ok, fail } from '@/lib/apiResponse'
 import { requireAuth, hashPassword } from '@/lib/auth'
 import { requirePlatformPermission } from '@/lib/platformRbac'
 import Tenant from '@/models/Tenant'
@@ -14,17 +14,17 @@ export const GET = withApi(async (req, { params }) => {
   const url = new URL(req.url)
   const tenantId = url.searchParams.get('tenantId')
 
-  if (!tenantId) throw new Error('tenantId query parameter is required')
+  if (!tenantId) return fail('tenantId query parameter is required', 400, 'VALIDATION_ERROR')
 
   const tenant = await Tenant.findById(tenantId)
-  if (!tenant) throw new Error('Tenant not found')
+  if (!tenant) return fail('Tenant not found', 404, 'TENANT_NOT_FOUND')
 
   const dbName = tenant.databaseName || buildTenantDatabaseName(tenant.tenantCode, tenant._id)
   const TenantEmployee = getTenantModelForDatabase('Employee', dbName)
 
   const admin = await TenantEmployee.findOne({ _id: params.id, role: 'COMPANY_ADMIN' }).select('-password')
   if (!admin) {
-    throw new Error('Administrator not found')
+    return fail('Administrator not found', 404, 'ADMIN_NOT_FOUND')
   }
 
   return ok({
@@ -42,23 +42,23 @@ export const PUT = withApi(async (req, { params }) => {
   const body = await req.json()
   const { tenantId, email, password, firstName, lastName, mobileNumber, designation, profilePhoto, status } = body
 
-  if (!tenantId) throw new Error('tenantId is required in the body')
+  if (!tenantId) return fail('tenantId is required in the body', 400, 'VALIDATION_ERROR')
 
   const tenant = await Tenant.findById(tenantId)
-  if (!tenant) throw new Error('Tenant not found')
+  if (!tenant) return fail('Tenant not found', 404, 'TENANT_NOT_FOUND')
 
   const dbName = tenant.databaseName || buildTenantDatabaseName(tenant.tenantCode, tenant._id)
   const TenantEmployee = getTenantModelForDatabase('Employee', dbName)
 
   const admin = await TenantEmployee.findOne({ _id: params.id, role: 'COMPANY_ADMIN' })
   if (!admin) {
-    throw new Error('Administrator not found')
+    return fail('Administrator not found', 404, 'ADMIN_NOT_FOUND')
   }
 
   if (email && email.toLowerCase() !== admin.email) {
     const existing = await TenantEmployee.findOne({ email: email.toLowerCase() })
     if (existing) {
-      throw new Error('An administrator with this email already exists in this company')
+      return fail('An administrator with this email already exists in this company', 400, 'DUPLICATE_ADMIN')
     }
     admin.email = email.toLowerCase()
   }

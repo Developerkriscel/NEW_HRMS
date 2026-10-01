@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { platformApi } from '@/services/platformApi'
 import { tenantApi } from '@/services/tenantApi'
+import api from '@/services/api'
 import { cn } from '@/lib/utils'
 
 const DRAFT_KEY = 'nexahr_add_organization_draft_v2'
@@ -43,7 +44,19 @@ const STEPS = [
   { title: 'Select Plan', description: 'Subscription & billing', icon: CreditCard },
 ]
 
-function defaultForm() {
+const fallbackPlatformSettings = {
+  organizationDefaults: {
+    defaultCountry: 'India',
+    defaultTimezone: 'Asia/Kolkata',
+    tenantCodePrefix: '',
+  },
+  provisioning: {
+    databasePrefix: 'nexahr_tenant',
+  },
+}
+
+function defaultForm(settings = fallbackPlatformSettings) {
+  const defaults = settings.organizationDefaults || fallbackPlatformSettings.organizationDefaults
   return {
     companyName: '',
     legalBusinessName: '',
@@ -58,11 +71,11 @@ function defaultForm() {
     email: '',
     phone: '+91 ',
     address: '',
-    country: 'India',
+    country: defaults.defaultCountry || 'India',
     state: '',
     city: '',
     pincode: '',
-    timezone: 'Asia/Kolkata',
+    timezone: defaults.defaultTimezone || 'Asia/Kolkata',
     currency: 'INR',
     adminFirstName: '',
     adminLastName: '',
@@ -96,6 +109,14 @@ function suggestCode(name) {
   const words = String(name || '').match(/[a-z0-9]+/gi) || []
   const seed = words.length > 1 ? words.map((word) => word[0]).join('') : words.join('')
   return normalizeCode(seed).slice(0, 8)
+}
+
+function applyTenantCodePrefix(code, settings) {
+  const prefix = normalizeCode(settings?.organizationDefaults?.tenantCodePrefix || '')
+  const normalized = normalizeCode(code)
+  if (!prefix) return normalized
+  if (normalized.startsWith(prefix)) return normalized
+  return normalizeCode(`${prefix}${normalized}`)
 }
 
 function isEmail(value) {
@@ -281,7 +302,8 @@ import { X } from 'lucide-react'
 export function CreateOrganizationModal({ isOpen, onClose }) {
   const router = useRouter()
   const scrollRef = useRef(null)
-  const [form, setForm] = useState(defaultForm)
+  const [platformSettings, setPlatformSettings] = useState(fallbackPlatformSettings)
+  const [form, setForm] = useState(() => defaultForm(fallbackPlatformSettings))
   const [step, setStep] = useState(0)
 
   useEffect(() => {
@@ -306,6 +328,34 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
   const [codeCheck, setCodeCheck] = useState(null)
   const [emailCheck, setEmailCheck] = useState(null)
   const [copiedPassword, setCopiedPassword] = useState(false)
+
+  useEffect(() => {
+    if (!isOpen) return
+    let active = true
+    api.get('/super-admin/settings', { skipCache: true, devMock: false })
+      .then(({ data }) => {
+        if (!active) return
+        const nextSettings = {
+          organizationDefaults: {
+            ...fallbackPlatformSettings.organizationDefaults,
+            ...(data.data?.settings?.organizationDefaults || {}),
+          },
+          provisioning: {
+            ...fallbackPlatformSettings.provisioning,
+            ...(data.data?.settings?.provisioning || {}),
+          },
+        }
+        setPlatformSettings(nextSettings)
+        setForm((current) => {
+          const pristine = !current.companyName && !current.email && !current.adminEmail
+          return pristine ? defaultForm(nextSettings) : current
+        })
+      })
+      .catch(() => {
+        if (active) setPlatformSettings(fallbackPlatformSettings)
+      })
+    return () => { active = false }
+  }, [isOpen])
 
   useEffect(() => {
     const draft = readDraft()
@@ -362,7 +412,7 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
     setDirty(true)
     setForm((current) => {
       const next = { ...current, [field]: value }
-      if (field === 'companyName' && !current.tenantCode) next.tenantCode = suggestCode(value)
+      if (field === 'companyName' && !current.tenantCode) next.tenantCode = applyTenantCodePrefix(suggestCode(value), platformSettings)
       return next
     })
     setErrors((current) => ({ ...current, [field]: '' }))
@@ -371,7 +421,7 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
   function resumeDraft() {
     const draft = readDraft()
     if (draft?.form) {
-      setForm({ ...defaultForm(), ...draft.form })
+      setForm({ ...defaultForm(platformSettings), ...draft.form })
       setStep(draft.step || 0)
       setReviewing(!!draft.reviewing)
       setDirty(true)
@@ -381,7 +431,7 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
 
   function discardDraft() {
     window.localStorage.removeItem(DRAFT_KEY)
-    setForm(defaultForm())
+    setForm(defaultForm(platformSettings))
     setStep(0)
     setReviewing(false)
     setIdempotencyKey(newIdempotencyKey())
@@ -491,6 +541,15 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
 
   function buildPayload() {
     const plan = selectedPlan
+    const provisioning = platformSettings.provisioning || fallbackPlatformSettings.provisioning
+    const planEmployeeLimit = plan?.employeeLimit
+    const planStorageLimit = plan?.storageLimitMb
+    const planTrialDays = plan?.trialDays
+    const effectiveTrialDays = Number.isFinite(Number(planTrialDays)) ? Number(planTrialDays) : 0
+    const subscriptionStartDate = new Date()
+    const subscriptionEndDate = effectiveTrialDays > 0
+      ? new Date(subscriptionStartDate.getTime() + effectiveTrialDays * 86400000).toISOString().slice(0, 10)
+      : undefined
     return {
       companyName: form.companyName.trim(),
       legalBusinessName: form.legalBusinessName.trim(),
@@ -516,9 +575,13 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
       adminProfilePhotoUrl: form.adminProfilePhotoUrl,
       sendLoginInvitation: form.sendLoginInvitation,
       planId: form.planId,
-      employeeLimit: plan?.employeeLimit ?? 50,
+      employeeLimit: planEmployeeLimit ?? 50,
+      storageLimitMb: planStorageLimit ?? 5120,
       features: Object.fromEntries((plan?.features || []).map((feature) => [String(feature).toLowerCase().replace(/\s+/g, '_'), true])),
-      subscriptionStartDate: new Date().toISOString().slice(0, 10),
+      subscriptionStartDate: subscriptionStartDate.toISOString().slice(0, 10),
+      subscriptionEndDate,
+      trialDays: effectiveTrialDays,
+      databasePrefix: provisioning.databasePrefix || 'nexahr_tenant',
       employeeIdPrefix: 'EMP',
       officeStartTime: '09:00',
       officeEndTime: '18:00',
@@ -527,7 +590,6 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
       payFrequency: 'MONTHLY',
       payrollCutoffDay: 25,
       allowedEmailDomains: [],
-      sessionTimeoutMinutes: 60,
     }
   }
 

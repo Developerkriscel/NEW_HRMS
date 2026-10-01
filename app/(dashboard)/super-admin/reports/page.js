@@ -40,8 +40,8 @@ export default function ReportsPage() {
 
   // Load lookup data
   useEffect(() => {
-    tenantApi.getPlans().then(res => setPlans(res.data.data)).catch(console.error)
-    tenantApi.getAll().then(res => setCompanies(res.data.data)).catch(console.error)
+    tenantApi.getPlans().then(res => setPlans(res.data.data || [])).catch(() => setPlans([]))
+    tenantApi.getAll({ size: 1000 }).then(res => setCompanies(res.data.data?.content || [])).catch(() => setCompanies([]))
   }, [])
 
   // Load reports based on filters
@@ -49,26 +49,30 @@ export default function ReportsPage() {
     setOverviewLoading(true)
     reportsApi.getOverview(filters).then(res => {
       setOverview(res.data.data)
-      setOverviewLoading(false)
-    }).catch(console.error)
+    }).catch(() => {
+      setOverview(null)
+    }).finally(() => setOverviewLoading(false))
 
     setTrendLoading(true)
     reportsApi.getRevenueTrend(filters).then(res => {
       setTrend(res.data.data)
-      setTrendLoading(false)
-    }).catch(console.error)
+    }).catch(() => {
+      setTrend([])
+    }).finally(() => setTrendLoading(false))
 
     setByCompanyLoading(true)
     reportsApi.getRevenueByCompany(filters).then(res => {
       setByCompany(res.data.data)
-      setByCompanyLoading(false)
-    }).catch(console.error)
+    }).catch(() => {
+      setByCompany([])
+    }).finally(() => setByCompanyLoading(false))
 
     setByPlanLoading(true)
     reportsApi.getRevenueByPlan(filters).then(res => {
       setByPlan(res.data.data)
-      setByPlanLoading(false)
-    }).catch(console.error)
+    }).catch(() => {
+      setByPlan([])
+    }).finally(() => setByPlanLoading(false))
 
   }, [filters])
 
@@ -78,8 +82,10 @@ export default function ReportsPage() {
     reportsApi.getPayments({ ...filters, page: txPage, limit: 10 }).then(res => {
       setTxData(res.data.data.data)
       setTxTotal(res.data.data.total)
-      setTxLoading(false)
-    }).catch(console.error)
+    }).catch(() => {
+      setTxData([])
+      setTxTotal(0)
+    }).finally(() => setTxLoading(false))
   }, [filters, txPage])
 
   return (

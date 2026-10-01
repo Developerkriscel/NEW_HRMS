@@ -1,41 +1,71 @@
 export const dynamic = 'force-dynamic'
 
 import { withApi } from '@/lib/handler'
-import { ok } from '@/lib/apiResponse'
+import { ok, fail } from '@/lib/apiResponse'
 import { requireAuth, hashPassword } from '@/lib/auth'
 import { requirePlatformPermission } from '@/lib/platformRbac'
 import Tenant from '@/models/Tenant'
 import { getTenantModelForDatabase, buildTenantDatabaseName } from '@/lib/tenantDb'
 import { rememberLoginDirectoryEntry } from '@/lib/loginDirectory'
-import mongoose from 'mongoose'
+
+function primaryAdminFallback(tenant) {
+  if (!tenant.adminEmail) return null
+  const emailName = String(tenant.adminEmail).split('@')[0] || 'Primary'
+  return {
+    _id: `tenant-primary-${tenant._id}`,
+    virtual: true,
+    source: 'TENANT_PRIMARY_ADMIN',
+    firstName: emailName,
+    lastName: 'Admin',
+    name: `${emailName} Admin`,
+    email: tenant.adminEmail,
+    phone: '',
+    mobileNumber: '',
+    role: 'COMPANY_ADMIN',
+    status: tenant.status === 'SUSPENDED' ? 'INACTIVE' : 'ACTIVE',
+    mfaEnabled: false,
+    companyName: tenant.companyName,
+    tenantId: tenant._id,
+    tenantCode: tenant.tenantCode,
+    tenantDatabaseMissingAdmin: true,
+    createdAt: tenant.createdAt,
+    updatedAt: tenant.updatedAt,
+  }
+}
 
 export const GET = withApi(async (req) => {
   const session = await requireAuth()
   requirePlatformPermission(session, 'operator.view')
 
-  if (session.devLogin && process.env.NODE_ENV !== 'production') {
-    // For local dev, maybe mock some admins if tenants exist, or just return an empty array if no real DB
-    // Or just fetch from actual tenants since dev uses local mongo now
-  }
-
-  const tenants = await Tenant.find({ deleted: false }).select('companyName tenantCode databaseName _id').lean()
+  const tenants = await Tenant.find({ deleted: false }).select('companyName tenantCode databaseName adminEmail status createdAt updatedAt _id').lean()
   const adminLists = await Promise.all(
     tenants.map(async (tenant) => {
       try {
         const dbName = tenant.databaseName || buildTenantDatabaseName(tenant.tenantCode, tenant._id)
         const TenantEmployee = getTenantModelForDatabase('Employee', dbName)
-        const admins = await TenantEmployee.find({ role: 'COMPANY_ADMIN' })
+        const query = {
+          deleted: false,
+          $or: [
+            { role: 'COMPANY_ADMIN' },
+            ...(tenant.adminEmail ? [{ email: String(tenant.adminEmail).toLowerCase() }] : []),
+          ],
+        }
+        const admins = await TenantEmployee.find(query)
           .select('-password -__v')
           .lean()
-        return admins.map((admin) => ({
+        const rows = admins.map((admin) => ({
           ...admin,
           companyName: tenant.companyName,
           tenantId: tenant._id,
           tenantCode: tenant.tenantCode
         }))
+        const hasPrimary = tenant.adminEmail && rows.some((admin) => String(admin.email).toLowerCase() === String(tenant.adminEmail).toLowerCase())
+        const fallback = hasPrimary ? null : primaryAdminFallback(tenant)
+        return fallback ? [fallback, ...rows] : rows
       } catch (e) {
         console.error('Error fetching admins for tenant', tenant.tenantCode, e)
-        return []
+        const fallback = primaryAdminFallback(tenant)
+        return fallback ? [fallback] : []
       }
     })
   )
@@ -47,24 +77,24 @@ export const GET = withApi(async (req) => {
 
 export const POST = withApi(async (req) => {
   const session = await requireAuth()
-  requirePlatformPermission(session, 'operator.update')
+  requirePlatformPermission(session, 'operator.create')
 
   const body = await req.json()
   const { tenantId, email, password, firstName, lastName, mobileNumber, designation, profilePhoto, status } = body
 
   if (!tenantId || !email || !password || !firstName || !lastName) {
-    throw new Error('Tenant, Email, password, first name, and last name are required')
+    return fail('Tenant, email, password, first name, and last name are required', 400, 'VALIDATION_ERROR')
   }
 
   const tenant = await Tenant.findById(tenantId)
-  if (!tenant) throw new Error('Tenant not found')
+  if (!tenant) return fail('Tenant not found', 404, 'TENANT_NOT_FOUND')
 
   const dbName = tenant.databaseName || buildTenantDatabaseName(tenant.tenantCode, tenant._id)
   const TenantEmployee = getTenantModelForDatabase('Employee', dbName)
 
   const existing = await TenantEmployee.findOne({ email: email.toLowerCase() })
   if (existing) {
-    throw new Error('An administrator with this email already exists in this company')
+    return fail('An administrator with this email already exists in this company', 400, 'DUPLICATE_ADMIN')
   }
 
   const hashedPassword = await hashPassword(password)

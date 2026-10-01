@@ -7,18 +7,18 @@ import api from './api'
 // still used by Navbar search and the super-admin dashboard/billing/plans
 // pages.
 export const tenantApi = {
-  getAll: (params) => api.get('/super-admin/tenants', { params }),
-  getById: (id) => api.get(`/super-admin/tenants/${id}`),
+  getAll: (params) => api.get('/super-admin/tenants', { params, devMock: false }),
+  getById: (id) => api.get(`/super-admin/tenants/${id}`, { devMock: false }),
   update: (id, data) => api.put(`/super-admin/tenants/${id}`, data),
-  getUsage: (id) => api.get(`/super-admin/tenants/${id}/usage`),
-  getAuditLogs: (id, params) => api.get(`/super-admin/tenants/${id}/audit-logs`, { params }),
+  getUsage: (id) => api.get(`/super-admin/tenants/${id}/usage`, { devMock: false }),
+  getAuditLogs: (id, params) => api.get(`/super-admin/tenants/${id}/audit-logs`, { params, devMock: false }),
   updateFeatures: (id, { features, reason }) => api.put(`/super-admin/tenants/${id}/features`, { features, reason }),
   provisionDatabase: (id) => api.post(`/super-admin/tenants/${id}/database`),
-  getDashboard: (params) => api.get('/super-admin/dashboard', { params }),
-  getRevenue: (params) => api.get('/super-admin/revenue', { params }),
-  getPlans: () => api.get('/super-admin/plans'),
+  getDashboard: (params) => api.get('/super-admin/dashboard', { params, devMock: false }),
+  getRevenue: (params) => api.get('/super-admin/revenue', { params, devMock: false }),
+  getPlans: () => api.get('/super-admin/plans', { devMock: false }),
   createPlan: (data) => api.post('/super-admin/plans', data),
   updatePlan: (id, data) => api.put(`/super-admin/plans/${id}`, data),
   deletePlan: (id) => api.delete(`/super-admin/plans/${id}`),
-  getAuditLogsGlobal: (params) => api.get('/super-admin/audit-logs', { params }),
+  getAuditLogsGlobal: (params) => api.get('/super-admin/audit-logs', { params, devMock: false }),
 }

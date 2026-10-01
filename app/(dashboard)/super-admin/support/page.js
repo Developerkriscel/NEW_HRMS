@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { LifeBuoy, AlertCircle, Clock, CheckCircle2, Search, Filter } from 'lucide-react'
 import { PageLoader } from '@/components/common/LoadingSpinner'
 import { cn } from '@/lib/utils'
+import api from '@/services/api'
 
 export default function SupportDashboardPage() {
   const router = useRouter()
@@ -18,18 +19,16 @@ export default function SupportDashboardPage() {
 
   async function fetchTickets() {
     try {
-      const res = await fetch('/api/super-admin/support/tickets')
-      if (res.ok) {
-        const data = await res.json()
-        setTickets(data.data)
+      const { data } = await api.get('/super-admin/support/tickets')
+      const items = data.data || []
+      setTickets(items)
         
-        // Compute basic stats
-        const open = data.data.filter(t => t.status === 'OPEN').length
-        const unassigned = data.data.filter(t => !t.assignedTo && t.status !== 'CLOSED' && t.status !== 'RESOLVED').length
-        const urgent = data.data.filter(t => t.priority === 'Urgent' && t.status !== 'CLOSED').length
-        const resolved = data.data.filter(t => t.status === 'RESOLVED').length
-        setStats({ open, unassigned, urgent, resolved })
-      }
+      // Compute basic stats
+      const open = items.filter(t => t.status === 'OPEN').length
+      const unassigned = items.filter(t => !t.assignedTo && t.status !== 'CLOSED' && t.status !== 'RESOLVED').length
+      const urgent = items.filter(t => t.priority === 'Urgent' && t.status !== 'CLOSED').length
+      const resolved = items.filter(t => t.status === 'RESOLVED').length
+      setStats({ open, unassigned, urgent, resolved })
     } catch (err) {
       console.error(err)
     } finally {

@@ -7,7 +7,6 @@ import { requirePlatformPermission } from '@/lib/platformRbac'
 import AuditLog from '@/models/AuditLog'
 import Subscription from '@/models/Subscription'
 import Tenant from '@/models/Tenant'
-import { devSuperAdminStore } from '@/lib/devSuperAdminStore'
 
 export const GET = withApi(async (req, { params }) => {
   const session = await requireAuth()
@@ -15,9 +14,6 @@ export const GET = withApi(async (req, { params }) => {
   const { searchParams } = new URL(req.url)
   const page = Number(searchParams.get('page') || 0)
   const size = Number(searchParams.get('size') || 50)
-  if (session.devLogin && process.env.NODE_ENV !== 'production') {
-    return ok(devSuperAdminStore.auditLogs({ page, size, tenantId: params.id }))
-  }
 
   // Actions performed ON this tenant are logged with entityType:'Tenant',
   // entityId:<tenantId> (super-admin actor, so AuditLog.tenantId is null —

@@ -6,7 +6,6 @@ import { requireAuth } from '@/lib/auth'
 import { requirePlatformPermission } from '@/lib/platformRbac'
 import { logSuperAdmin } from '@/lib/audit'
 import Plan from '@/models/Plan'
-import { devSuperAdminStore } from '@/lib/devSuperAdminStore'
 
 const FIELDS = ['name', 'description', 'price', 'billingCycle', 'employeeLimit', 'storageLimitMb', 'apiQuota', 'integrationLimit', 'retentionTier', 'gracePeriodDays', 'features', 'trialDays', 'sortOrder', 'active']
 
@@ -14,11 +13,6 @@ export const PUT = withApi(async (req, { params }) => {
   const session = await requireAuth()
   requirePlatformPermission(session, 'plan.update')
   const body = await req.json()
-  if (session.devLogin && process.env.NODE_ENV !== 'production') {
-    const plan = devSuperAdminStore.updatePlan(params.id, body)
-    if (!plan) return fail('Plan not found', 404)
-    return ok(plan, 'Plan updated')
-  }
 
   const plan = await Plan.findOne({ _id: params.id, deleted: false })
   if (!plan) return fail('Plan not found', 404)
@@ -43,10 +37,6 @@ export const PUT = withApi(async (req, { params }) => {
 export const DELETE = withApi(async (req, { params }) => {
   const session = await requireAuth()
   requirePlatformPermission(session, 'plan.archive')
-  if (session.devLogin && process.env.NODE_ENV !== 'production') {
-    if (!devSuperAdminStore.disablePlan(params.id)) return fail('Plan not found', 404)
-    return ok(null, 'Plan disabled')
-  }
 
   const plan = await Plan.findOne({ _id: params.id, deleted: false })
   if (!plan) return fail('Plan not found', 404)

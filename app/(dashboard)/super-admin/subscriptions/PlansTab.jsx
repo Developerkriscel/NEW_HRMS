@@ -42,6 +42,7 @@ export default function PlansTab() {
       setModules(resModules.data.data || [])
     } catch (err) {
       if (err.response?.status === 403) setForbidden(true)
+      else setError(err.response?.data?.message || 'Unable to load plans')
     } finally {
       setLoading(false)
     }

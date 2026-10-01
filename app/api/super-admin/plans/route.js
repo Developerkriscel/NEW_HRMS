@@ -6,12 +6,10 @@ import { requireAuth } from '@/lib/auth'
 import { requirePlatformPermission } from '@/lib/platformRbac'
 import { logSuperAdmin } from '@/lib/audit'
 import Plan from '@/models/Plan'
-import { devSuperAdminStore } from '@/lib/devSuperAdminStore'
 
 export const GET = withApi(async () => {
   const session = await requireAuth()
   requirePlatformPermission(session, 'plan.view')
-  if (session.devLogin && process.env.NODE_ENV !== 'production') return ok(devSuperAdminStore.listPlans())
 
   const plans = await Plan.find({ deleted: false }).sort({ sortOrder: 1 }).lean()
   return ok(plans)
@@ -21,11 +19,6 @@ export const POST = withApi(async (req) => {
   const session = await requireAuth()
   requirePlatformPermission(session, 'plan.create')
   const body = await req.json()
-  if (session.devLogin && process.env.NODE_ENV !== 'production') {
-    const plan = devSuperAdminStore.createPlan(body)
-    if (plan.error) return fail(plan.error, 400, 'DUPLICATE')
-    return ok(plan, 'Plan created', 201)
-  }
 
   const existing = await Plan.findOne({ name: body.name, deleted: false })
   if (existing) return fail('A plan with this name already exists', 400, 'DUPLICATE')
