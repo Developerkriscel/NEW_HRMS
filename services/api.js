@@ -241,6 +241,23 @@ function mockPayloadForPath(path, params = {}) {
   if (path === '/company/modules') return companyModulesData()
   if (path === '/company/mail-settings') return { enabled: false, host: '', port: '', username: '', fromEmail: '' }
   if (path === '/company/audit-logs') return pageData([], params)
+  if (path === '/notifications') {
+    return {
+      notifications: [
+        {
+          id: 'dev_mock_1',
+          title: 'System Notification',
+          message: 'All services running normally.',
+          type: 'info',
+          category: 'system',
+          link: null,
+          read: false,
+          time: new Date().toISOString(),
+        },
+      ],
+      unreadCount: 1,
+    }
+  }
 
   if (path === '/attendance/today') return null
   if (path === '/attendance' && params?.summaryOnly) return { summary: { present: 0, absent: 0, late: 0, total: 0 } }

@@ -117,6 +117,14 @@ export async function middleware(req) {
     return NextResponse.next()
   }
 
+  if (pathname === '/notifications' || pathname.startsWith('/notifications/')) {
+    const session = await getSession()
+    if (!session) {
+      return NextResponse.redirect(new URL('/login', req.url))
+    }
+    return NextResponse.next()
+  }
+
   const guard = ROLE_GUARDS.find((g) => pathname.startsWith(g.prefix))
   if (guard) {
     const session = await getSession()
@@ -142,6 +150,8 @@ export const config = {
     '/',
     '/login',
     '/forgot-password',
+    '/notifications',
+    '/notifications/:path*',
     '/super-admin/:path*',
     '/company/:path*',
     '/hr/:path*',

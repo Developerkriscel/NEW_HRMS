@@ -1,19 +1,14 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Bell, Moon, Sun, Menu, Search, LogOut, Settings, User, ChevronDown, HelpCircle } from 'lucide-react'
+import { Bell, Moon, Sun, Menu, Search, LogOut, Settings, User, ChevronDown, HelpCircle, CheckCheck, ExternalLink } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
 import { Avatar } from '@/components/common/Avatar'
 import { ROLE_PANEL_LABELS } from '@/lib/roleDashboards'
 import { MODULE_ACCESS, filterByModuleAccess } from '@/lib/moduleAccess'
-
-const MOCK_NOTIFICATIONS = [
-  { id: 1, title: 'Leave approved', message: 'Your leave for Dec 25 has been approved', time: new Date(Date.now() - 3600000), read: false, type: 'success' },
-  { id: 2, title: 'Payslip generated', message: 'Your November payslip is ready', time: new Date(Date.now() - 86400000), read: false, type: 'info' },
-  { id: 3, title: 'Document reminder', message: 'PAN card upload pending', time: new Date(Date.now() - 172800000), read: true, type: 'warning' },
-]
+import { notificationApi } from '@/services/notificationApi'
 
 const PROFILE_PATH_BY_ROLE = {
   SUPER_ADMIN: '/super-admin/settings',
@@ -124,11 +119,75 @@ export function Navbar({ onMobileMenuToggle }) {
   const [showSearch, setShowSearch] = useState(false)
   const [remoteResults, setRemoteResults] = useState([])
   const [searchLoading, setSearchLoading] = useState(false)
+  const [panelNotifications, setPanelNotifications] = useState([])
+  const [notificationsLoading, setNotificationsLoading] = useState(false)
   const searchRef = useRef(null)
   const searchBoxRef = useRef(null)
+  const notificationsBoxRef = useRef(null)
 
-  const allNotifications = [...MOCK_NOTIFICATIONS, ...notifications]
-  const unreadCount = allNotifications.filter((n) => !n.read).length
+  const fetchNotifications = useCallback(async () => {
+    if (!user) return
+    try {
+      setNotificationsLoading(true)
+      const res = await notificationApi.list()
+      const data = res?.data?.data
+      if (data?.notifications && Array.isArray(data.notifications)) {
+        setPanelNotifications(data.notifications)
+      }
+    } catch (err) {
+      console.warn('Failed to load notifications', err?.message)
+    } finally {
+      setNotificationsLoading(false)
+    }
+  }, [user])
+
+  useEffect(() => {
+    fetchNotifications()
+    const interval = setInterval(fetchNotifications, 45000)
+    return () => clearInterval(interval)
+  }, [fetchNotifications])
+
+  const allNotifications = useMemo(() => {
+    const list = [...panelNotifications]
+    const fetchedIds = new Set(list.map((n) => String(n.id)))
+    for (const clientN of notifications || []) {
+      if (!fetchedIds.has(String(clientN.id))) {
+        list.unshift(clientN)
+      }
+    }
+    return list
+  }, [panelNotifications, notifications])
+
+  const unreadCount = useMemo(() => {
+    return allNotifications.filter((n) => !n.read).length
+  }, [allNotifications])
+
+  const handleNotificationClick = async (n) => {
+    setPanelNotifications((prev) =>
+      prev.map((item) => (item.id === n.id ? { ...item, read: true } : item))
+    )
+    useUIStore.getState().markNotificationRead(n.id)
+    try {
+      await notificationApi.markRead(n.id)
+    } catch {
+      // non-fatal
+    }
+    setShowNotifications(false)
+    if (n.link) {
+      router.push(n.link)
+    }
+  }
+
+  const handleMarkAllRead = async () => {
+    const syntheticIds = allNotifications.map((n) => n.id)
+    setPanelNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+    useUIStore.getState().markAllRead()
+    try {
+      await notificationApi.markAllRead(syntheticIds)
+    } catch {
+      // non-fatal
+    }
+  }
   const profilePath = PROFILE_PATH_BY_ROLE[user?.role] || (user ? `/${user.role?.toLowerCase().replace('_', '-')}/dashboard` : '/login')
   const panelLabel = ROLE_PANEL_LABELS[user?.role] || 'Dashboard'
   const navResults = filterByModuleAccess(SEARCH_NAV_BY_ROLE[user?.role] || SEARCH_NAV_BY_ROLE.EMPLOYEE, user)
@@ -156,6 +215,9 @@ export function Navbar({ onMobileMenuToggle }) {
     function handleClickOutside(event) {
       if (searchBoxRef.current && !searchBoxRef.current.contains(event.target)) {
         setShowSearch(false)
+      }
+      if (notificationsBoxRef.current && !notificationsBoxRef.current.contains(event.target)) {
+        setShowNotifications(false)
       }
     }
 
@@ -279,42 +341,109 @@ export function Navbar({ onMobileMenuToggle }) {
             </div>
 
             {/* Notification */}
-            <div className="relative">
+            <div className="relative" ref={notificationsBoxRef}>
               <button
                 onClick={() => { setShowNotifications(!showNotifications); setShowProfile(false); setShowSearch(false) }}
                 className="relative flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-slate-800 shadow-[4px_4px_10px_rgba(0,0,0,0.05),-4px_-4px_10px_rgba(255,255,255,0.8)] dark:shadow-[4px_4px_10px_rgba(0,0,0,0.3),-4px_-4px_10px_rgba(255,255,255,0.02)] transition-all hover:-translate-y-0.5 text-slate-700 dark:text-slate-300"
+                aria-label="Open notifications"
               >
                 <Bell className="w-4 h-4" strokeWidth={2.5} />
                 {unreadCount > 0 && (
-                  <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-800"></span>
+                  <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-800 animate-pulse"></span>
                 )}
               </button>
 
               {showNotifications && (
-                <div className="absolute right-0 mt-3 w-80 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 overflow-hidden z-50 animate-fade-in">
+                <div className="absolute right-0 mt-3 w-80 sm:w-96 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 overflow-hidden z-50 animate-fade-in">
                   <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
-                    <span className="font-semibold text-slate-800 dark:text-slate-100">Notifications</span>
-                    <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full font-medium">
-                      {unreadCount} new
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-800 dark:text-slate-100 text-sm">Notifications</span>
+                      {unreadCount > 0 ? (
+                        <span className="text-[11px] bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full font-medium">
+                          {unreadCount} new
+                        </span>
+                      ) : (
+                        <span className="text-[11px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full font-medium">
+                          All caught up
+                        </span>
+                      )}
+                    </div>
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={handleMarkAllRead}
+                        className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 font-medium flex items-center gap-1 transition-colors"
+                        title="Mark all as read"
+                      >
+                        <CheckCheck className="w-3.5 h-3.5" />
+                        Mark all read
+                      </button>
+                    )}
                   </div>
                   <div className="max-h-80 overflow-y-auto divide-y divide-slate-50 dark:divide-slate-800">
-                    {allNotifications.map((n) => (
-                      <div key={n.id} className={`p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors ${!n.read ? 'bg-blue-50/30 dark:bg-blue-900/10' : ''}`}>
-                        <div className="flex gap-3">
-                          <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${!n.read ? 'bg-blue-500' : 'bg-transparent'}`} />
-                          <div>
-                            <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{n.title}</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{n.message}</p>
-                            <p className="text-xs text-slate-400 mt-1">{formatRelativeTime(n.time)}</p>
-                          </div>
-                        </div>
+                    {allNotifications.length === 0 ? (
+                      <div className="py-8 text-center text-sm text-slate-400">
+                        No notifications right now
                       </div>
-                    ))}
+                    ) : (
+                      allNotifications.slice(0, 15).map((n) => {
+                        const typeDotColor =
+                          n.type === 'error' || n.category === 'security'
+                            ? 'bg-rose-500'
+                            : n.type === 'warning' || n.category === 'leave'
+                            ? 'bg-amber-500'
+                            : n.type === 'success' || n.category === 'payroll'
+                            ? 'bg-emerald-500'
+                            : 'bg-blue-500'
+
+                        return (
+                          <div
+                            key={n.id}
+                            onClick={() => handleNotificationClick(n)}
+                            className={`p-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer transition-colors ${
+                              !n.read ? 'bg-blue-50/25 dark:bg-blue-900/10' : ''
+                            }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div
+                                className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
+                                  !n.read ? typeDotColor : 'bg-slate-200 dark:bg-slate-700'
+                                }`}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p
+                                    className={`text-sm truncate ${
+                                      !n.read
+                                        ? 'font-semibold text-slate-900 dark:text-slate-100'
+                                        : 'font-medium text-slate-700 dark:text-slate-300'
+                                    }`}
+                                  >
+                                    {n.title}
+                                  </p>
+                                  <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                                    {formatRelativeTime(n.time)}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">
+                                  {n.message}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })
+                    )}
                   </div>
-                  <div className="p-3 border-t border-slate-100 dark:border-slate-800">
-                    <button className="w-full text-xs text-blue-600 dark:text-blue-400 font-medium hover:underline">
+                  <div className="p-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+                    <button
+                      onClick={() => {
+                        setShowNotifications(false)
+                        router.push('/notifications')
+                      }}
+                      className="w-full text-xs text-blue-600 dark:text-blue-400 font-medium hover:underline flex items-center justify-center gap-1.5"
+                    >
                       View all notifications
+                      <ExternalLink className="w-3 h-3" />
                     </button>
                   </div>
                 </div>
