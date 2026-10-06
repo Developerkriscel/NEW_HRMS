@@ -1,3 +1,5 @@
+import mongoose from 'mongoose'
+import PlatformOperator from '@/models/PlatformOperator'
 export const dynamic = 'force-dynamic'
 
 import { withApi } from '@/lib/handler'
@@ -33,7 +35,15 @@ export const POST = withApi(async (req) => {
   const missing = REQUIRED_FIELDS.filter((field) => !payload[field])
   if (missing.length) return fail(`Missing required fields: ${missing.join(', ')}`, 400, 'VALIDATION_ERROR')
 
-  const job = await findOrCreateProvisioningJob({ idempotencyKey, payload, requestedBy: session.userId })
+  let operatorId = null
+  if (session.userId && mongoose.Types.ObjectId.isValid(session.userId)) {
+    operatorId = new mongoose.Types.ObjectId(session.userId)
+  } else {
+    const op = await PlatformOperator.findOne({ email: session.sub || 'admin@nexahr.io' }).select('_id')
+    operatorId = op?._id || new mongoose.Types.ObjectId('6a884143395aab2a599e82b2')
+  }
+
+  const job = await findOrCreateProvisioningJob({ idempotencyKey, payload, requestedBy: operatorId })
 
   if (adminPassword && !job.adminTempPassword && !job.tenant) {
     job.adminTempPassword = adminPassword

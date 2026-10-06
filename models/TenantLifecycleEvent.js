@@ -14,7 +14,7 @@ const TenantLifecycleEventSchema = new mongoose.Schema(
     toStatus: { type: String, required: true },
     reason: { type: String, required: true },
     purgeScheduledFor: { type: Date, default: null },
-    performedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'PlatformOperator', required: true },
+    performedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'PlatformOperator', default: null },
     performedByEmail: { type: String, required: true },
   },
   { timestamps: { createdAt: true, updatedAt: false } }

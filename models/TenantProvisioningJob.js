@@ -23,7 +23,7 @@ const TenantProvisioningJobSchema = new mongoose.Schema(
     attempts: { type: Number, default: 0 },
     startedAt: { type: Date, default: null },
     completedAt: { type: Date, default: null },
-    requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'PlatformOperator', required: true },
+    requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'PlatformOperator', default: null },
     ...baseFields,
   },
   { timestamps: true }
