@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Play, CheckCircle2, Banknote, TrendingUp, Calendar, Users, FileText, Search, Filter, FileDown, Eye, Settings2, X, Save, AlertTriangle } from 'lucide-react'
 import { DataTable } from '@/components/tables/DataTable'
 import { Badge } from '@/components/common/Badge'
@@ -316,10 +316,12 @@ export default function HRPayrollPage() {
     if (activeTab === 'company' && companyView === 'setup') loadSalarySetup()
   }, [activeTab, companyView, loadSalarySetup])
 
-  const handleSearchChange = debounce((val) => {
+  const handleSearchChange = useMemo(() => debounce((val) => {
     setSearch(val)
     setPage(0)
-  }, 500)
+  }, 500), [])
+
+  useEffect(() => () => handleSearchChange.cancel(), [handleSearchChange])
 
   const handleStatusChange = async (id, newStatus) => {
     try {

@@ -43,6 +43,30 @@ function employeeActiveDuringPeriodQuery(periodStart, periodEnd) {
   }
 }
 
+function salaryStructureEffectiveDuringPeriodQuery(periodStart, periodEnd) {
+  return {
+    approvalStatus: 'APPROVED',
+    deleted: false,
+    ctc: { $gt: 0 },
+    $and: [
+      {
+        $or: [
+          { effectiveFrom: { $lte: periodEnd } },
+          { effectiveFrom: null },
+          { effectiveFrom: { $exists: false } },
+        ],
+      },
+      {
+        $or: [
+          { effectiveTo: null },
+          { effectiveTo: { $gte: periodStart } },
+          { effectiveTo: { $exists: false } },
+        ],
+      },
+    ],
+  }
+}
+
 export const GET = withApi(async (req) => {
   const session = await requireAuth()
   await requireRole(session, ['HR_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN'])
@@ -71,10 +95,7 @@ export const GET = withApi(async (req) => {
   const structures = await SalaryStructure.find({
     employee: { $in: employeeIds },
     tenantId,
-    isActive: true,
-    ctc: { $gt: 0 },
-    approvalStatus: 'APPROVED',
-    deleted: false,
+    ...salaryStructureEffectiveDuringPeriodQuery(periodStart, periodEnd),
   })
   const structuredEmpIds = new Set(structures.map(s => s.employee.toString()))
   

@@ -5,5 +5,5 @@ import api from './api'
 // from Application (see services/candidateApi.js). getDashboard is
 // unrelated (Recruitment Dashboard, Step 1) and stays.
 export const recruitmentApi = {
-  getDashboard: () => api.get('/recruitment/dashboard'),
+  getDashboard: () => api.get('/recruitment/dashboard', { devMock: false, skipCache: true }),
 }

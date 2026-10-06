@@ -15,14 +15,18 @@ export const GET = withApi(async (req, { params }) => {
   const month = Number(searchParams.get('month'))
   const year = Number(searchParams.get('year'))
 
-  if (session.role === 'EMPLOYEE' && String(params.employeeId) !== session.userId) {
+  const selfServiceRole = ['EMPLOYEE', 'MANAGER'].includes(session.role)
+  if (selfServiceRole && String(params.employeeId) !== String(session.userId)) {
     return fail('You can only view your own payslip', 403)
+  }
+  if (!selfServiceRole && !['HR_MANAGER', 'FINANCE', 'COMPANY_ADMIN', 'SUPER_ADMIN'].includes(session.role)) {
+    return fail('You do not have permission to view payslips', 403)
   }
 
   const payslip = await Payslip.findOne({ employee: params.employeeId, month, year, tenantId, deleted: false })
     .populate('employee', 'firstName lastName employeeCode')
   if (!payslip) return fail('Payslip not found', 404)
-  if (session.role === 'EMPLOYEE' && !['FINALIZED', 'PAID'].includes(payslip.status)) {
+  if (selfServiceRole && !['FINALIZED', 'PAID'].includes(payslip.status)) {
     return fail('Payslip is not available yet', 403)
   }
 

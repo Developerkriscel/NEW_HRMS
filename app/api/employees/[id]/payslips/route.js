@@ -8,11 +8,15 @@ import Payslip from '@/models/Payslip'
 export const GET = withApi(async (_req, { params }) => {
   const session = await requireAuth()
   const tenantId = requireTenantId(session)
-  if (session.role === 'EMPLOYEE' && String(params.id) !== session.userId) {
+  const selfServiceRole = ['EMPLOYEE', 'MANAGER'].includes(session.role)
+  if (selfServiceRole && String(params.id) !== String(session.userId)) {
     return fail('You can only view your own payslips', 403)
   }
+  if (!selfServiceRole && !['HR_MANAGER', 'FINANCE', 'COMPANY_ADMIN', 'SUPER_ADMIN'].includes(session.role)) {
+    return fail('You do not have permission to view payslips', 403)
+  }
   const query = { employee: params.id, tenantId, deleted: false }
-  if (session.role === 'EMPLOYEE') {
+  if (selfServiceRole) {
     query.status = { $in: ['FINALIZED', 'PAID'] }
   }
   const payslips = await Payslip.find(query).sort({ year: -1, month: -1 })

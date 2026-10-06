@@ -608,6 +608,9 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
       const tenant = job?.tenant
       window.localStorage.removeItem(DRAFT_KEY)
       setSuccess({
+        jobId: job?._id,
+        status: job?.status || 'PENDING',
+        error: job?.error || '',
         tenantId: tenant?._id || tenant || job?.tenant,
         organizationName: form.companyName,
         adminName: `${form.adminFirstName} ${form.adminLastName}`.trim(),
@@ -628,6 +631,43 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
     }
   }
 
+  useEffect(() => {
+    if (!success?.jobId || ['COMPLETED', 'FAILED', 'PARTIALLY_COMPLETED'].includes(success.status)) return
+
+    let active = true
+    let pollTimer = null
+
+    const pollProvisioningJob = async () => {
+      try {
+        const { data } = await platformApi.getProvisioningJob(success.jobId)
+        if (!active) return
+        const job = data.data?.job
+        if (!job) return
+        const tenant = job.tenant
+        setSuccess((current) => {
+          if (!current) return current
+          return {
+            ...current,
+            status: job.status || current.status,
+            error: job.error || '',
+            tenantId: tenant?._id || tenant || job.tenant || current.tenantId,
+          }
+        })
+      } catch (err) {
+        if (!active) return
+        setSuccess((current) => current ? { ...current, error: err.response?.data?.message || 'Unable to refresh provisioning status' } : current)
+      }
+    }
+
+    pollProvisioningJob()
+    pollTimer = window.setInterval(pollProvisioningJob, 1500)
+
+    return () => {
+      active = false
+      if (pollTimer) window.clearInterval(pollTimer)
+    }
+  }, [success?.jobId, success?.status])
+
   function copyPassword(value) {
     navigator.clipboard?.writeText(value)
     setCopiedPassword(true)
@@ -635,20 +675,51 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
   }
 
   if (success) {
+    const provisioningDone = success.status === 'COMPLETED'
+    const provisioningFailed = ['FAILED', 'PARTIALLY_COMPLETED'].includes(success.status)
+    const statusTone = provisioningFailed ? 'rose' : provisioningDone ? 'emerald' : 'blue'
+    const title = provisioningFailed
+      ? 'Organization Provisioning Needs Attention'
+      : provisioningDone
+        ? 'Organization Created Successfully'
+        : 'Organization Provisioning Started'
+    const description = provisioningFailed
+      ? (success.error || 'Provisioning did not complete. Review the provisioning job before handing over access.')
+      : provisioningDone
+        ? `${success.organizationName} has been provisioned and linked to its primary administrator.`
+        : `${success.organizationName} is being provisioned. You can keep this screen open; this usually finishes in a few seconds.`
+
     return (
       <Portal>
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 sm:p-6 overflow-y-auto">
       <div className="bg-slate-50 dark:bg-slate-950 w-full max-w-3xl min-h-[50vh] rounded-[32px] p-6 sm:p-10 relative shadow-2xl animate-fade-in my-auto">
-        <div className="mx-auto max-w-3xl rounded-3xl border border-emerald-200 bg-white p-8 text-center shadow-sm dark:border-emerald-900/60 dark:bg-slate-900">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300">
-            <CheckCircle2 className="h-8 w-8" />
+        <div className={cn(
+          'mx-auto max-w-3xl rounded-3xl border bg-white p-8 text-center shadow-sm dark:bg-slate-900',
+          statusTone === 'emerald' && 'border-emerald-200 dark:border-emerald-900/60',
+          statusTone === 'blue' && 'border-blue-200 dark:border-blue-900/60',
+          statusTone === 'rose' && 'border-rose-200 dark:border-rose-900/60'
+        )}>
+          <div className={cn(
+            'mx-auto flex h-16 w-16 items-center justify-center rounded-3xl',
+            statusTone === 'emerald' && 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300',
+            statusTone === 'blue' && 'bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300',
+            statusTone === 'rose' && 'bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-300'
+          )}>
+            {provisioningDone ? (
+              <CheckCircle2 className="h-8 w-8" />
+            ) : provisioningFailed ? (
+              <RefreshCw className="h-8 w-8" />
+            ) : (
+              <Loader2 className="h-8 w-8 animate-spin" />
+            )}
           </div>
-          <h1 className="mt-5 text-2xl font-bold text-slate-900 dark:text-white">Organization Created Successfully</h1>
+          <h1 className="mt-5 text-2xl font-bold text-slate-900 dark:text-white">{title}</h1>
           <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
-            {success.organizationName} has been provisioned and linked to its primary administrator.
+            {description}
           </p>
           <div className="mt-7 grid gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 text-left dark:border-slate-800 dark:bg-slate-950/40">
-            <SummaryRow label="Organization ID" value={success.tenantId} />
+            <SummaryRow label="Provisioning Status" value={success.status || 'PENDING'} />
+            <SummaryRow label="Organization ID" value={success.tenantId || 'Creating...'} />
             <SummaryRow label="Primary Admin" value={`${success.adminName} (${success.adminEmail})`} />
             <SummaryRow label="Login Email" value={success.adminEmail} />
             {success.tempPassword ? (
@@ -663,19 +734,22 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
                   </button>
                 </div>
                 <p className="mt-2 text-xs font-semibold text-amber-800 dark:text-amber-200">Share this securely. It is shown only on this screen.</p>
+                {!provisioningDone ? (
+                  <p className="mt-1 text-xs font-semibold text-amber-800 dark:text-amber-200">This password will work after provisioning completes.</p>
+                ) : null}
               </div>
             ) : null}
             <SummaryRow label="Subscription" value={`${success.planName} - ${formatCurrency(success.price, form.currency)} / ${String(success.billingCycle || 'MONTHLY').toLowerCase()}`} />
             <SummaryRow label="Invitation" value={success.invitation} />
           </div>
           <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
-            <button type="button" className="btn-primary justify-center" onClick={() => {
-              onClose();
+            <button type="button" className="btn-primary justify-center disabled:cursor-not-allowed disabled:opacity-50" disabled={!success.tenantId} onClick={() => {
+              onClose(true);
               router.push(`/super-admin/tenants/${success.tenantId}`);
             }}>
               View Organization
             </button>
-            <button type="button" className="btn-secondary justify-center" onClick={onClose}>
+            <button type="button" className="btn-secondary justify-center" onClick={() => onClose(true)}>
               Close
             </button>
           </div>

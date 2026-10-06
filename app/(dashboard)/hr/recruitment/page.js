@@ -244,6 +244,7 @@ export default function RecruitmentDashboardPage() {
   const [aiAnalysisEnabled, setAiAnalysisEnabled] = useState(true)
   const fileInputRef = useRef(null)
   const resumeInputRef = useRef(null)
+  const candidatesLoadedRef = useRef(false)
   
   // Workflow States
   const [candidatePhase, setCandidatePhase] = useState('idle') // idle, upload, processing, uploaded, analyzing, results
@@ -271,7 +272,7 @@ export default function RecruitmentDashboardPage() {
   const fetchPositions = async () => {
     setPositionsLoading(true)
     try {
-      const res = await jobApi.list({ size: 50 })
+      const res = await jobApi.list({ size: 50 }, { devMock: false, skipCache: true })
       const jobs = res.data?.data?.content || res.data?.data || []
       const mappedJobs = jobs.map(job => ({
         id: job._id || job.id,
@@ -309,10 +310,15 @@ export default function RecruitmentDashboardPage() {
     }
   }
 
+  const ensureCandidatesLoaded = async ({ force = false } = {}) => {
+    if (candidatesLoadedRef.current && !force) return
+    candidatesLoadedRef.current = true
+    await fetchCandidates({ force })
+  }
+
   useEffect(() => {
-    fetchCandidates()
     fetchPositions()
-  }, [fetchCandidates])
+  }, [])
 
   const formatInterviewSchedule = (cand) => {
     if (!cand?.interviewAt) return null
@@ -763,7 +769,7 @@ export default function RecruitmentDashboardPage() {
       const newStatuses = {}
       candidatesToImport.forEach(c => { newStatuses[c.email || c.id] = 'Pipeline' })
       setLocalCandidateStatuses((prev) => ({ ...prev, ...newStatuses }))
-      fetchCandidates()
+      ensureCandidatesLoaded({ force: true })
     } catch (err) {
       setAnalysisError(err.response?.data?.message || err.message || 'Failed to add candidates to pipeline.')
     } finally {
@@ -800,7 +806,7 @@ export default function RecruitmentDashboardPage() {
       const newStatuses = {}
       candidatesToShortlist.forEach(c => { newStatuses[c.email || c.id] = 'Shortlisted' })
       setLocalCandidateStatuses((prev) => ({ ...prev, ...newStatuses }))
-      fetchCandidates()
+      ensureCandidatesLoaded({ force: true })
     } catch (err) {
       setAnalysisError(err.response?.data?.message || err.message || 'Failed to shortlist candidates.')
     } finally {
@@ -1154,6 +1160,7 @@ export default function RecruitmentDashboardPage() {
                           setSelectedPositionForCandidates(pos);
                         }
                         setActiveTab('candidates');
+                        ensureCandidatesLoaded();
                       }}
                       className="hover:bg-indigo-50/30 dark:hover:bg-indigo-500/5 transition-colors group cursor-pointer"
                     >
@@ -2166,7 +2173,7 @@ export default function RecruitmentDashboardPage() {
               });
               if (res.data?.success) {
                 setShowManualCandidateModal(false);
-                fetchCandidates();
+                ensureCandidatesLoaded({ force: true });
               } else {
                 throw new Error(res.data?.message || 'Failed to add candidate');
               }

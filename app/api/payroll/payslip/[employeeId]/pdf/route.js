@@ -14,10 +14,14 @@ export const GET = withApi(async (req, { params }) => {
   const payslip = await Payslip.findOne({ _id: params.employeeId, tenantId, deleted: false }).populate('employee', 'firstName lastName employeeCode')
   if (!payslip) return fail('Payslip not found', 404)
 
-  if (session.role === 'EMPLOYEE' && String(payslip.employee._id) !== session.userId) {
+  const selfServiceRole = ['EMPLOYEE', 'MANAGER'].includes(session.role)
+  if (selfServiceRole && String(payslip.employee._id) !== String(session.userId)) {
     return fail('You can only download your own payslip', 403)
   }
-  if (session.role === 'EMPLOYEE' && !['FINALIZED', 'PAID'].includes(payslip.status)) {
+  if (!selfServiceRole && !['HR_MANAGER', 'FINANCE', 'COMPANY_ADMIN', 'SUPER_ADMIN'].includes(session.role)) {
+    return fail('You do not have permission to download payslips', 403)
+  }
+  if (selfServiceRole && !['FINALIZED', 'PAID'].includes(payslip.status)) {
     return fail('Payslip is not available yet', 403)
   }
 

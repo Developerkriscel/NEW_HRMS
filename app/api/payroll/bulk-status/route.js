@@ -20,10 +20,12 @@ export const PATCH = withApi(async (req) => {
   const tenantId = requireTenantId(session)
   
   const body = await req.json().catch(() => ({}))
-  const { month, year, status } = body
+  const month = Number(body.month)
+  const year = Number(body.year)
+  const { status } = body
   
-  if (!month || !year || !status) {
-    return fail('Month, year, and target status are required', 400)
+  if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year) || year < 2000 || !status) {
+    return fail('Valid month, year, and target status are required', 400)
   }
 
   if (!STATUS_TRANSITIONS[status]) {

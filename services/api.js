@@ -14,6 +14,9 @@ const GET_CACHE_TTL_MS = Number(process.env.NEXT_PUBLIC_API_CACHE_TTL_MS || 3000
 const JSON_GET_TIMEOUT_MS = Number(process.env.NEXT_PUBLIC_API_GET_TIMEOUT_MS || 12000)
 const getCache = new Map()
 const DEV_LOGIN_STORAGE_KEY = 'nexahr_dev_login'
+const DEV_MOCK_BLOCKED_GET_PATHS = new Set([
+  '/recruitment/dashboard',
+])
 
 function isDevLoginMockEnabled() {
   if (process.env.NODE_ENV === 'production' || typeof window === 'undefined') return false
@@ -288,6 +291,7 @@ function mockPayloadForPath(path, params = {}) {
   if (path === '/super-admin/dashboard') return superAdminDashboardData()
   if (path === '/super-admin/admins') return []
   if (path === '/super-admin/support/tickets') return []
+  if (path === '/notifications') return { notifications: [], unreadCount: 0 }
   if (path === '/super-admin/settings') return platformSettingsData()
   if (path === '/super-admin/settings/ai') return { provider: 'GEMINI', model: 'gemini-2.5-flash', apiKeyPreview: null, isConfigured: false }
   if (path === '/super-admin/reports/overview') return reportOverviewData()
@@ -347,6 +351,7 @@ function shouldMockDevGet(config) {
   if (!isDevLoginMockEnabled()) return false
 
   const path = normalizePath(config.url)
+  if (DEV_MOCK_BLOCKED_GET_PATHS.has(path)) return false
   if (path.startsWith('/auth/') || path.startsWith('/public/') || path.startsWith('/candidate/')) return false
   return true
 }
@@ -433,6 +438,9 @@ function clearGetCacheForUrl(url) {
   }
   if (!removed && group === '/') clearGetCache()
 }
+
+api.clearGetCache = clearGetCache
+api.clearGetCacheForUrl = clearGetCacheForUrl
 
 for (const method of ['post', 'put', 'patch', 'delete']) {
   const rawMethod = api[method].bind(api)

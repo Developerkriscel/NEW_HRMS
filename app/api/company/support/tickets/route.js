@@ -1,13 +1,15 @@
 export const dynamic = 'force-dynamic'
 
 import { withApi } from '@/lib/handler'
-import { ok } from '@/lib/apiResponse'
+import { ok, fail } from '@/lib/apiResponse'
 import { requireAuth } from '@/lib/auth'
 import SupportTicket from '@/models/SupportTicket'
+import SupportTicketMessage from '@/models/SupportTicketMessage'
+import mongoose from 'mongoose'
 
 export const GET = withApi(async (req) => {
   const session = await requireAuth()
-  if (!session.tenantId) throw new Error('Tenant not found')
+  if (!session.tenantId) return fail('Tenant not found for this account', 400, 'TENANT_NOT_FOUND')
 
   const { searchParams } = new URL(req.url)
   const status = searchParams.get('status')
@@ -25,7 +27,7 @@ export const GET = withApi(async (req) => {
 
 export const POST = withApi(async (req) => {
   const session = await requireAuth()
-  if (!session.tenantId) throw new Error('Tenant not found')
+  if (!session.tenantId) return fail('Tenant not found for this account', 400, 'TENANT_NOT_FOUND')
   // We can also verify if session.userId has company admin role if needed
 
   const body = await req.json()
@@ -33,12 +35,10 @@ export const POST = withApi(async (req) => {
 
   // Basic validation
   if (!subject || !description || !category || !priority) {
-    throw new Error('Subject, description, category, and priority are required')
+    return fail('Subject, description, category, and priority are required', 400, 'VALIDATION_ERROR')
   }
 
-  // Generate ticket number
-  const ticketCount = await SupportTicket.countDocuments()
-  const ticketNumber = `SUP-${(ticketCount + 1).toString().padStart(6, '0')}`
+  const ticketNumber = `SUP-${new mongoose.Types.ObjectId().toString().slice(-8).toUpperCase()}`
 
   const ticket = await SupportTicket.create({
     ticketNumber,
@@ -53,5 +53,14 @@ export const POST = withApi(async (req) => {
     status: 'OPEN'
   })
 
-  return ok(ticket)
+  await SupportTicketMessage.create({
+    ticket: ticket._id,
+    senderId: session.userId,
+    senderRole: 'COMPANY_ADMIN',
+    message: description,
+    attachments: attachments || [],
+    isInternal: false,
+  })
+
+  return ok(ticket, 'Support ticket created', 201)
 })

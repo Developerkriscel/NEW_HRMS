@@ -11,15 +11,44 @@ import { findOrCreateProvisioningJob, runProvisioningJob } from '@/lib/platformT
 import TenantProvisioningJob from '@/models/TenantProvisioningJob'
 
 const REQUIRED_FIELDS = ['companyName', 'tenantCode', 'email', 'adminName', 'adminEmail']
+const runningProvisioningJobs = global._nexahrRunningProvisioningJobs || new Set()
+global._nexahrRunningProvisioningJobs = runningProvisioningJobs
 
-// Starts (or safely resumes) a provisioning job. The client generates
-// `idempotencyKey` once when the wizard is opened and persists it in the
-// draft — resubmitting after a timeout, a page reload, or an explicit retry
-// all reuse the same key, so this never creates a second Tenant for the
-// same submission. Runs the step sequence synchronously and returns the
-// outcome; there is no background queue in this deployment (see the Phase 0
-// architecture assessment), so a slow step means a slow request rather than
-// a silently-stuck job — the client should show progress accordingly.
+function generateTempPassword() {
+  return `Nexahr@${1000 + Math.floor(Math.random() * 9000)}`
+}
+
+function serializeJob(job) {
+  const obj = job?.toObject ? job.toObject() : job
+  if (!obj) return null
+  return { ...obj, adminTempPassword: undefined }
+}
+
+function startProvisioningInBackground(jobId, session, payload) {
+  const key = String(jobId)
+  if (runningProvisioningJobs.has(key)) return
+  runningProvisioningJobs.add(key)
+
+  setTimeout(async () => {
+    try {
+      const finished = await runProvisioningJob(jobId)
+      await logSuperAdmin(session, {
+        action: `TENANT_PROVISIONING_${finished.status}`,
+        entityType: 'TenantProvisioningJob',
+        entityId: finished._id,
+        description: `Provisioning for ${payload.companyName}`,
+      })
+    } catch (err) {
+      console.error('background tenant provisioning failed', err)
+    } finally {
+      runningProvisioningJobs.delete(key)
+    }
+  }, 0)
+}
+
+// Starts (or safely resumes) a provisioning job. The client keeps one
+// idempotency key per draft, so retries reuse the same job instead of
+// creating duplicate tenants. Heavy tenant setup runs after the response.
 export const POST = withApi(async (req) => {
   const session = await requireAuth()
   requirePlatformPermission(session, 'tenant.create')
@@ -45,39 +74,28 @@ export const POST = withApi(async (req) => {
 
   const job = await findOrCreateProvisioningJob({ idempotencyKey, payload, requestedBy: operatorId })
 
-  if (adminPassword && !job.adminTempPassword && !job.tenant) {
-    job.adminTempPassword = adminPassword
+  if (!job.adminTempPassword && !job.tenant) {
+    job.adminTempPassword = adminPassword || generateTempPassword()
     await job.save()
   }
 
-  if (job.status === 'PROVISIONING' || job.status === 'VALIDATING') {
-    return fail('This submission is already being provisioned', 409, 'JOB_IN_PROGRESS')
-  }
-
   if (job.status !== 'COMPLETED') {
-    try {
-      await runProvisioningJob(job._id)
-    } catch (err) {
-      // The job document itself already carries the failure detail (status +
-      // error + per-step breakdown) — surface that instead of a bare 500.
-    }
-
-    await logSuperAdmin(session, {
-      action: 'TENANT_PROVISIONING_' + job.status,
-      entityType: 'TenantProvisioningJob',
-      entityId: job._id,
-      description: `Provisioning for ${payload.companyName}`,
-      req,
-    })
+    startProvisioningInBackground(job._id, session, payload)
   }
 
-  const finished = await TenantProvisioningJob.findById(job._id).select('+adminTempPassword').populate('tenant')
-  const tempPassword = finished.adminTempPassword
-  const responseJob = { ...finished.toObject(), adminTempPassword: undefined }
+  const current = await TenantProvisioningJob.findById(job._id).select('+adminTempPassword').populate('tenant')
+  if (!current) return fail('Provisioning job not found after creation', 500, 'JOB_NOT_FOUND')
 
-  if (finished.status === 'FAILED' || finished.status === 'PARTIALLY_COMPLETED') {
-    return fail(finished.error || 'Provisioning did not complete', 422, finished.status, { job: responseJob, tempPassword })
+  const tempPassword = current.adminTempPassword
+  const responseJob = serializeJob(current)
+
+  if (current.status === 'FAILED' || current.status === 'PARTIALLY_COMPLETED') {
+    return fail(current.error || 'Provisioning did not complete', 422, current.status, { job: responseJob, tempPassword })
   }
 
-  return ok({ job: responseJob, tempPassword }, finished.status === 'COMPLETED' ? 'Tenant provisioned' : 'Provisioning in progress', 201)
+  return ok(
+    { job: responseJob, tempPassword },
+    current.status === 'COMPLETED' ? 'Tenant provisioned' : 'Provisioning started',
+    current.status === 'COMPLETED' ? 201 : 202
+  )
 })

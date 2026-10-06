@@ -19,7 +19,7 @@ export default function SupportDashboardPage() {
 
   async function fetchTickets() {
     try {
-      const { data } = await api.get('/super-admin/support/tickets')
+      const { data } = await api.get('/super-admin/support/tickets', { devMock: false, skipCache: true })
       const items = data.data || []
       setTickets(items)
         
@@ -124,7 +124,7 @@ export default function SupportDashboardPage() {
                 tickets.map(t => (
                   <tr key={t._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                     <td className="py-4 px-2 font-bold text-sm text-slate-900 dark:text-white">{t.ticketNumber}</td>
-                    <td className="py-4 px-2 text-sm text-slate-600 dark:text-slate-300">{t.tenant?.name || 'Unknown'}</td>
+                    <td className="py-4 px-2 text-sm text-slate-600 dark:text-slate-300">{t.tenant?.companyName || t.tenant?.tenantCode || 'Unknown'}</td>
                     <td className="py-4 px-2 text-sm text-slate-600 dark:text-slate-300 max-w-[250px] truncate">{t.subject}</td>
                     <td className="py-4 px-2">
                       <span className={cn(

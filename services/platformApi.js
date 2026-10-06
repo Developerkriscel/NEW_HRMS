@@ -38,7 +38,12 @@ export const platformApi = {
   changeSubscriptionPlan: (id, data) => api.post(`/platform/subscriptions/${id}/plan-change`, data),
   extendTrial: (id, data) => api.post(`/platform/subscriptions/${id}/trial-extension`, data),
   manageGrace: (id, data) => api.post(`/platform/subscriptions/${id}/grace`, data),
-  changeSubscriptionStatus: (id, data) => api.post(`/platform/subscriptions/${id}/status`, data),
+  changeSubscriptionStatus: async (id, data) => {
+    const response = await api.post(`/platform/subscriptions/${id}/status`, data)
+    api.clearGetCacheForUrl?.('/super-admin/tenants')
+    api.clearGetCacheForUrl?.('/platform/subscriptions')
+    return response
+  },
   getCredits: (subscriptionId) => api.get(`/platform/subscriptions/${subscriptionId}/credits`, { devMock: false }),
   applyCredit: (subscriptionId, data) => api.post(`/platform/subscriptions/${subscriptionId}/credits`, data),
   getInvoices: (subscriptionId) => api.get(`/platform/subscriptions/${subscriptionId}/invoices`, { devMock: false }),

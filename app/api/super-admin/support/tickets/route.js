@@ -28,7 +28,7 @@ export const GET = withApi(async (req) => {
   }
 
   const tickets = await SupportTicket.find(query)
-    .populate('tenant', 'name subdomain')
+    .populate('tenant', 'companyName tenantCode subdomain')
     .populate('createdBy', 'firstName lastName email')
     .populate('assignedTo', 'name email')
     .sort({ createdAt: -1 })

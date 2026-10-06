@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronUp, ChevronDown, Plus, Search, Building2, Mail, Users, Database, ShieldCheck, ArrowUpRight, Sparkles, X } from 'lucide-react'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
@@ -42,6 +42,14 @@ function TenantStatusPill({ status }) {
       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40">
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
         {s === 'TRIAL' ? 'Free Trial' : 'Grace Period'}
+      </span>
+    )
+  }
+  if (s === 'CANCELLED' || s === 'EXPIRED') {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+        <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+        {s === 'CANCELLED' ? 'Cancelled' : 'Expired'}
       </span>
     )
   }
@@ -94,14 +102,16 @@ export default function TenantsPage() {
   const [sortDir, setSortDir] = useState('desc')
   const [selectedTenant, setSelectedTenant] = useState(null)
   const [viewingImage, setViewingImage] = useState(null)
+  const loadSeqRef = useRef(0)
 
   useEffect(() => {
     const timer = setTimeout(() => setSearch(searchInput), 350)
     return () => clearTimeout(timer)
   }, [searchInput])
 
-  async function load() {
-    setLoading(true)
+  const load = useCallback(async ({ silent = false } = {}) => {
+    const requestId = ++loadSeqRef.current
+    if (!silent) setLoading(true)
     setForbidden(false)
     const params = { page, size: PAGE_SIZE, sortBy, sortDir }
     if (status !== 'All') params.status = status
@@ -109,21 +119,22 @@ export default function TenantsPage() {
     if (search) params.search = search
 
     try {
-      // static platformApi
       const res = await platformApi.getTenants(params)
+      if (requestId !== loadSeqRef.current) return
       setRows(res.data.data.content)
       setTotalPages(res.data.data.totalPages)
       setTotalElements(res.data.data.totalElements)
     } catch (err) {
+      if (requestId !== loadSeqRef.current) return
       if (err.response?.status === 403) setForbidden(true)
     } finally {
-      setLoading(false)
+      if (requestId === loadSeqRef.current) setLoading(false)
     }
-  }
+  }, [page, status, planFilter, search, sortBy, sortDir])
 
   useEffect(() => {
     load()
-  }, [page, status, planFilter, search, sortBy, sortDir])
+  }, [load])
 
   useEffect(() => {
     let active = true
@@ -161,7 +172,7 @@ export default function TenantsPage() {
 
   return (
     <div className="animate-fade-in pb-12">
-      <CreateOrganizationModal isOpen={showCreateModal} onClose={() => { setShowCreateModal(false); load(); }} />
+      <CreateOrganizationModal isOpen={showCreateModal} onClose={(refresh = false) => { setShowCreateModal(false); if (refresh) load({ silent: true }); }} />
       <EditOrganizationModal open={!!editingTenantId} onClose={() => setEditingTenantId(null)} tenantId={editingTenantId} onSuccess={() => load()} />
       {/* Top Header Card */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100/80 dark:border-slate-800/60 pb-3 mb-5">
