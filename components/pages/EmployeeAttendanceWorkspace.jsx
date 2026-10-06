@@ -34,8 +34,9 @@ export function EmployeeAttendanceWorkspace({ headerAction }) {
         params.from = today.toISOString()
         params.to = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString()
       } else if (dateRange === 'This Week') {
-        const firstDay = new Date(today.setDate(today.getDate() - today.getDay()))
+        const firstDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay())
         params.from = firstDay.toISOString()
+        params.to = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString()
       } else if (dateRange === 'Last Week') {
         const firstDay = new Date(new Date().setDate(today.getDate() - today.getDay() - 7))
         const lastDay = new Date(new Date().setDate(today.getDate() - today.getDay() - 1))
@@ -44,6 +45,7 @@ export function EmployeeAttendanceWorkspace({ headerAction }) {
       } else if (dateRange === 'This Month') {
         const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
         params.from = firstDay.toISOString()
+        params.to = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString()
       } else if (dateRange === 'Last Month') {
         const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1)
         const lastDay = new Date(now.getFullYear(), now.getMonth(), 0)
@@ -51,6 +53,7 @@ export function EmployeeAttendanceWorkspace({ headerAction }) {
         params.to = new Date(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate() + 1).toISOString()
       } else if (dateRange === 'All History') {
         params.from = new Date(2000, 0, 1).toISOString()
+        params.to = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString()
       } else if (dateRange === 'Custom') {
         if (customStart) params.from = new Date(customStart).toISOString()
         if (customEnd) {
@@ -149,11 +152,11 @@ export function EmployeeAttendanceWorkspace({ headerAction }) {
   const status = getStatusDisplay()
 
   const columns = [
-    { header: 'Date', accessor: 'date', render: (v) => <span className="font-medium">{formatDate(v)}</span> },
+    { header: 'Date', accessor: 'date', render: (v, record) => <span className="font-medium">{formatDate(record.checkInTime || v)}</span> },
     { header: 'Check In', accessor: 'checkInTime', render: (v) => v ? new Date(v).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—' },
     { header: 'Check Out', accessor: 'checkOutTime', render: (v) => v ? new Date(v).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—' },
     { header: 'Working Hours', accessor: 'workingMinutes', render: (v) => v ? <span className="font-semibold text-slate-700 dark:text-slate-300">{`${Math.floor(v/60)}h ${v%60}m`}</span> : '—' },
-    { header: 'Status', accessor: 'status', render: (v) => <Badge variant={v === 'PRESENT' ? 'success' : v === 'ABSENT' ? 'danger' : 'warning'}>{v}</Badge> },
+    { header: 'Status', accessor: 'status', render: (v) => <Badge variant={v === 'PRESENT' ? 'success' : v === 'ABSENT' ? 'danger' : 'warning'}>{v?.replace('_', ' ')}</Badge> },
     {
       header: '', accessor: '_id',
       render: (_, record) => (
@@ -267,10 +270,10 @@ export function EmployeeAttendanceWorkspace({ headerAction }) {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
-          { label: 'Present Days', value: records.filter(r => r.status === 'PRESENT').length, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
+          { label: 'Present Days', value: records.filter(r => ['PRESENT', 'HALF_DAY', 'WFH'].includes(r.status)).length, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
           { label: 'Absent Days', value: records.filter(r => r.status === 'ABSENT').length, color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-500/10' },
           { label: 'Leave Taken', value: records.filter(r => r.status === 'ON_LEAVE').length, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-500/10' },
-          { label: 'Total Hours', value: `${Math.floor(records.reduce((acc, r) => acc + (r.workingMinutes || 0), 0) / 60)}h`, color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-500/10' },
+          { label: 'Total Hours', value: `${Math.floor(records.reduce((acc, r) => acc + (r.workingMinutes || 0), 0) / 60)}h ${records.reduce((acc, r) => acc + (r.workingMinutes || 0), 0) % 60}m`, color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-500/10' },
         ].map((stat) => (
           <div key={stat.label} className="max-h-[90dvh] overflow-y-auto group relative overflow-hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 rounded-2xl shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300">
             <div className={`absolute top-0 right-0 w-24 h-24 rounded-full ${stat.bg} -mr-8 -mt-8 transition-transform group-hover:scale-150 duration-500 ease-out`}></div>

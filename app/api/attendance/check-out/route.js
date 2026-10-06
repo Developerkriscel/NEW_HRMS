@@ -67,10 +67,13 @@ export const POST = withApi(async (req) => {
   const workMinutes = Math.max(0, elapsedMinutes - totalBreakMinutes)
   const workHours = Math.floor(workMinutes / 60)
 
-  if (workHours < 2) {
-    attendance.status = 'ABSENT'
-  } else if (workHours < 4) {
+  if (workHours < 4) {
     attendance.status = 'HALF_DAY'
+    attendance.halfDay = true
+    attendance.earlyLogout = true
+  } else {
+    attendance.status = 'PRESENT'
+    attendance.halfDay = false
   }
 
   const [employee, tenantDoc] = await Promise.all([

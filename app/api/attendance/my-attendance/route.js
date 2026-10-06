@@ -12,80 +12,143 @@ export const GET = withApi(async (req) => {
   const tenantId = requireTenantId(session)
   const { searchParams } = new URL(req.url)
 
-  const now = new Date()
-  const defaultFrom = new Date(now.getFullYear(), now.getMonth(), 1)
-  const from = searchParams.get('from') ? new Date(searchParams.get('from')) : defaultFrom
-  let to = searchParams.get('to') ? new Date(searchParams.get('to')) : now
-  
-  if (searchParams.get('to')) {
-    const toDate = new Date(searchParams.get('to'))
-    toDate.setDate(toDate.getDate() + 1)
-    to = toDate
-  } else {
-    to = now
+  const tenant = await Tenant.findById(tenantId).lean()
+  const timezone = tenant?.timezone || 'Asia/Kolkata'
+
+  // Helper to extract calendar YYYY-MM-DD in tenant timezone
+  function toDateKey(dateInput) {
+    if (!dateInput) return null
+    const d = new Date(dateInput)
+    if (isNaN(d.getTime())) return null
+    try {
+      return d.toLocaleDateString('en-CA', { timeZone: timezone })
+    } catch {
+      return d.toISOString().split('T')[0]
+    }
   }
+
+  const now = new Date()
+  const todayKey = toDateKey(now)
+  const [currY, currM] = todayKey.split('-')
+
+  let fromKey = searchParams.get('from') ? toDateKey(searchParams.get('from')) : null
+  if (!fromKey) {
+    fromKey = `${currY}-${currM}-01`
+  }
+
+  let toKey = searchParams.get('to') ? toDateKey(searchParams.get('to')) : null
+  if (!toKey) {
+    toKey = todayKey
+  }
+
+  // Expand DB query window so no timezone edge cases miss records in MongoDB
+  const [sy, sm, sd] = fromKey.split('-').map(Number)
+  const queryFrom = new Date(Date.UTC(sy, sm - 1, sd - 1, 0, 0, 0))
+
+  const [ey, em, ed] = toKey.split('-').map(Number)
+  const queryTo = new Date(Date.UTC(ey, em - 1, ed + 2, 23, 59, 59, 999))
 
   const records = await Attendance.find({
     employee: session.userId,
     tenantId,
-    date: { $gte: from, $lt: to },
+    $or: [
+      { date: { $gte: queryFrom, $lte: queryTo } },
+      { checkInTime: { $gte: queryFrom, $lte: queryTo } }
+    ]
   }).sort({ date: -1 }).lean()
 
   const employee = await Employee.findById(session.userId).lean()
-  const tenant = await Tenant.findById(tenantId).lean()
 
   let weeklyOffs = []
   if (employee?.weekOff) {
-    weeklyOffs = employee.weekOff.split(',').map(d => d.trim())
+    weeklyOffs = employee.weekOff.split(',').map(d => d.trim().toLowerCase())
   } else if (tenant?.hrSettings?.weeklyOff) {
-    weeklyOffs = tenant.hrSettings.weeklyOff
+    weeklyOffs = tenant.hrSettings.weeklyOff.map(d => d.trim().toLowerCase())
   }
 
-  const joiningDate = employee?.joiningDate ? new Date(employee.joiningDate) : new Date(2000, 0, 1)
+  const joiningKey = employee?.joiningDate ? toDateKey(employee.joiningDate) : '2000-01-01'
 
   const recordsMap = new Map()
   records.forEach(r => {
-    recordsMap.set(new Date(r.date).toISOString().split('T')[0], r)
+    // Prefer checkInTime for actual punch date; fallback to date
+    const key = toDateKey(r.checkInTime) || toDateKey(r.date)
+    if (key) {
+      recordsMap.set(key, r)
+    }
   })
 
-  const endLimit = new Date()
-  endLimit.setHours(23, 59, 59, 999)
-  
-  const actualTo = to < endLimit ? to : endLimit
-  const loopEnd = new Date(actualTo)
+  // The range of days to present in history
+  const loopEndKey = toKey < todayKey ? toKey : todayKey
+  const loopStartKey = fromKey <= loopEndKey ? fromKey : loopEndKey
+
+  const dayKeys = []
+  let [cy, cm, cd] = loopStartKey.split('-').map(Number)
+  const [ty, tm, td] = loopEndKey.split('-').map(Number)
+  const curUtc = new Date(Date.UTC(cy, cm - 1, cd))
+  const endUtc = new Date(Date.UTC(ty, tm - 1, td))
+
+  while (curUtc <= endUtc) {
+    const y = curUtc.getUTCFullYear()
+    const m = String(curUtc.getUTCMonth() + 1).padStart(2, '0')
+    const d = String(curUtc.getUTCDate()).padStart(2, '0')
+    dayKeys.push(`${y}-${m}-${d}`)
+    curUtc.setUTCDate(curUtc.getUTCDate() + 1)
+  }
 
   const finalRecords = []
   const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
-  for (let d = new Date(from); d < loopEnd; d.setDate(d.getDate() + 1)) {
-    const dStr = d.toISOString().split('T')[0]
-    if (recordsMap.has(dStr)) {
-      finalRecords.push(recordsMap.get(dStr))
+  for (const dKey of dayKeys) {
+    if (recordsMap.has(dKey)) {
+      const rec = recordsMap.get(dKey)
+      finalRecords.push({
+        ...rec,
+        date: rec.date || new Date(`${dKey}T12:00:00Z`).toISOString()
+      })
     } else {
-      // Check joining date
-      const dTime = d.getTime()
-      const joiningTime = joiningDate.getTime()
-      if (dTime < joiningTime && dStr !== joiningDate.toISOString().split('T')[0]) {
+      if (dKey < joiningKey) continue
+
+      const [y, m, d] = dKey.split('-').map(Number)
+      const dayDate = new Date(Date.UTC(y, m - 1, d, 12, 0, 0))
+      const dayName = DAYS[dayDate.getUTCDay()]
+
+      if (weeklyOffs.includes(dayName.toLowerCase())) continue
+
+      // For today, if employee hasn't checked in yet, don't generate synthetic absent
+      // while the working shift is still ongoing
+      if (dKey === todayKey) {
         continue
       }
-      
-      const dayName = DAYS[d.getDay()]
-      if (!weeklyOffs.includes(dayName)) {
-        finalRecords.push({
-          _id: `absent-${dStr}`,
-          employee: session.userId,
-          tenantId,
-          date: new Date(d).toISOString(),
-          status: 'ABSENT',
-          checkInTime: null,
-          checkOutTime: null,
-          workingMinutes: 0
-        })
-      }
+
+      finalRecords.push({
+        _id: `absent-${dKey}`,
+        employee: session.userId,
+        tenantId,
+        date: dayDate.toISOString(),
+        status: 'ABSENT',
+        checkInTime: null,
+        checkOutTime: null,
+        workingMinutes: 0
+      })
     }
   }
 
-  finalRecords.sort((a, b) => new Date(b.date) - new Date(a.date))
+  // Ensure any records in recordsMap that might fall slightly outside dayKeys are also included
+  recordsMap.forEach((rec, key) => {
+    if (!finalRecords.some(r => (toDateKey(r.checkInTime) || toDateKey(r.date)) === key)) {
+      finalRecords.push({
+        ...rec,
+        date: rec.date || new Date(`${key}T12:00:00Z`).toISOString()
+      })
+    }
+  })
+
+  // Sort newest first
+  finalRecords.sort((a, b) => {
+    const timeA = new Date(a.checkInTime || a.date).getTime()
+    const timeB = new Date(b.checkInTime || b.date).getTime()
+    return timeB - timeA
+  })
 
   return ok(finalRecords)
 })

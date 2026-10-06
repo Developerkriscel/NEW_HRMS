@@ -124,7 +124,7 @@ export function AttendanceDetailsDrawer({ isOpen, onClose, record, canEdit = fal
             <div>
               <div className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">Date</div>
               <div className="text-xl font-semibold text-slate-900 dark:text-white mb-3">
-                {formatDate(record.date)}
+                {formatDate(record.checkInTime || record.date)}
               </div>
               {isEditing ? (
                 <select 
@@ -205,6 +205,20 @@ export function AttendanceDetailsDrawer({ isOpen, onClose, record, canEdit = fal
               </div>
             </div>
 
+            {!record.checkInTime && !record.checkOutTime ? (
+              <div className="rounded-2xl border border-rose-100 bg-rose-50/70 p-5 dark:border-rose-900/30 dark:bg-rose-950/20 text-center space-y-2.5">
+                <div className="mx-auto w-10 h-10 rounded-full bg-rose-100 text-rose-600 dark:bg-rose-900/50 dark:text-rose-400 flex items-center justify-center">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div className="font-semibold text-rose-900 dark:text-rose-200 text-sm">
+                  No Punch-In Activity
+                </div>
+                <p className="text-xs text-rose-700/80 dark:text-rose-400 max-w-xs mx-auto">
+                  No check-in or check-out was recorded for this day. The employee was marked as absent.
+                </p>
+              </div>
+            ) : (
+              <>
             {/* Verification */}
             <div>
               <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-4 uppercase tracking-wider">Verification</h3>
@@ -360,6 +374,8 @@ export function AttendanceDetailsDrawer({ isOpen, onClose, record, canEdit = fal
                 )}
               </div>
             </div>
+              </>
+            )}
           </div>
 
           {/* Footer Actions */}
