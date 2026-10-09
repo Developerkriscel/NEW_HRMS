@@ -11,7 +11,8 @@ import {
   Activity, 
   TrendingUp,
   BarChart3,
-  Briefcase
+  Briefcase,
+  Filter
 } from 'lucide-react'
 import { PageLoader } from '@/components/common/LoadingSpinner'
 import { AttendanceBarChart, GenericAreaChart } from '@/components/charts/DynamicDashboardCharts'
@@ -79,14 +80,10 @@ export function CompanyDashboardWorkspace({ headerAction }) {
   const [stats, setStats] = useState(null)
   const [report, setReport] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [timeFilter, setTimeFilter] = useState('This Week')
 
   useEffect(() => {
-    if (user?.devLogin) {
-      setStats(EMPTY_COMPANY_STATS)
-      setReport({ months: [], headcount: [], joiners: [] })
-      setLoading(false)
-      return
-    }
+    setLoading(true)
 
     const now = new Date()
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
@@ -120,11 +117,14 @@ export function CompanyDashboardWorkspace({ headerAction }) {
         })
         setReport(reportRes.data.data)
       })
-      .catch(console.error)
+      .catch((err) => {
+        console.error('Failed to load company stats:', err)
+        setStats(EMPTY_COMPANY_STATS)
+      })
       .finally(() => setLoading(false))
-  }, [user])
+  }, [user, timeFilter])
 
-  if (loading) return <PageLoader />
+  if (loading && !stats) return <PageLoader />
 
   const attendanceTrendData = [
     { name: 'Mon', present: Math.max(0, (stats?.totalEmployees || 0) - 2), absent: 2 },
@@ -152,7 +152,27 @@ export function CompanyDashboardWorkspace({ headerAction }) {
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 font-medium">Real-time overview of workforce and attendance.</p>
         </div>
-        {headerAction && <div className="backdrop-blur-sm bg-white/30 dark:bg-slate-800/30 rounded-xl p-1 shadow-sm">{headerAction}</div>}
+
+        {/* Right Header Actions */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mt-3 sm:mt-0 w-full sm:w-auto">
+          {/* Global Dashboard Filter */}
+          <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 shadow-sm w-full sm:w-auto">
+            <Filter className="w-4 h-4 text-slate-400" />
+            <select 
+              value={timeFilter}
+              onChange={(e) => setTimeFilter(e.target.value)}
+              className="bg-transparent text-sm font-semibold text-slate-700 dark:text-slate-300 outline-none cursor-pointer"
+            >
+              <option>Today</option>
+              <option>Yesterday</option>
+              <option>This Week</option>
+              <option>This Month</option>
+              <option>Last 6 Months</option>
+              <option>All Time</option>
+            </select>
+          </div>
+          {headerAction && <div className="w-full sm:w-auto flex overflow-x-auto pb-1 sm:pb-0 hide-scrollbar">{headerAction}</div>}
+        </div>
       </div>
 
       <div>

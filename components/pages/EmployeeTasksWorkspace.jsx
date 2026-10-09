@@ -12,26 +12,33 @@ const STATUSES = ['NOT_STARTED', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED']
 export function EmployeeTasksWorkspace() {
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [commentByTask, setCommentByTask] = useState({})
 
-  function load() {
-    setLoading(true)
-    taskApi.list({ size: 100 })
+  function load({ silent = false } = {}) {
+    if (silent) setRefreshing(true)
+    else setLoading(true)
+    return taskApi.list({ size: 100 })
       .then((res) => setTasks(res.data.data.content || []))
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (silent) setRefreshing(false)
+        else setLoading(false)
+      })
   }
 
-  useEffect(load, [])
+  useEffect(() => { load() }, [])
 
   async function setStatus(task, status) {
     setSaving(true)
     setMessage('')
     try {
-      await taskApi.setStatus(task._id, status)
+      const res = await taskApi.setStatus(task._id, status)
+      const updated = res.data?.data || { ...task, status }
+      setTasks((current) => current.map((item) => item._id === task._id ? { ...item, ...updated, status } : item))
       setMessage('Task updated')
-      load()
+      load({ silent: true }).catch(() => {})
     } catch (err) {
       setMessage(err.response?.data?.message || 'Failed to update task')
     } finally {
@@ -45,10 +52,14 @@ export function EmployeeTasksWorkspace() {
     setSaving(true)
     setMessage('')
     try {
-      await taskApi.addComment(task._id, text)
+      const res = await taskApi.addComment(task._id, text)
+      const updated = res.data?.data
       setCommentByTask((current) => ({ ...current, [task._id]: '' }))
+      if (updated?._id) {
+        setTasks((current) => current.map((item) => item._id === task._id ? { ...item, ...updated } : item))
+      }
       setMessage('Comment added')
-      load()
+      load({ silent: true }).catch(() => {})
     } catch (err) {
       setMessage(err.response?.data?.message || 'Failed to add comment')
     } finally {
@@ -88,6 +99,7 @@ export function EmployeeTasksWorkspace() {
         </div>
       </div>
       {message && <p className="text-sm text-slate-500 dark:text-slate-400">{message}</p>}
+      {refreshing && <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Refreshing in background...</p>}
       <DataTable columns={columns} data={tasks} isLoading={loading} searchPlaceholder="Search tasks..." emptyMessage="No assigned tasks found" />
     </div>
   )

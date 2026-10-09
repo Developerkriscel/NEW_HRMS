@@ -8,9 +8,13 @@ import { runForTenant } from '@/lib/tenantDb'
 import { resolveOfferTokenClaims } from '@/lib/offerTokenHelpers'
 import { loadOfferByToken, createPreboardingRecord } from '@/lib/offerHelpers'
 import { OFFER_STATUS, OFFER_CANDIDATE_ACTION } from '@/lib/offerConstants'
-import { ACTIVITY_ENTRY_TYPE } from '@/lib/candidateConstants'
+import { ACTIVITY_ENTRY_TYPE, APPLICATION_STATUS } from '@/lib/candidateConstants'
+import { PIPELINE_STAGE_CATEGORY } from '@/lib/jobConstants'
+import { STAGE_HISTORY_ACTION } from '@/lib/pipelineConstants'
+import { applyStageMove, recordStageHistory } from '@/lib/pipelineHelpers'
 import OfferCandidateAction from '@/models/OfferCandidateAction'
 import Application from '@/models/Application'
+import JobPipelineStage from '@/models/JobPipelineStage'
 
 const ACCEPTABLE = [OFFER_STATUS.SENT, OFFER_STATUS.VIEWED]
 
@@ -53,8 +57,32 @@ export const POST = withApi(async (req, { params }) => {
     const application = await Application.findOne({ _id: offer.applicationId, tenantId: claims.tenant._id, deleted: false })
     let preboarding = null
     if (application) {
+      const stages = await JobPipelineStage.find({ tenantId: claims.tenant._id, jobId: application.jobId, isActive: true }).sort({ order: 1 })
+      const hiredStage = stages.find((s) => s.category === PIPELINE_STAGE_CATEGORY.HIRED || /hired/i.test(s.name))
+      const fromStageId = application.currentStage
+      const fromStageName = application.currentStageName
+
+      if (hiredStage) {
+        applyStageMove(application, hiredStage, { comment: `Offer accepted by ${body.fullName.trim()} — candidate hired`, actorName: body.fullName.trim() })
+      }
+      application.status = APPLICATION_STATUS.HIRED
       application.activityLog.push({ type: ACTIVITY_ENTRY_TYPE.STATUS_CHANGED, message: `Offer accepted by ${body.fullName.trim()} — moved to preboarding` })
       await application.save()
+
+      if (hiredStage) {
+        await recordStageHistory({
+          tenantId: claims.tenant._id,
+          application,
+          fromStageId,
+          toStageId: hiredStage._id,
+          fromStageName,
+          toStageName: hiredStage.name,
+          action: STAGE_HISTORY_ACTION.MOVED,
+          comment: `Offer accepted by ${body.fullName.trim()} — candidate hired`,
+          session: null,
+        })
+      }
+
       preboarding = await createPreboardingRecord(claims.tenant._id, { application, offer, version })
     }
 

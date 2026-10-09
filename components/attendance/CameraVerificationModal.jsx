@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useRef, useState, useCallback, useEffect } from 'react'
-import { Camera, X, RefreshCw, CheckCircle2, MapPin } from 'lucide-react'
+import { Camera, X, RefreshCw, CheckCircle2, MapPin, AlertCircle } from 'lucide-react'
 import { Portal } from '@/components/common/Portal'
 
 export function CameraVerificationModal({ isOpen, onClose, onConfirm, locationRequired = false, title = "Verify Attendance", variant = 'modal' }) {
@@ -12,6 +12,8 @@ export function CameraVerificationModal({ isOpen, onClose, onConfirm, locationRe
   const [location, setLocation] = useState(null)
   const [locationError, setLocationError] = useState('')
   const [isLocating, setIsLocating] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
   const streamRef = useRef(null)
 
   const stopCamera = useCallback(() => {
@@ -78,6 +80,8 @@ export function CameraVerificationModal({ isOpen, onClose, onConfirm, locationRe
   useEffect(() => {
     if (isOpen) {
       setCapturedImage(null)
+      setSubmitError('')
+      setSubmitting(false)
       startCamera()
       if (locationRequired) {
         getLocation()
@@ -105,22 +109,36 @@ export function CameraVerificationModal({ isOpen, onClose, onConfirm, locationRe
       ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height)
       const imageUrl = canvas.toDataURL('image/jpeg', 0.8)
       setCapturedImage(imageUrl)
+      setSubmitError('')
       stopCamera()
     }
   }
 
   const handleRetake = () => {
     setCapturedImage(null)
+    setSubmitError('')
     startCamera()
+    if (locationRequired) {
+      getLocation()
+    }
   }
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (locationRequired && !location) {
       setLocationError('Please allow location access to continue.')
       return;
     }
-    onConfirm({ photo: capturedImage, location })
-    onClose()
+    setSubmitting(true)
+    setSubmitError('')
+    try {
+      await onConfirm({ photo: capturedImage, location })
+      onClose()
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Attendance verification failed. Please try again.'
+      setSubmitError(msg)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   if (!isOpen) return null
@@ -183,17 +201,41 @@ export function CameraVerificationModal({ isOpen, onClose, onConfirm, locationRe
               </div>
             )}
 
-            <div className="flex gap-3 w-full">
-              <button onClick={handleRetake} className="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center justify-center gap-2">
+            {submitError && (
+              <div className="w-full max-w-md mb-5 p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-rose-700 dark:text-rose-300 flex items-start gap-2.5 text-xs animate-in fade-in">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-500 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-bold text-rose-800 dark:text-rose-200">Attendance Policy Error</p>
+                  <p className="mt-0.5 leading-relaxed text-rose-600 dark:text-rose-400">{submitError}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3 w-full max-w-md">
+              <button 
+                onClick={handleRetake} 
+                disabled={submitting}
+                className="flex-1 py-3 px-4 rounded-xl bg-slate-500 text-white font-medium hover:bg-slate-600 transition-colors disabled:opacity-50 shadow-lg shadow-slate-500/30 flex items-center justify-center gap-2"
+              >
                 <RefreshCw className="w-4 h-4" />
                 Retake
               </button>
               <button 
                 onClick={handleConfirm}
-                disabled={locationRequired && (!location || !!locationError)}
-                className="flex-1 py-3 px-4 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/30"
+                disabled={submitting || (locationRequired && (!location || !!locationError))}
+                className="flex-1 py-3 px-4 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-2"
               >
-                Confirm
+                {submitting ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Verifying...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Confirm</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

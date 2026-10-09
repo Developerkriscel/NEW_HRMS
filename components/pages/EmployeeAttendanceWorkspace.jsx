@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { DataTable } from '@/components/tables/DataTable'
 import { Badge } from '@/components/common/Badge'
 import { attendanceApi } from '@/services/attendanceApi'
@@ -8,9 +8,20 @@ import { formatDate } from '@/lib/utils'
 import { Clock, CheckCircle, Coffee, Calendar, Camera, ChevronRight, Activity } from 'lucide-react'
 import { CameraVerificationModal } from '@/components/attendance/CameraVerificationModal'
 import { AttendanceDetailsDrawer } from '@/components/attendance/AttendanceDetailsDrawer'
+import { AttendanceCalendarView } from '@/components/attendance/AttendanceCalendarView'
+
+function toLocalDateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function getRecordDateValue(record) {
+  return new Date(record?.date || record?.checkInTime || record?.createdAt || 0).getTime()
+}
 
 export function EmployeeAttendanceWorkspace({ headerAction }) {
+  const [viewMode, setViewMode] = useState('table') // 'table' | 'calendar'
   const [records, setRecords] = useState([])
+  const [monthRecords, setMonthRecords] = useState([])
   const [todayRecord, setTodayRecord] = useState(null)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
@@ -19,69 +30,64 @@ export function EmployeeAttendanceWorkspace({ headerAction }) {
   const [cameraAction, setCameraAction] = useState(null)
   const [selectedRecord, setSelectedRecord] = useState(null)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
-  const [dateRange, setDateRange] = useState('This Month')
+  const [dateRange, setDateRange] = useState('Today')
+  const [statusFilter, setStatusFilter] = useState('ALL')
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
 
-  const fetchData = useCallback(async () => {
-    setLoading(true)
+  const fetchData = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true)
     try {
       const params = {}
       const now = new Date()
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
       
       if (dateRange === 'Today') {
-        params.from = today.toISOString()
-        params.to = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString()
+        params.from = toLocalDateKey(today)
+        params.to = toLocalDateKey(today)
       } else if (dateRange === 'This Week') {
         const firstDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay())
-        params.from = firstDay.toISOString()
-        params.to = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString()
+        params.from = toLocalDateKey(firstDay)
+        params.to = toLocalDateKey(today)
       } else if (dateRange === 'Last Week') {
         const firstDay = new Date(new Date().setDate(today.getDate() - today.getDay() - 7))
         const lastDay = new Date(new Date().setDate(today.getDate() - today.getDay() - 1))
-        params.from = firstDay.toISOString()
-        params.to = new Date(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate() + 1).toISOString()
+        params.from = toLocalDateKey(firstDay)
+        params.to = toLocalDateKey(lastDay)
       } else if (dateRange === 'This Month') {
         const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
-        params.from = firstDay.toISOString()
-        params.to = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString()
+        params.from = toLocalDateKey(firstDay)
+        params.to = toLocalDateKey(today)
       } else if (dateRange === 'Last Month') {
         const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1)
         const lastDay = new Date(now.getFullYear(), now.getMonth(), 0)
-        params.from = firstDay.toISOString()
-        params.to = new Date(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate() + 1).toISOString()
+        params.from = toLocalDateKey(firstDay)
+        params.to = toLocalDateKey(lastDay)
       } else if (dateRange === 'All History') {
-        params.from = new Date(2000, 0, 1).toISOString()
-        params.to = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString()
+        params.from = '2000-01-01'
+        params.to = toLocalDateKey(today)
       } else if (dateRange === 'Custom') {
-        if (customStart) params.from = new Date(customStart).toISOString()
-        if (customEnd) {
-          const end = new Date(customEnd)
-          params.to = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1).toISOString()
-        }
+        if (customStart) params.from = customStart
+        if (customEnd) params.to = customEnd
       }
 
-      const [todayRes, historyRes] = await Promise.all([
-        attendanceApi.getTodayStatus(),
-        attendanceApi.getMyAttendance(params)
-      ])
-      setTodayRecord(todayRes.data.data)
-      setRecords(historyRes.data.data || [])
+      const res = await attendanceApi.getEmployeePage(params)
+      const data = res.data.data || {}
+      setTodayRecord(data.todayRecord || null)
+      setRecords(data.records || [])
+      setMonthRecords(data.monthRecords || [])
     } catch (err) {
       console.error(err)
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [dateRange, customStart, customEnd])
 
   useEffect(() => { fetchData() }, [fetchData])
 
   useEffect(() => {
-    let frameId
-    const tick = () => { setNow(new Date()); frameId = requestAnimationFrame(tick) }
-    frameId = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(frameId)
+    const interval = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(interval)
   }, [])
 
   const isOnBreak = todayRecord?.breaks?.some(b => !b.end)
@@ -119,10 +125,10 @@ export function EmployeeAttendanceWorkspace({ headerAction }) {
       const payload = { photo: data.photo, location: data.location, source: 'WEB' }
       if (cameraAction === 'check-in') await attendanceApi.checkIn(payload)
       else if (cameraAction === 'check-out') await attendanceApi.checkOut(payload)
-      await fetchData()
+      await fetchData({ silent: true })
     } catch (err) {
       console.error(err)
-      alert(err.response?.data?.message || 'Action failed')
+      throw err
     } finally {
       setActionLoading(false)
     }
@@ -133,7 +139,7 @@ export function EmployeeAttendanceWorkspace({ headerAction }) {
     try {
       if (action === 'start') await attendanceApi.startBreak()
       else await attendanceApi.endBreak()
-      await fetchData()
+      await fetchData({ silent: true })
     } catch (err) {
       console.error(err)
       alert(err.response?.data?.message || 'Action failed')
@@ -151,14 +157,14 @@ export function EmployeeAttendanceWorkspace({ headerAction }) {
 
   const status = getStatusDisplay()
 
-  const columns = [
+  const columns = useMemo(() => [
     { header: 'Date', accessor: 'date', render: (v, record) => <span className="font-medium">{formatDate(record.checkInTime || v)}</span> },
     { header: 'Check In', accessor: 'checkInTime', render: (v) => v ? new Date(v).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—' },
     { header: 'Check Out', accessor: 'checkOutTime', render: (v) => v ? new Date(v).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—' },
     { header: 'Working Hours', accessor: 'workingMinutes', render: (v) => v ? <span className="font-semibold text-slate-700 dark:text-slate-300">{`${Math.floor(v/60)}h ${v%60}m`}</span> : '—' },
-    { header: 'Status', accessor: 'status', render: (v) => <Badge variant={v === 'PRESENT' ? 'success' : v === 'ABSENT' ? 'danger' : 'warning'}>{v?.replace('_', ' ')}</Badge> },
+    { header: 'Status', accessor: 'status', sortable: false, render: (v) => <Badge variant={v === 'PRESENT' ? 'success' : (v === 'ABSENT' || v === 'NOT_MARKED') ? 'danger' : 'info'}>{v === 'NOT_MARKED' ? 'ABSENT' : v?.replace('_', ' ')}</Badge> },
     {
-      header: '', accessor: '_id',
+      header: '', key: 'details', sortable: false,
       render: (_, record) => (
         <button
           onClick={() => { setSelectedRecord(record); setIsDrawerOpen(true) }}
@@ -168,7 +174,51 @@ export function EmployeeAttendanceWorkspace({ headerAction }) {
         </button>
       )
     }
-  ]
+  ], [])
+
+  const counts = useMemo(() => {
+    const list = monthRecords.length > 0 ? monthRecords : records
+    return {
+      present: list.filter(r => ['PRESENT', 'HALF_DAY', 'WFH'].includes(r.status)).length,
+      absent: list.filter(r => r.status === 'ABSENT').length,
+      leave: list.filter(r => r.status === 'ON_LEAVE').length,
+    }
+  }, [monthRecords, records])
+
+  const stats = useMemo(() => {
+    const dataSource = monthRecords.length > 0 ? monthRecords : records
+    const totalMinutes = dataSource.reduce((acc, r) => acc + (r.workingMinutes || 0), 0)
+    return [
+      { key: 'PRESENT', label: 'Present Days', value: counts.present, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
+      { key: 'ABSENT', label: 'Absent Days', value: counts.absent, color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-500/10' },
+      { key: 'ON_LEAVE', label: 'Leave Taken', value: counts.leave, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-500/10' },
+      { key: null, label: 'Total Hours', value: `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`, color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-500/10' },
+    ]
+  }, [monthRecords, records, counts])
+
+  const displayedRecords = useMemo(() => {
+    const sortByDate = (items) => [...items].sort((a, b) => getRecordDateValue(a) - getRecordDateValue(b))
+
+    if (statusFilter === 'ALL') {
+      return sortByDate(records)
+    }
+
+    let filtered = records.filter(r => {
+      if (statusFilter === 'PRESENT') return ['PRESENT', 'HALF_DAY', 'WFH'].includes(r.status)
+      return r.status === statusFilter
+    })
+
+    // If filtering by a status (e.g. ABSENT) while in 'Today' or narrow range where current range has 0 matches,
+    // fallback to monthRecords so the user immediately sees the requested records!
+    if (filtered.length === 0 && monthRecords.length > 0) {
+      filtered = monthRecords.filter(r => {
+        if (statusFilter === 'PRESENT') return ['PRESENT', 'HALF_DAY', 'WFH'].includes(r.status)
+        return r.status === statusFilter
+      })
+    }
+
+    return sortByDate(filtered)
+  }, [records, monthRecords, statusFilter])
 
   return (
     <div className="animate-fade-in space-y-4 w-full pb-12">
@@ -268,77 +318,170 @@ export function EmployeeAttendanceWorkspace({ headerAction }) {
         variant="inline"
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {[
-          { label: 'Present Days', value: records.filter(r => ['PRESENT', 'HALF_DAY', 'WFH'].includes(r.status)).length, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
-          { label: 'Absent Days', value: records.filter(r => r.status === 'ABSENT').length, color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-500/10' },
-          { label: 'Leave Taken', value: records.filter(r => r.status === 'ON_LEAVE').length, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-500/10' },
-          { label: 'Total Hours', value: `${Math.floor(records.reduce((acc, r) => acc + (r.workingMinutes || 0), 0) / 60)}h ${records.reduce((acc, r) => acc + (r.workingMinutes || 0), 0) % 60}m`, color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-500/10' },
-        ].map((stat) => (
-          <div key={stat.label} className="max-h-[90dvh] overflow-y-auto group relative overflow-hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 rounded-2xl shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300">
-            <div className={`absolute top-0 right-0 w-24 h-24 rounded-full ${stat.bg} -mr-8 -mt-8 transition-transform group-hover:scale-150 duration-500 ease-out`}></div>
-            <div className="relative z-10">
-              <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{stat.label}</p>
-              <h3 className={`text-2xl font-bold mt-1 ${stat.color}`}>{stat.value}</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {stats.map((stat) => {
+          const isActive = stat.key && statusFilter === stat.key
+          return (
+            <div
+              key={stat.label}
+              onClick={() => {
+                if (stat.key) {
+                  setStatusFilter(prev => (prev === stat.key ? 'ALL' : stat.key))
+                }
+              }}
+              className={`group relative overflow-hidden bg-white dark:bg-slate-900 border ${
+                isActive ? 'ring-2 ring-indigo-500 border-indigo-500 shadow-md scale-[1.02]' : 'border-slate-200 dark:border-slate-800'
+              } p-3 sm:p-4 rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 ${stat.key ? 'cursor-pointer' : ''}`}
+            >
+              <div className={`absolute top-0 right-0 w-16 h-16 rounded-full ${stat.bg} -mr-4 -mt-4 transition-transform group-hover:scale-150 duration-500 ease-out`}></div>
+              <div className="relative z-10">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{stat.label}</p>
+                    <p className="text-[9px] text-slate-400 dark:text-slate-500 font-medium lowercase">this month</p>
+                  </div>
+                  {stat.key && (
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md transition-colors ${
+                      isActive ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600'
+                    }`}>
+                      {isActive ? 'Filtered' : 'Click to View'}
+                    </span>
+                  )}
+                </div>
+                <h3 className={`text-xl font-bold mt-1 ${stat.color}`}>{stat.value}</h3>
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
+      {/* Attendance Workspace View: Calendar View vs Table View */}
+      {viewMode === 'calendar' && (
+      <div className="space-y-4">
+        <div className="flex justify-between items-center px-1">
+          <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+            <div className="p-1.5 bg-indigo-100 dark:bg-indigo-500/20 rounded-lg text-indigo-600 dark:text-indigo-400">
+              <Calendar className="w-4 h-4" />
+            </div>
+            Attendance Calendar
+          </h2>
+          <button
+            onClick={() => setViewMode('table')}
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 text-xs sm:text-sm font-semibold transition-all shadow-2xs hover:scale-102"
+          >
+            <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+            Hide Calendar
+          </button>
+        </div>
+        <AttendanceCalendarView
+          onSelectRecord={(rec) => {
+            setSelectedRecord(rec)
+            setIsDrawerOpen(true)
+          }}
+        />
+      </div>
+      )}
+
+      {viewMode === 'table' && (
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 bg-slate-50/50 dark:bg-slate-800/20">
-            <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
-              <div className="p-1.5 bg-indigo-100 dark:bg-indigo-500/20 rounded-lg text-indigo-600 dark:text-indigo-400">
-                <Calendar className="w-4 h-4" />
-              </div>
-              Attendance History
-            </h2>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex flex-col">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Date Range</label>
-                <select 
-                  value={dateRange}
-                  onChange={(e) => setDateRange(e.target.value)}
-                  className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 min-w-[140px]"
-                >
-                  <option value="Today">Today</option>
-                  <option value="This Week">This Week</option>
-                  <option value="Last Week">Last Week</option>
-                  <option value="This Month">This Month</option>
-                  <option value="Last Month">Last Month</option>
-                  <option value="All History">All History</option>
-                  <option value="Custom">Custom</option>
-                </select>
-              </div>
-              
-              {dateRange === 'Custom' && (
-                <>
-                  <div className="flex flex-col">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Start Date</label>
-                    <input 
-                      type="date"
-                      value={customStart}
-                      onChange={(e) => setCustomStart(e.target.value)}
-                      className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-                    />
-                  </div>
-                  <div className="flex flex-col">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">End Date</label>
-                    <input 
-                      type="date"
-                      value={customEnd}
-                      onChange={(e) => setCustomEnd(e.target.value)}
-                      className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-                    />
-                  </div>
-                </>
-              )}
+          <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+            <div className="p-1.5 bg-indigo-100 dark:bg-indigo-500/20 rounded-lg text-indigo-600 dark:text-indigo-400">
+              <Calendar className="w-4 h-4" />
             </div>
+            Attendance History
+          </h2>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => setViewMode('calendar')}
+              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 text-xs sm:text-sm font-semibold transition-all shadow-2xs hover:scale-102"
+            >
+              <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+              Show Calendar
+            </button>
+
+            <div className="flex flex-col">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Status</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 min-w-[140px]"
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="PRESENT">Present / Half Day ({counts.present})</option>
+                <option value="ABSENT">Absent ({counts.absent})</option>
+                <option value="ON_LEAVE">On Leave ({counts.leave})</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Date Range</label>
+              <select 
+                value={dateRange}
+                onChange={(e) => setDateRange(e.target.value)}
+                className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 min-w-[140px]"
+              >
+                <option value="Today">Today</option>
+                <option value="This Week">This Week</option>
+                <option value="Last Week">Last Week</option>
+                <option value="This Month">This Month</option>
+                <option value="Last Month">Last Month</option>
+                <option value="All History">All History</option>
+                <option value="Custom">Custom</option>
+              </select>
+            </div>
+            
+            {dateRange === 'Custom' && (
+              <>
+                <div className="flex flex-col">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Start Date</label>
+                  <input 
+                    type="date"
+                    value={customStart}
+                    onChange={(e) => setCustomStart(e.target.value)}
+                    className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                  />
+                </div>
+                <div className="flex flex-col">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">End Date</label>
+                  <input 
+                    type="date"
+                    value={customEnd}
+                    onChange={(e) => setCustomEnd(e.target.value)}
+                    className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                  />
+                </div>
+              </>
+            )}
           </div>
+        </div>
+
+        {statusFilter !== 'ALL' && (
+          <div className="px-5 py-2.5 bg-indigo-50/80 dark:bg-indigo-950/40 border-b border-indigo-100 dark:border-indigo-900/50 flex items-center justify-between text-xs text-indigo-700 dark:text-indigo-300">
+            <span className="flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${statusFilter === 'ABSENT' ? 'bg-rose-500 animate-pulse' : statusFilter === 'PRESENT' ? 'bg-emerald-500' : 'bg-purple-500'}`}></span>
+              Showing: <strong>{statusFilter === 'PRESENT' ? 'Present / Half Day' : statusFilter === 'ABSENT' ? 'Absent Days' : statusFilter}</strong> ({displayedRecords.length} records)
+            </span>
+            <button onClick={() => { setStatusFilter('ALL'); setDateRange('Today'); }} className="font-bold underline hover:text-indigo-950 dark:hover:text-white">
+              Clear Filter (Back to Today)
+            </button>
+          </div>
+        )}
+
+
         <div className="p-1">
-          <DataTable columns={columns} data={records} isLoading={loading} searchable={false} emptyMessage="No attendance records found for this period." />
+          <DataTable 
+            columns={columns} 
+            data={displayedRecords} 
+            isLoading={loading} 
+            searchable={false} 
+            disableSorting={true}
+            emptyMessage={statusFilter !== 'ALL' ? `No ${statusFilter.toLowerCase().replace('_', ' ')} records found for this period.` : "No attendance records found for this period."} 
+            pageSize={1000} 
+          />
         </div>
       </div>
+      )}
 
       <AttendanceDetailsDrawer
         isOpen={isDrawerOpen}

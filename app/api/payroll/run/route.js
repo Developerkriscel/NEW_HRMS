@@ -82,12 +82,16 @@ export const POST = withApi(async (req) => {
     return fail('Valid month and year are required', 400)
   }
 
+  const allowOverwrite = Boolean(body.allowOverwrite)
+
   const protectedQuery = { tenantId, month, year, status: { $in: LOCKED_PAYSLIP_STATUSES }, deleted: false }
   if (selectedEmployeeIds.length > 0) {
     protectedQuery.employee = { $in: selectedEmployeeIds }
   }
 
-  const lockedPayslips = await Payslip.find(protectedQuery).select('employee status').lean()
+  const lockedPayslips = allowOverwrite
+    ? []
+    : await Payslip.find(protectedQuery).select('employee status').lean()
   const lockedEmployeeIds = new Set(lockedPayslips.map((payslip) => payslip.employee.toString()))
 
   const { periodStart, periodEnd } = getPayrollWindow(month, year)

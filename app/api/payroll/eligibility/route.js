@@ -67,6 +67,9 @@ function salaryStructureEffectiveDuringPeriodQuery(periodStart, periodEnd) {
   }
 }
 
+import '@/models/Department'
+import '@/models/Designation'
+
 export const GET = withApi(async (req) => {
   const session = await requireAuth()
   await requireRole(session, ['HR_MANAGER', 'COMPANY_ADMIN', 'SUPER_ADMIN'])
@@ -81,100 +84,164 @@ export const GET = withApi(async (req) => {
   }
 
   const { periodStart, periodEnd } = getPayrollWindow(month, year)
+  const totalDaysInMonth = new Date(year, month, 0).getDate()
 
   // 1. Get employees who were active during this payroll period
   const employees = await Employee.find({
     tenantId,
     deleted: false,
     ...employeeActiveDuringPeriodQuery(periodStart, periodEnd),
-  }).select('firstName lastName employeeCode ctc')
+  })
+    .select('firstName lastName employeeCode ctc department designation joiningDate')
+    .populate('department', 'name')
+    .populate('designation', 'name title')
+    .lean()
 
   const employeeIds = employees.map(e => e._id)
 
-  // 2. Find missing salary structures
+  // 2. Find salary structures
   const structures = await SalaryStructure.find({
     employee: { $in: employeeIds },
     tenantId,
     ...salaryStructureEffectiveDuringPeriodQuery(periodStart, periodEnd),
-  })
-  const structuredEmpIds = new Set(structures.map(s => s.employee.toString()))
-  
+  }).lean()
+  const structureMap = new Map(structures.map(s => [s.employee.toString(), s]))
+
   const missingSalary = []
   employees.forEach(emp => {
-    if (!structuredEmpIds.has(emp._id.toString())) {
-      // If no structure, check if they have a CTC on their profile as a fallback
-      if (!emp.ctc || emp.ctc <= 0) {
-        missingSalary.push({ _id: emp._id, name: `${emp.firstName} ${emp.lastName}`, code: emp.employeeCode })
-      }
+    const hasStructure = structureMap.has(emp._id.toString())
+    if (!hasStructure && (!emp.ctc || emp.ctc <= 0)) {
+      missingSalary.push({ _id: emp._id, name: `${emp.firstName} ${emp.lastName}`, code: emp.employeeCode })
     }
   })
 
-  // 3. Find missing attendance (employees with 0 attendance records for the month)
-  const monthStart = periodStart
-  const monthEnd = periodEnd
+  // 3. Find attendance summary for each employee
+  const monthStart = new Date(year, month - 1, 1, 0, 0, 0, 0)
+  const monthEnd = new Date(year, month, 0, 23, 59, 59, 999)
   
-  const attendanceRecords = await Attendance.aggregate([
-    {
-      $match: {
-        tenantId,
-        date: { $gte: monthStart, $lte: monthEnd },
-        employee: { $in: employeeIds }
-      }
-    },
-    {
-      $group: {
-        _id: '$employee',
-        count: { $sum: 1 }
-      }
+  const attendanceRecords = await Attendance.find({
+    tenantId,
+    date: { $gte: monthStart, $lte: monthEnd },
+    employee: { $in: employeeIds },
+    deleted: false,
+  }).select('employee status date').lean()
+  
+  const attendanceMap = new Map()
+  for (const record of attendanceRecords) {
+    const empIdStr = record.employee.toString()
+    if (!attendanceMap.has(empIdStr)) {
+      attendanceMap.set(empIdStr, {
+        presentDays: 0,
+        halfDays: 0,
+        leaveDays: 0,
+        absentDays: 0,
+        totalLogged: 0,
+      })
     }
-  ])
-  
-  const attendanceMap = new Set(attendanceRecords.map(a => a._id.toString()))
+    const stat = attendanceMap.get(empIdStr)
+    stat.totalLogged++
+    if (record.status === 'PRESENT' || record.status === 'WFH') {
+      stat.presentDays++
+    } else if (record.status === 'HALF_DAY') {
+      stat.halfDays++
+    } else if (record.status === 'ON_LEAVE') {
+      stat.leaveDays++
+    } else if (record.status === 'ABSENT' || record.status === 'NOT_MARKED') {
+      stat.absentDays++
+    }
+  }
+
   const missingAttendance = []
-  
   employees.forEach(emp => {
-    if (!attendanceMap.has(emp._id.toString())) {
+    const att = attendanceMap.get(emp._id.toString())
+    if (!att || att.totalLogged === 0) {
       missingAttendance.push({ _id: emp._id, name: `${emp.firstName} ${emp.lastName}`, code: emp.employeeCode })
     }
   })
 
+  // 4. Find all existing payslips for the month (locked vs draft)
   const existingPayslips = await Payslip.find({
     tenantId,
     month,
     year,
     deleted: false,
     employee: { $in: employeeIds },
-    status: { $in: LOCKED_PAYSLIP_STATUSES },
   })
-    .select('employee status netSalary updatedAt paymentDate')
+    .select('employee status netSalary grossSalary updatedAt paymentDate')
     .lean()
 
-  const employeeById = new Map(employees.map((employee) => [employee._id.toString(), employee]))
-  const lockedEmployeeIds = new Set(existingPayslips.map((payslip) => payslip.employee.toString()))
-  const missingSalaryIds = new Set(missingSalary.map((employee) => employee._id.toString()))
-  const blockedPayslips = existingPayslips.map((payslip) => {
-    const employee = employeeById.get(payslip.employee.toString())
+  const payslipMap = new Map(existingPayslips.map(p => [p.employee.toString(), p]))
+  const lockedEmployeeIds = new Set(
+    existingPayslips
+      .filter(p => LOCKED_PAYSLIP_STATUSES.includes(p.status))
+      .map(p => p.employee.toString())
+  )
+  const missingSalaryIds = new Set(missingSalary.map(e => e._id.toString()))
+
+  const employeeById = new Map(employees.map(e => [e._id.toString(), e]))
+  const blockedPayslips = existingPayslips
+    .filter(p => LOCKED_PAYSLIP_STATUSES.includes(p.status))
+    .map(payslip => {
+      const employee = employeeById.get(payslip.employee.toString())
+      return {
+        employeeId: payslip.employee,
+        name: employee ? `${employee.firstName} ${employee.lastName}` : 'Employee',
+        code: employee?.employeeCode || '',
+        status: payslip.status,
+        netSalary: payslip.netSalary || 0,
+        paymentDate: payslip.paymentDate || null,
+        updatedAt: payslip.updatedAt || null,
+      }
+    })
+
+  // 5. Build rich employee list for frontend selection & review
+  const employeeList = employees.map(emp => {
+    const empIdStr = emp._id.toString()
+    const att = attendanceMap.get(empIdStr) || { presentDays: 0, halfDays: 0, leaveDays: 0, absentDays: 0, totalLogged: 0 }
+    const payslip = payslipMap.get(empIdStr)
+    const structure = structureMap.get(empIdStr)
+    const ctc = Number(structure?.ctc || emp.ctc || 0)
+    const monthlyCtc = Math.round(ctc / 12)
+    const hasSalary = !missingSalaryIds.has(empIdStr)
+    const isLocked = lockedEmployeeIds.has(empIdStr)
+    const isDraft = payslip?.status === 'DRAFT'
+    const isProcessable = hasSalary && !isLocked
+
+    const effectiveDays = att.presentDays + (att.halfDays * 0.5) + att.leaveDays
+    const payableDays = Math.max(0, Math.min(totalDaysInMonth, totalDaysInMonth - att.absentDays))
+
     return {
-      employeeId: payslip.employee,
-      name: employee ? `${employee.firstName} ${employee.lastName}` : 'Employee',
-      code: employee?.employeeCode || '',
-      status: payslip.status,
-      netSalary: payslip.netSalary || 0,
-      paymentDate: payslip.paymentDate || null,
-      updatedAt: payslip.updatedAt || null,
+      _id: emp._id,
+      name: `${emp.firstName} ${emp.lastName}`,
+      code: emp.employeeCode || '',
+      department: emp.department?.name || '',
+      designation: emp.designation?.title || emp.designation?.name || '',
+      ctc,
+      monthlyCtc,
+      presentDays: att.presentDays,
+      halfDays: att.halfDays,
+      leaveDays: att.leaveDays,
+      absentDays: att.absentDays,
+      totalLogged: att.totalLogged,
+      effectiveDays,
+      payableDays,
+      payslipStatus: payslip?.status || null,
+      isLocked,
+      isDraft,
+      hasSalary,
+      isProcessable,
     }
   })
 
   const totalSalaryEligible = employees.length - missingSalary.length
-  const totalProcessable = employees.filter((employee) => (
-    !missingSalaryIds.has(employee._id.toString())
-    && !lockedEmployeeIds.has(employee._id.toString())
-  )).length
+  const totalProcessable = employeeList.filter(e => e.isProcessable).length
 
   return ok({
     totalEmployees: employees.length,
     totalEligible: Math.max(0, totalSalaryEligible),
     totalProcessable: Math.max(0, totalProcessable),
+    totalDaysInMonth,
+    employees: employeeList,
     missingSalary,
     missingAttendance,
     blockedPayslips,

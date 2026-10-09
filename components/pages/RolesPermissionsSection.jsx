@@ -25,7 +25,7 @@ export function RolesPermissionsSection() {
       })
       .finally(() => setLoading(false))
   }
-  useEffect(load, [])
+  useEffect(() => { load() }, [])
 
   async function changeRole(employeeId, role) {
     setSavingId(employeeId)

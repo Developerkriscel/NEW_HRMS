@@ -47,7 +47,7 @@ export default function PlanDetailPage() {
       })
       .finally(() => setLoading(false))
   }
-  useEffect(load, [id])
+  useEffect(() => { load() }, [id])
 
   async function saveLimits() {
     setSavingLimits(true)

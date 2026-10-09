@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { Receipt, Plus, X } from 'lucide-react'
 import { Badge } from '@/components/common/Badge'
 import { DataTable } from '@/components/tables/DataTable'
@@ -14,6 +13,7 @@ const CATEGORIES = ['TRAVEL', 'FOOD', 'ACCOMMODATION', 'OFFICE_SUPPLIES', 'OTHER
 export function EmployeeExpensesWorkspace() {
   const [expenses, setExpenses] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -24,24 +24,35 @@ export function EmployeeExpensesWorkspace() {
     setMounted(true)
   }, [])
 
-  function load() {
-    setLoading(true)
-    expenseApi.list({ size: 100, myExpenses: true })
+  function load({ silent = false } = {}) {
+    if (silent) setRefreshing(true)
+    else setLoading(true)
+
+    return expenseApi.list({ size: 100, myExpenses: true })
       .then((res) => setExpenses(res.data.data.content || []))
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (silent) setRefreshing(false)
+        else setLoading(false)
+      })
   }
 
-  useEffect(load, [])
+  useEffect(() => { load() }, [])
 
   async function submitExpense(e) {
     e.preventDefault()
     setSaving(true)
     setMessage('')
     try {
-      await expenseApi.submit({ ...form, amount: Number(form.amount) })
+      const res = await expenseApi.submit({ ...form, amount: Number(form.amount) })
+      const createdExpense = res.data.data
       setForm({ category: 'OTHER', amount: '', expenseDate: '', description: '', receiptNote: '' })
       setShowForm(false)
-      load()
+      if (createdExpense?._id) {
+        setExpenses((items) => [createdExpense, ...items])
+        load({ silent: true }).catch(() => {})
+      } else {
+        await load({ silent: true })
+      }
     } catch (err) {
       setMessage(err.response?.data?.message || 'Failed to submit expense')
     } finally {
@@ -52,8 +63,8 @@ export function EmployeeExpensesWorkspace() {
   const columns = [
     { header: 'Expense', accessor: 'category', render: (_, row) => (
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center shrink-0">
-          <Receipt className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+        <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center shrink-0">
+          <Receipt className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
         </div>
         <div>
           <p className="font-bold text-slate-800 dark:text-slate-100">{row.category.replace('_', ' ')}</p>
@@ -64,7 +75,11 @@ export function EmployeeExpensesWorkspace() {
     { header: 'Date', accessor: 'expenseDate', render: (v) => <span className="font-medium text-slate-600 dark:text-slate-300">{formatDate(v)}</span> },
     { header: 'Amount', accessor: 'amount', render: (v) => <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(v)}</span> },
     { header: 'Receipt', accessor: 'receiptNote', render: (v) => v ? <span className="text-sm font-medium text-slate-600 dark:text-slate-400">{v}</span> : <span className="text-sm text-slate-400">—</span> },
-    { header: 'Status', accessor: 'status', render: (v) => <Badge variant={v === 'APPROVED' ? 'success' : v === 'PENDING' ? 'warning' : 'danger'}>{v}</Badge> },
+    { header: 'Status', accessor: 'status', align: 'right', render: (v) => (
+      <div className="flex justify-end">
+        <Badge variant={v === 'APPROVED' ? 'success' : v === 'PENDING' ? 'warning' : 'danger'}>{v}</Badge>
+      </div>
+    ) },
   ]
 
   return (
@@ -153,6 +168,9 @@ export function EmployeeExpensesWorkspace() {
       )}
 
       <div className="pt-2">
+        {refreshing && (
+          <div className="mb-2 text-xs font-semibold text-slate-400">Refreshing in background...</div>
+        )}
         <DataTable columns={columns} data={expenses} isLoading={loading} searchPlaceholder="Search expense history..." emptyMessage="No expense claims found" />
       </div>
     </div>

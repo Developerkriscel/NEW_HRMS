@@ -24,6 +24,7 @@ export function DataTable({
   emptyMessage = 'No records found',
   className,
   pageSize = 5,
+  disableSorting = false,
 }) {
   const [search, setSearch] = useState('')
   const [sortKey, setSortKey] = useState(null)
@@ -34,7 +35,7 @@ export function DataTable({
     return collectSearchText(row).toLowerCase().includes(search.toLowerCase())
   })
 
-  const sorted = [...filtered].sort((a, b) => {
+  const sorted = disableSorting ? filtered : [...filtered].sort((a, b) => {
     if (!sortKey) return 0
     const aVal = a[sortKey]
     const bVal = b[sortKey]
@@ -85,16 +86,16 @@ export function DataTable({
               {columns.map((col) => (
                 <th
                   key={col.key || col.accessor}
-                  onClick={() => col.sortable !== false && col.accessor && handleSort(col.accessor)}
+                  onClick={() => !disableSorting && col.sortable !== false && col.accessor && handleSort(col.accessor)}
                   className={cn(
                     'px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-wider',
-                    col.sortable !== false && col.accessor ? 'cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200 transition-colors' : ''
+                    !disableSorting && col.sortable !== false && col.accessor ? 'cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200 transition-colors' : ''
                   )}
                   style={{ width: col.width }}
                 >
                   <div className={cn("flex items-center gap-1.5", col.align === 'right' && "justify-end")}>
                     {col.header}
-                    {col.accessor && sortKey === col.accessor && (
+                    {!disableSorting && col.accessor && sortKey === col.accessor && (
                       sortDir === 'asc'
                         ? <ChevronUp className="w-3.5 h-3.5 text-blue-500" />
                         : <ChevronDown className="w-3.5 h-3.5 text-blue-500" />

@@ -12,35 +12,45 @@ export function EmployeePerformanceWorkspace() {
   const [kras, setKras] = useState([])
   const [reviews, setReviews] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [progressByKra, setProgressByKra] = useState({})
 
-  function load() {
-    setLoading(true)
-    Promise.all([kraApi.list({ size: 100 }), performanceReviewApi.list({ size: 100 })])
+  function load({ silent = false } = {}) {
+    if (silent) setRefreshing(true)
+    else setLoading(true)
+    return Promise.all([kraApi.list({ size: 100 }), performanceReviewApi.list({ size: 100 })])
       .then(([kraRes, reviewRes]) => {
         setKras(kraRes.data.data.content || [])
         setReviews(reviewRes.data.data.content || [])
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (silent) setRefreshing(false)
+        else setLoading(false)
+      })
   }
 
-  useEffect(load, [])
+  useEffect(() => { load() }, [])
 
   async function updateProgress(kra, submit = false) {
     const draft = progressByKra[kra._id] || {}
     setSaving(true)
     setMessage('')
     try {
-      await kraApi.updateProgress(kra._id, {
-        progressPercent: draft.progressPercent === undefined ? kra.progressPercent : Number(draft.progressPercent),
+      const nextProgress = draft.progressPercent === undefined ? kra.progressPercent : Number(draft.progressPercent)
+      const res = await kraApi.updateProgress(kra._id, {
+        progressPercent: nextProgress,
         note: draft.note || '',
         submit,
       })
+      const updated = res.data?.data
+      setKras((current) => current.map((item) => item._id === kra._id
+        ? { ...item, ...(updated || {}), progressPercent: nextProgress, status: submit ? (updated?.status || 'SUBMITTED') : (updated?.status || item.status) }
+        : item))
       setProgressByKra((current) => ({ ...current, [kra._id]: { progressPercent: '', note: '' } }))
       setMessage(submit ? 'KRA submitted for review' : 'KRA progress updated')
-      load()
+      load({ silent: true }).catch(() => {})
     } catch (err) {
       setMessage(err.response?.data?.message || 'Failed to update KRA')
     } finally {
@@ -90,6 +100,7 @@ export function EmployeePerformanceWorkspace() {
         </div>
       </div>
       {message && <p className="text-sm text-slate-500 dark:text-slate-400">{message}</p>}
+      {refreshing && <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Refreshing in background...</p>}
       <DataTable columns={kraColumns} data={kras} isLoading={loading} searchPlaceholder="Search KRAs..." emptyMessage="No KRAs assigned" />
       <DataTable columns={reviewColumns} data={reviews} isLoading={loading} searchPlaceholder="Search reviews..." emptyMessage="No submitted reviews found" />
     </div>

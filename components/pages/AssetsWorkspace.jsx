@@ -16,6 +16,7 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
   const [requests, setRequests] = useState([])
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
 
@@ -44,9 +45,10 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
   const [recoverCondition, setRecoverCondition] = useState('Good')
   const [recoverStatus, setRecoverStatus] = useState('AVAILABLE')
 
-  function load() {
-    setLoading(true)
-    Promise.all([
+  function load({ silent = false } = {}) {
+    if (silent) setRefreshing(true)
+    else setLoading(true)
+    return Promise.all([
       assetApi.list(),
       assetApi.listRequests({ size: 100 }),
       reviewMode ? employeeApi.getAll({ size: 50 }).catch(() => ({ data: { data: { content: [] } } })) : Promise.resolve({ data: { data: { content: [] } } })
@@ -58,10 +60,13 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
           setEmployees(empRes.data.data.content)
         }
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (silent) setRefreshing(false)
+        else setLoading(false)
+      })
   }
 
-  useEffect(load, [reviewMode])
+  useEffect(() => { load() }, [reviewMode])
 
   // KPIs
   const totalAssets = assets.length
@@ -75,11 +80,13 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
     setSaving(true)
     setMessage('')
     try {
-      await assetApi.request(requestForm)
+      const res = await assetApi.request(requestForm)
+      const createdRequest = res.data.data
       setRequestForm({ assetName: '', type: 'NEW', reason: '' })
       setMessage('Asset request submitted successfully')
       setShowRequestForm(false)
-      load()
+      if (createdRequest?._id) setRequests(prev => [createdRequest, ...prev])
+      load({ silent: true })
     } catch (err) {
       setMessage(err.response?.data?.message || 'Failed to submit request')
     } finally {
@@ -98,7 +105,7 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
       setReportNote('')
       setMessage('Asset reported and replacement request opened')
       setShowReportForm(false)
-      load()
+      load({ silent: true })
     } catch (err) {
       setMessage(err.response?.data?.message || 'Failed to report asset')
     } finally {
@@ -112,10 +119,12 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
     setSaving(true)
     setMessage('')
     try {
-      await assetApi.create(addForm)
+      const res = await assetApi.create(addForm)
+      const createdAsset = res.data.data
       setAddForm({ assetTag: '', name: '', category: 'Laptop', condition: 'Good', details: '', imageUrl: '' })
       setShowAddForm(false)
-      load()
+      if (createdAsset?._id) setAssets(prev => [createdAsset, ...prev])
+      load({ silent: true })
     } catch (err) {
       setMessage(err.response?.data?.message || 'Failed to add asset')
     } finally {
@@ -147,7 +156,7 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
       setShowAssignForm(false)
       setAssignAssetId('')
       setAssignEmployeeId('')
-      load()
+      load({ silent: true })
     } catch (err) {
       setMessage(err.response?.data?.message || 'Failed to assign asset')
     } finally {
@@ -164,7 +173,7 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
       await assetApi.recover(recoverAssetId, { status: recoverStatus, condition: recoverCondition })
       setShowRecoverForm(false)
       setRecoverAssetId('')
-      load()
+      load({ silent: true })
     } catch (err) {
       setMessage(err.response?.data?.message || 'Failed to recover asset')
     } finally {
@@ -177,7 +186,8 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
     setSaving(true)
     try {
       await assetApi.delete(id)
-      load()
+      setAssets(prev => prev.filter(asset => asset._id !== id))
+      load({ silent: true })
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to delete asset')
     } finally {
@@ -314,6 +324,17 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
     { label: 'Needs Attention', value: damagedAssets, icon: Wrench, color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-500/10' },
   ]
 
+  const tabSwitcher = (
+    <div className="flex bg-slate-100/50 dark:bg-slate-800/50 p-1 rounded-xl w-fit border border-slate-200/50 dark:border-slate-700/50 backdrop-blur-xl">
+      <button onClick={() => setActiveTab('directory')} className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-bold text-xs transition-all duration-300 ${activeTab === 'directory' ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-slate-200 dark:ring-slate-700' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800'}`}>
+        <Laptop className="w-3.5 h-3.5" /> {reviewMode ? 'Directory' : 'My Assets'}
+      </button>
+      <button onClick={() => setActiveTab('requests')} className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-bold text-xs transition-all duration-300 ${activeTab === 'requests' ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-slate-200 dark:ring-slate-700' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800'}`}>
+        <Package className="w-3.5 h-3.5" /> Requests {requests.filter(r => r.status === 'PENDING').length > 0 && <span className="bg-rose-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{requests.filter(r => r.status === 'PENDING').length}</span>}
+      </button>
+    </div>
+  )
+
   return (
     <div className="animate-fade-in space-y-6 pb-12">
       {/* Header */}
@@ -327,15 +348,6 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex bg-slate-100/50 dark:bg-slate-800/50 p-1 rounded-xl w-fit border border-slate-200/50 dark:border-slate-700/50 backdrop-blur-xl">
-            <button onClick={() => setActiveTab('directory')} className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-bold text-xs transition-all duration-300 ${activeTab === 'directory' ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-slate-200 dark:ring-slate-700' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800'}`}>
-              <Laptop className="w-3.5 h-3.5" /> {reviewMode ? 'Directory' : 'My Assets'}
-            </button>
-            <button onClick={() => setActiveTab('requests')} className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-bold text-xs transition-all duration-300 ${activeTab === 'requests' ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-slate-200 dark:ring-slate-700' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800'}`}>
-              <Package className="w-3.5 h-3.5" /> Requests {requests.filter(r => r.status === 'PENDING').length > 0 && <span className="bg-rose-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{requests.filter(r => r.status === 'PENDING').length}</span>}
-            </button>
-          </div>
-          
           {reviewMode && activeTab === 'directory' && (
             <button 
               className="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-xl font-bold text-sm transition-all shadow-[0_0_20px_-5px_rgba(79,70,229,0.5)] flex items-center gap-2" 
@@ -344,18 +356,18 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
               <Plus className="w-4 h-4" /> Add Asset
             </button>
           )}
-        </div>
 
-        {employeeMode && (
-          <div className="flex items-center gap-3">
-            <button className="bg-white hover:bg-slate-50 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 py-2 px-4 rounded-xl font-bold text-sm transition-all shadow-sm border border-slate-200 dark:border-slate-700 flex items-center gap-2" onClick={() => { setMessage(''); setShowReportForm(true); }}>
-              <AlertTriangle className="w-4 h-4 text-amber-500" /> Report Issue
-            </button>
-            <button className="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-xl font-bold text-sm transition-all shadow-[0_0_20px_-5px_rgba(79,70,229,0.5)] flex items-center gap-2" onClick={() => { setMessage(''); setShowRequestForm(true); }}>
-              <Plus className="w-4 h-4" /> Request Asset
-            </button>
-          </div>
-        )}
+          {employeeMode && (
+            <>
+              <button className="bg-violet-600 hover:bg-violet-700 text-white py-2.5 px-6 rounded-full font-bold text-sm transition-all shadow-[0_0_20px_-5px_rgba(124,58,237,0.5)] flex items-center" onClick={() => { setMessage(''); setShowReportForm(true); }}>
+                Report Issue
+              </button>
+              <button className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 px-6 rounded-full font-bold text-sm transition-all shadow-[0_0_20px_-5px_rgba(79,70,229,0.5)] flex items-center" onClick={() => { setMessage(''); setShowRequestForm(true); }}>
+                Request Asset
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* KPI Cards (Review Mode Only) */}
@@ -378,28 +390,32 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
         </div>
       )}
 
+      {refreshing && <p className="text-xs font-semibold text-slate-400">Refreshing in background...</p>}
+
       {/* Tables */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
-        {(!reviewMode || activeTab === 'directory') && (
-          <div className={reviewMode && activeTab !== 'directory' ? 'hidden' : 'block'}>
+        {activeTab === 'directory' && (
+          <div>
             <DataTable
               columns={assetColumns}
               data={assets}
               isLoading={loading}
               searchPlaceholder="Search assets..."
               emptyMessage="No assets found"
+              actions={tabSwitcher}
             />
           </div>
         )}
         
-        {(!reviewMode || activeTab === 'requests') && (
-          <div className={reviewMode && activeTab !== 'requests' ? 'hidden' : 'block'}>
+        {activeTab === 'requests' && (
+          <div>
             <DataTable
               columns={requestColumns}
               data={requests}
               isLoading={loading}
               searchPlaceholder="Search requests..."
               emptyMessage="No asset requests found"
+              actions={tabSwitcher}
             />
           </div>
         )}

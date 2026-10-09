@@ -95,15 +95,15 @@ const HR_NAV = [
 ]
 
 const MANAGER_NAV = [
-  { label: 'Dashboard', icon: 'LayoutDashboard', path: '/manager/dashboard' },
+  { label: 'My Dashboard', icon: 'LayoutDashboard', path: '/manager/dashboard' },
   { label: 'My Team', icon: 'Users', path: '/manager/team' },
-  { label: 'Leave & Approvals', icon: 'CalendarCheck', path: '/manager/leave' },
   { label: 'Attendance', icon: 'Clock', path: '/manager/attendance' },
+  { label: 'Leave & Approvals', icon: 'CalendarCheck', path: '/manager/leave' },
   { label: 'Reports', icon: 'BarChart2', path: '/manager/reports' },
-  { label: 'My Payslips', icon: 'Banknote', path: '/manager/payslips' },
-  { label: 'My Expenses', icon: 'Receipt', path: '/manager/expenses' },
-  { label: 'My Documents', icon: 'FileText', path: '/manager/documents' },
-  { label: 'My Assets', icon: 'Monitor', path: '/manager/assets' },
+  { label: 'Payslips', icon: 'Banknote', path: '/manager/payslips' },
+  { label: 'Expenses', icon: 'Receipt', path: '/manager/expenses' },
+  { label: 'Documents', icon: 'FileText', path: '/manager/documents' },
+  { label: 'Assets', icon: 'Monitor', path: '/manager/assets' },
   { label: 'Training', icon: 'GraduationCap', path: '/manager/training' },
   { label: 'Referrals', icon: 'UserPlus', path: '/manager/referrals' },
   { label: 'Offboarding', icon: 'LogOut', path: '/manager/offboarding' },

@@ -72,6 +72,8 @@ const AttendanceSchema = new mongoose.Schema(
 AttendanceSchema.index({ employee: 1, date: 1 }, { unique: true })
 AttendanceSchema.index({ tenantId: 1, date: 1 })
 AttendanceSchema.index({ tenantId: 1, date: -1 })
+AttendanceSchema.index({ tenantId: 1, employee: 1, date: -1 })
+AttendanceSchema.index({ tenantId: 1, employee: 1, checkInTime: -1 })
 AttendanceSchema.index({ tenantId: 1, regularizationStatus: 1, date: -1 })
 AttendanceSchema.index({ employee: 1, date: -1 })
 

@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { Plus, X, Calendar, Send, FileText } from 'lucide-react'
+import { Plus, X, Calendar, Send, FileText, Filter } from 'lucide-react'
 import { Badge } from '@/components/common/Badge'
+import { DataTable } from '@/components/tables/DataTable'
 import { leaveApi } from '@/services/leaveApi'
 import { teamRequestApi } from '@/services/teamRequestApi'
 import { formatDate } from '@/lib/utils'
@@ -12,7 +13,47 @@ import { Portal } from '@/components/common/Portal'
 
 const REQUEST_TYPES = ['SHIFT_CHANGE', 'OVERTIME', 'WORK_FROM_HOME', 'TRAVEL', 'DOCUMENT']
 
-export function EmployeeLeaveWorkspace({ headerAction }) {
+function matchesTimeFilter(dateVal, timeFilter) {
+  if (!timeFilter || timeFilter === 'All Time') return true
+  if (!dateVal) return true
+  const d = new Date(dateVal)
+  if (isNaN(d.getTime())) return true
+
+  const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+
+  if (timeFilter === 'Today') {
+    return d >= startOfToday && d <= endOfToday
+  }
+  if (timeFilter === 'Yesterday') {
+    const startOfYesterday = new Date(startOfToday)
+    startOfYesterday.setDate(startOfYesterday.getDate() - 1)
+    const endOfYesterday = new Date(startOfToday.getTime() - 1)
+    return d >= startOfYesterday && d <= endOfYesterday
+  }
+  if (timeFilter === 'This Week') {
+    const startOfWeek = new Date(startOfToday)
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay())
+    return d >= startOfWeek
+  }
+  if (timeFilter === 'This Month') {
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
+    return d >= startOfMonth
+  }
+  if (timeFilter === 'Last 6 Months') {
+    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 6, 1, 0, 0, 0, 0)
+    return d >= sixMonthsAgo
+  }
+  return true
+}
+
+function matchesStatusFilter(status, statusFilter) {
+  if (!statusFilter || statusFilter === 'ALL') return true
+  return status === statusFilter
+}
+
+export function EmployeeLeaveWorkspace({ headerAction, isHrPanel = false }) {
   const { user } = useAuthStore()
   const canSelfApprove = ['COMPANY_ADMIN', 'SUPER_ADMIN'].includes(user?.role)
 
@@ -20,36 +61,52 @@ export function EmployeeLeaveWorkspace({ headerAction }) {
   const [leaves, setLeaves] = useState([])
   const [types, setTypes] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [loadError, setLoadError] = useState(false)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ leaveTypeId: '', startDate: '', endDate: '', reason: '' })
+  const [form, setForm] = useState({ leaveTypeId: '', dayType: 'FULL_DAY', startDate: '', endDate: '', reason: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   // Requests State
   const [requests, setRequests] = useState([])
   const [reqLoading, setReqLoading] = useState(true)
+  const [reqRefreshing, setReqRefreshing] = useState(false)
   const [showReqForm, setShowReqForm] = useState(false)
   const [reqForm, setReqForm] = useState({ type: 'WORK_FROM_HOME', fromDate: '', toDate: '', reason: '', detailText: '' })
   const [reqSaving, setReqSaving] = useState(false)
   const [reqError, setReqError] = useState('')
 
+  // Filters (for HR Panel)
+  const [timeFilter, setTimeFilter] = useState('All Time')
+  const [statusFilter, setStatusFilter] = useState('ALL')
+
   // UI State
   const [activeTab, setActiveTab] = useState('leave')
   const [mounted, setMounted] = useState(false)
 
-  function load() {
-    setLoading(true)
+  function load({ silent = false } = {}) {
+    if (silent) setRefreshing(true)
+    else setLoading(true)
     setLoadError(false)
-    leaveApi.getMyLeaves({ size: 50 })
+    const leavesPromise = leaveApi.getMyLeaves({ size: 50 })
       .then((res) => setLeaves(res.data.data.content))
       .catch(() => setLoadError(true))
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (silent) setRefreshing(false)
+        else setLoading(false)
+      })
 
-    setReqLoading(true)
-    teamRequestApi.list({ size: 50 })
+    if (silent) setReqRefreshing(true)
+    else setReqLoading(true)
+    const requestsPromise = teamRequestApi.list({ size: 50 })
       .then((res) => setRequests(res.data.data.content || []))
-      .finally(() => setReqLoading(false))
+      .finally(() => {
+        if (silent) setReqRefreshing(false)
+        else setReqLoading(false)
+      })
+
+    return Promise.allSettled([leavesPromise, requestsPromise])
   }
 
   useEffect(() => {
@@ -63,10 +120,18 @@ export function EmployeeLeaveWorkspace({ headerAction }) {
     setSaving(true)
     setError('')
     try {
-      await leaveApi.apply(form)
+      const payload = {
+        ...form,
+        endDate: form.dayType === 'FULL_DAY' ? form.endDate : form.startDate,
+        halfDay: form.dayType !== 'FULL_DAY',
+        halfDayType: form.dayType === 'FULL_DAY' ? null : form.dayType
+      }
+      const res = await leaveApi.apply(payload)
       setShowForm(false)
-      setForm({ leaveTypeId: '', startDate: '', endDate: '', reason: '' })
-      load()
+      setForm({ leaveTypeId: '', dayType: 'FULL_DAY', startDate: '', endDate: '', reason: '' })
+      const createdLeave = res.data.data
+      if (createdLeave?._id) setLeaves(prev => [createdLeave, ...prev])
+      load({ silent: true })
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to apply for leave')
     } finally {
@@ -79,7 +144,7 @@ export function EmployeeLeaveWorkspace({ headerAction }) {
     setReqSaving(true)
     setReqError('')
     try {
-      await teamRequestApi.submit({
+      const res = await teamRequestApi.submit({
         type: reqForm.type,
         fromDate: reqForm.fromDate || null,
         toDate: reqForm.toDate || null,
@@ -88,7 +153,9 @@ export function EmployeeLeaveWorkspace({ headerAction }) {
       })
       setShowReqForm(false)
       setReqForm({ type: 'WORK_FROM_HOME', fromDate: '', toDate: '', reason: '', detailText: '' })
-      load()
+      const createdRequest = res.data.data
+      if (createdRequest?._id) setRequests(prev => [createdRequest, ...prev])
+      load({ silent: true })
     } catch (err) {
       setReqError(err.response?.data?.message || 'Failed to submit request')
     } finally {
@@ -121,13 +188,131 @@ export function EmployeeLeaveWorkspace({ headerAction }) {
     setRequests(prev => prev.map(item => item._id === id ? { ...item, status: 'REJECTED' } : item))
   }
 
-  const tabSwitcher = (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+  const leaveColumns = useMemo(() => [
+    { header: 'Leave Type', accessor: 'leaveType', render: (v) => <span className="font-medium text-slate-900 dark:text-white">{v?.name || 'Unknown'}</span> },
+    { header: 'Day Type', accessor: 'halfDay', render: (_, l) => <span className="text-sm text-slate-600 dark:text-slate-400">{!l.halfDay ? 'Full Day' : (l.halfDayType === 'FIRST_HALF' ? 'Half Day - First Half' : 'Half Day - Second Half')}</span> },
+    { header: 'Duration', accessor: 'startDate', render: (_, l) => (
+      <div className="flex flex-col gap-0.5">
+        <span className="font-medium text-sm whitespace-nowrap">{formatDate(l.startDate)} <span className="text-slate-300 dark:text-slate-600">→</span> {formatDate(l.endDate)}</span>
+        <span className="text-[11px] font-semibold text-slate-500">{l.numberOfDays} Day{l.numberOfDays > 1 ? 's' : ''}</span>
+      </div>
+    ) },
+    { header: 'Reason', accessor: 'reason', render: (v) => <span className="text-sm text-slate-600 dark:text-slate-400 max-w-xs truncate block" title={v}>{v || '—'}</span> },
+    { header: 'Status', accessor: 'status', align: 'right', render: (v, l) => (
+      <div className="flex items-center justify-end gap-3">
+        <Badge variant={v === 'APPROVED' ? 'success' : v === 'PENDING' ? 'warning' : 'danger'}>{v}</Badge>
+        {v === 'PENDING' && (
+          <div className="flex items-center gap-1.5 opacity-100">
+            <button onClick={() => handleCancelLeave(l._id)} className="text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 dark:text-rose-400 dark:bg-rose-500/10 dark:hover:bg-rose-500/20 px-3 py-1.5 rounded-lg">Cancel</button>
+            {canSelfApprove && (
+              <>
+                <button onClick={() => handleApproveLeave(l._id)} className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-extrabold text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20">Accept</button>
+                <button onClick={() => handleRejectLeave(l._id)} className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-extrabold text-red-700 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">Reject</button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    ) }
+  ], [canSelfApprove, leaves]) // eslint-disable-line
+
+  const requestColumns = useMemo(() => [
+    { header: 'Request Type', accessor: 'type', render: (v) => <span className="font-medium text-slate-900 dark:text-white capitalize">{v?.replace(/_/g, ' ')?.toLowerCase()}</span> },
+    { header: 'Duration', accessor: 'fromDate', render: (_, r) => (
+      r.fromDate && r.toDate ? (
+        <span className="font-medium text-sm whitespace-nowrap">{formatDate(r.fromDate)} <span className="text-slate-300 dark:text-slate-600">→</span> {formatDate(r.toDate)}</span>
+      ) : <span className="text-slate-400">—</span>
+    ) },
+    { header: 'Reason', accessor: 'reason', render: (v) => <span className="text-sm text-slate-600 dark:text-slate-400">{v || '—'}</span> },
+    { header: 'Status', accessor: 'status', align: 'right', render: (v, r) => (
+      <div className="flex items-center justify-end gap-3">
+        <Badge variant={v === 'APPROVED' ? 'success' : v === 'PENDING' ? 'warning' : 'danger'}>{v}</Badge>
+        {v === 'PENDING' && canSelfApprove && (
+          <div className="flex items-center gap-1.5 opacity-100">
+            <button onClick={() => handleApproveRequestDirect(r._id)} className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-extrabold text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20">Accept</button>
+            <button onClick={() => handleRejectRequestDirect(r._id)} className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-extrabold text-red-700 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">Reject</button>
+          </div>
+        )}
+      </div>
+    ) }
+  ], [canSelfApprove, requests]) // eslint-disable-line
+
+  const filteredLeaves = useMemo(() => {
+    if (!isHrPanel) return leaves
+    return leaves.filter(l => {
+      const dateVal = l.startDate || l.createdAt
+      const matchesTime = matchesTimeFilter(dateVal, timeFilter)
+      const matchesStatus = matchesStatusFilter(l.status, statusFilter)
+      return matchesTime && matchesStatus
+    })
+  }, [leaves, timeFilter, statusFilter, isHrPanel])
+
+  const filteredRequests = useMemo(() => {
+    if (!isHrPanel) return requests
+    return requests.filter(r => {
+      const dateVal = r.fromDate || r.createdAt
+      const matchesTime = matchesTimeFilter(dateVal, timeFilter)
+      const matchesStatus = matchesStatusFilter(r.status, statusFilter)
+      return matchesTime && matchesStatus
+    })
+  }, [requests, timeFilter, statusFilter, isHrPanel])
+
+  const actionToolbar = (
+    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
       <div className="flex space-x-1 p-1 bg-slate-100 dark:bg-slate-800/50 rounded-xl w-fit">
         <button onClick={() => setActiveTab('leave')} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'leave' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}>Leave History</button>
         <button onClick={() => setActiveTab('request')} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'request' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}>My Requests</button>
       </div>
-      {headerAction && <div>{headerAction}</div>}
+
+      <div className="flex flex-wrap items-center gap-3">
+        {isHrPanel && (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 shadow-sm">
+              <Filter className="w-3.5 h-3.5 text-slate-400" />
+              <select 
+                value={timeFilter}
+                onChange={(e) => setTimeFilter(e.target.value)}
+                className="bg-transparent text-xs font-semibold text-slate-700 dark:text-slate-300 outline-none cursor-pointer"
+              >
+                <option>All Time</option>
+                <option>Today</option>
+                <option>Yesterday</option>
+                <option>This Week</option>
+                <option>This Month</option>
+                <option>Last 6 Months</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 shadow-sm">
+              <select 
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="bg-transparent text-xs font-semibold text-slate-700 dark:text-slate-300 outline-none cursor-pointer"
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="PENDING">Pending</option>
+                <option value="APPROVED">Approved</option>
+                <option value="REJECTED">Rejected</option>
+              </select>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center gap-2.5">
+          <button
+            className="bg-violet-600 hover:bg-violet-700 text-white py-2 px-3.5 rounded-lg font-bold text-xs transition-all shadow-[0_0_16px_-5px_rgba(124,58,237,0.5)] flex items-center justify-center shrink-0"
+            onClick={() => { setReqError(''); setShowReqForm(true) }}
+          >
+            New Request
+          </button>
+          <button
+            className="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-3.5 rounded-lg font-bold text-xs transition-all shadow-[0_0_16px_-5px_rgba(79,70,229,0.5)] flex items-center justify-center shrink-0"
+            onClick={() => { setError(''); setShowForm(true) }}
+          >
+            Apply for Leave
+          </button>
+        </div>
+      </div>
     </div>
   )
 
@@ -138,142 +323,38 @@ export function EmployeeLeaveWorkspace({ headerAction }) {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full">Leave & Requests</h1>
           </div>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Manage your time-off and submit team requests</p>
         </div>
-        <div className="flex items-center gap-2.5 mt-5 sm:mt-6">
-          <button
-            className="bg-white hover:bg-slate-50 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 py-2 px-3.5 rounded-lg font-bold text-xs transition-all shadow-sm border border-slate-200 dark:border-slate-700 flex items-center gap-1.5"
-            onClick={() => { setReqError(''); setShowReqForm(true) }}
-          >
-            <Send className="w-3.5 h-3.5" /> New Request
-          </button>
-          <button
-            className="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-3.5 rounded-lg font-bold text-xs transition-all shadow-[0_0_16px_-5px_rgba(79,70,229,0.5)] flex items-center gap-1.5"
-            onClick={() => { setError(''); setShowForm(true) }}
-          >
-            <Plus className="w-3.5 h-3.5" /> Apply for Leave
-          </button>
-        </div>
+        {headerAction && (
+          <div className="flex items-center gap-3">
+            {headerAction}
+          </div>
+        )}
       </div>
 
       {activeTab === 'leave' && (
         <div className="space-y-5 animate-fade-in">
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2"><Calendar className="w-5 h-5 text-indigo-500" /> Leave History</h2>
-          {tabSwitcher}
+          {refreshing && <p className="text-xs font-semibold text-slate-400">Refreshing in background...</p>}
+          {actionToolbar}
           {loading ? (
             <p className="text-sm text-slate-400">Loading leaves...</p>
           ) : loadError ? (
             <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm p-8 text-center text-sm text-red-500">
               Failed to load leave requests — try refreshing
             </div>
-          ) : leaves.length === 0 ? (
-            <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm p-8 text-center text-sm text-slate-400">
-              No leave requests yet
-            </div>
           ) : (
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden divide-y divide-slate-50 dark:divide-slate-800/50">
-              {leaves.map((l) => (
-                <div key={l._id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 group">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center shrink-0">
-                      <Calendar className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                    </div>
-                    <div>
-                      <p className="font-bold text-slate-900 dark:text-white text-sm">{l.leaveType?.name}</p>
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                        <span className="flex items-center gap-1.5 font-medium">
-                          {formatDate(l.startDate)}
-                          <span className="text-slate-300 dark:text-slate-600">→</span>
-                          {formatDate(l.endDate)}
-                        </span>
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-xs font-semibold">
-                          {l.numberOfDays} Day{l.numberOfDays > 1 ? 's' : ''}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-end sm:justify-start gap-3">
-                    <Badge variant={l.status === 'APPROVED' ? 'success' : l.status === 'PENDING' ? 'warning' : 'danger'}>
-                      {l.status}
-                    </Badge>
-                    {l.status === 'PENDING' && (
-                      <div className="flex items-center gap-1.5 opacity-100">
-                        <button
-                          onClick={() => handleCancelLeave(l._id)}
-                          className="text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 dark:text-rose-400 dark:bg-rose-500/10 dark:hover:bg-rose-500/20 px-3 py-1.5 rounded-lg"
-                        >
-                          Cancel
-                        </button>
-                        {canSelfApprove && (
-                          <>
-                            <button onClick={() => handleApproveLeave(l._id)} className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-extrabold text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20">
-                              Accept
-                            </button>
-                            <button onClick={() => handleRejectLeave(l._id)} className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-extrabold text-red-700 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">
-                              Reject
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <DataTable columns={leaveColumns} data={filteredLeaves} pageSize={100} />
           )}
         </div>
       )}
 
       {activeTab === 'request' && (
         <div className="space-y-5 animate-fade-in">
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2"><FileText className="w-5 h-5 text-indigo-500" /> My Requests</h2>
-          {tabSwitcher}
+          {reqRefreshing && <p className="text-xs font-semibold text-slate-400">Refreshing in background...</p>}
+          {actionToolbar}
           {reqLoading ? (
             <p className="text-sm text-slate-400">Loading requests...</p>
-          ) : requests.length === 0 ? (
-            <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm p-8 text-center text-sm text-slate-400">
-              No requests yet
-            </div>
           ) : (
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden divide-y divide-slate-50 dark:divide-slate-800/50">
-              {requests.map((r) => (
-                <div key={r._id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 group">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center shrink-0">
-                      <FileText className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                    </div>
-                    <div>
-                      <p className="font-bold text-slate-900 dark:text-white text-sm">{r.type.replace(/_/g, ' ')}</p>
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                        {r.fromDate && r.toDate && (
-                          <span className="flex items-center gap-1.5 font-medium">
-                            {formatDate(r.fromDate)}
-                            <span className="text-slate-300 dark:text-slate-600">→</span>
-                            {formatDate(r.toDate)}
-                          </span>
-                        )}
-                        <span className="text-slate-500">{r.reason}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-end sm:justify-start gap-3">
-                    <Badge variant={r.status === 'APPROVED' ? 'success' : r.status === 'PENDING' ? 'warning' : 'danger'}>
-                      {r.status}
-                    </Badge>
-                    {r.status === 'PENDING' && canSelfApprove && (
-                      <div className="flex items-center gap-1.5 opacity-100">
-                        <button onClick={() => handleApproveRequestDirect(r._id)} className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-extrabold text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20">
-                          Accept
-                        </button>
-                        <button onClick={() => handleRejectRequestDirect(r._id)} className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-extrabold text-red-700 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">
-                          Reject
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <DataTable columns={requestColumns} data={filteredRequests} pageSize={100} />
           )}
         </div>
       )}
@@ -302,22 +383,34 @@ export function EmployeeLeaveWorkspace({ headerAction }) {
             <form onSubmit={handleApplyLeave} className="p-6 space-y-5">
               {error && <div className="p-3 rounded-xl text-sm font-medium border bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20">{error}</div>}
               
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 ml-1">Leave Type</label>
-                <select required className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all appearance-none" value={form.leaveTypeId} onChange={(e) => setForm({ ...form, leaveTypeId: e.target.value })}>
-                  <option value="" disabled>Select Leave Type</option>
-                  {types.map((t) => <option key={t._id} value={t._id}>{t.name}</option>)}
-                </select>
-              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 ml-1">Start Date</label>
-                  <input required type="date" className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 ml-1">Leave Type</label>
+                  <select required className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all appearance-none" value={form.leaveTypeId} onChange={(e) => setForm({ ...form, leaveTypeId: e.target.value })}>
+                    <option value="" disabled>Select Leave Type</option>
+                    {types.map((t) => <option key={t._id} value={t._id}>{t.name}</option>)}
+                  </select>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 ml-1">End Date</label>
-                  <input required type="date" className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 ml-1">Day Type</label>
+                  <select required className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all appearance-none" value={form.dayType} onChange={(e) => setForm({ ...form, dayType: e.target.value })}>
+                    <option value="FULL_DAY">Full Day</option>
+                    <option value="FIRST_HALF">Half Day - First Half</option>
+                    <option value="SECOND_HALF">Half Day - Second Half</option>
+                  </select>
                 </div>
+              </div>
+              <div className={`grid ${form.dayType === 'FULL_DAY' ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 ml-1">{form.dayType === 'FULL_DAY' ? 'Start Date' : 'Date'}</label>
+                  <input required type="date" className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value, ...(form.dayType !== 'FULL_DAY' && { endDate: e.target.value }) })} />
+                </div>
+                {form.dayType === 'FULL_DAY' && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 ml-1">End Date</label>
+                    <input required type="date" className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
+                  </div>
+                )}
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 ml-1">Reason</label>

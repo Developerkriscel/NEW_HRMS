@@ -35,8 +35,7 @@ export const POST = withApi(async (req, { params }) => {
   if (!version || version.status !== OFFER_VERSION_STATUS.APPROVED) {
     return fail('Only an approved offer can be sent', 400, 'INVALID_STATE')
   }
-  const reqBody = await req.json().catch(() => ({}))
-  if (!offer.candidateId?.email && !reqBody.candidateEmail) return fail('Candidate email is missing. Add candidate email before sending an offer.', 400, 'VALIDATION_ERROR')
+  if (!offer.candidateId?.email && !body.candidateEmail) return fail('Candidate email is missing. Add candidate email before sending an offer.', 400, 'VALIDATION_ERROR')
   await assertTenantMailReady(tenantId)
 
   const actorName = await getActorName(session)
@@ -53,9 +52,9 @@ export const POST = withApi(async (req, { params }) => {
       version,
       offer,
       portalUrl,
-      subject: reqBody?.subject || null,
-      body: reqBody?.body || null,
-      candidateEmail: reqBody?.candidateEmail || null,
+      subject: body?.subject || null,
+      body: body?.body || null,
+      candidateEmail: body?.candidateEmail || null,
     })
   } catch (err) {
     await revokeOfferTokens(tenantId, offer._id)

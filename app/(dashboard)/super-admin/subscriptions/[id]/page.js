@@ -37,7 +37,7 @@ export default function SubscriptionDetailPage() {
       .catch((err) => { if (err.response?.status === 403) setForbidden(true) })
       .finally(() => setLoading(false))
   }
-  useEffect(load, [id])
+  useEffect(() => { load() }, [id])
 
   useEffect(() => {
     tenantApi.getPlans().then((res) => setPlans(res.data.data || [])).catch(() => setPlans([]))

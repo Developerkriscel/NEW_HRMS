@@ -47,7 +47,7 @@ export default function SubscriptionsTab() {
       })
       .finally(() => setLoading(false))
   }
-  useEffect(load, [page, status])
+  useEffect(() => { load() }, [page, status])
 
   if (forbidden) return <PermissionDenied requiredPermission="subscription.view" message="You don't have permission to view subscriptions." />
 

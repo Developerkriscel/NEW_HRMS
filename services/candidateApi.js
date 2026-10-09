@@ -1,7 +1,7 @@
 import api from './api'
 
 export const candidateApi = {
-  list: (params) => api.get('/recruitment/candidates', { params }),
+  list: (params, config = {}) => api.get('/recruitment/candidates', { ...config, params }),
   get: (id) => api.get(`/recruitment/candidates/${id}`),
   create: (data) => api.post('/recruitment/candidates', data),
   bulkApply: (data) => api.post('/recruitment/candidates/bulk-apply', data),

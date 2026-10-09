@@ -87,7 +87,7 @@ export function CandidateAssessmentPortal({ token }) {
       .catch((err) => setError(err.response?.data?.message || 'This assessment link is invalid'))
       .finally(() => setLoading(false))
   }
-  useEffect(load, [token])
+  useEffect(() => { load() }, [token])
 
   useEffect(() => {
     if (!inProgress) return

@@ -36,7 +36,7 @@ export function CandidatePreboardingPortal({ token }) {
       .catch((err) => setError(err.response?.data?.message || 'This form link is invalid'))
       .finally(() => setLoading(false))
   }
-  useEffect(load, [token])
+  useEffect(() => { load() }, [token])
 
   if (loading) return <Centered><p className="text-slate-400">Loading...</p></Centered>
   if (error) return <Centered><Card className="text-center"><XCircle className="w-10 h-10 text-slate-300 mx-auto mb-3" /><p className="text-slate-500 dark:text-slate-400">{error}</p></Card></Centered>
@@ -336,7 +336,7 @@ function DocumentsView({ token, candidateName }) {
     setLoading(true)
     publicPreboardingApi.get(token).then((res) => setDocs(res.data.data.documents || [])).catch(() => setError('Could not load documents')).finally(() => setLoading(false))
   }
-  useEffect(load, [token])
+  useEffect(() => { load() }, [token])
 
   async function handleUpload(requirementId, file) {
     if (!file) return

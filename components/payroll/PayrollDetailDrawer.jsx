@@ -160,16 +160,21 @@ export function PayrollDetailDrawer({ isOpen, onClose, payslip, onStatusChange, 
         </div>
 
         {/* Footer Actions */}
-        <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex justify-end gap-2">
-          {['FINALIZED', 'PAID'].includes(payslip.status) && (
+        <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex justify-end gap-2 flex-wrap">
+          {['APPROVED', 'FINALIZED', 'PAID'].includes(payslip.status) && (
             <button onClick={() => onDownload?.(payslip._id)} className="px-4 py-2 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl font-bold transition-all text-sm flex items-center gap-2">
               <Download className="w-4 h-4" /> PDF
             </button>
           )}
           {payslip.status === 'DRAFT' && (
-            <button onClick={() => onStatusChange(payslip._id, 'REVIEW')} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all text-sm flex items-center gap-2">
-              Send to Review
-            </button>
+            <>
+              <button onClick={() => onStatusChange(payslip._id, 'REVIEW')} className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 rounded-xl font-bold transition-all text-sm flex items-center gap-2">
+                Send to Review
+              </button>
+              <button onClick={() => onStatusChange(payslip._id, 'APPROVED')} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all text-sm flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4" /> Approve
+              </button>
+            </>
           )}
           {payslip.status === 'REVIEW' && (
             <button onClick={() => onStatusChange(payslip._id, 'APPROVED')} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all text-sm flex items-center gap-2">
@@ -177,9 +182,14 @@ export function PayrollDetailDrawer({ isOpen, onClose, payslip, onStatusChange, 
             </button>
           )}
           {payslip.status === 'APPROVED' && (
-            <button onClick={() => onStatusChange(payslip._id, 'FINALIZED')} className="px-4 py-2 bg-indigo-900 hover:bg-indigo-800 text-white rounded-xl font-bold transition-all text-sm flex items-center gap-2">
-              Finalize
-            </button>
+            <>
+              <button onClick={() => onStatusChange(payslip._id, 'FINALIZED')} className="px-4 py-2 bg-indigo-900 hover:bg-indigo-800 text-white rounded-xl font-bold transition-all text-sm flex items-center gap-2">
+                Finalize
+              </button>
+              <button onClick={() => onStatusChange(payslip._id, 'PAID')} className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold transition-all text-sm flex items-center gap-2">
+                <CreditCard className="w-4 h-4" /> Mark Paid
+              </button>
+            </>
           )}
           {payslip.status === 'FINALIZED' && (
             <button onClick={() => onStatusChange(payslip._id, 'PAID')} className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold transition-all text-sm flex items-center gap-2">

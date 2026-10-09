@@ -1,12 +1,4 @@
-'use client'
-
-import dynamic from 'next/dynamic'
-import { PageLoader } from '@/components/common/LoadingSpinner'
-
-const AssetsWorkspace = dynamic(
-  () => import('@/components/pages/AssetsWorkspace').then((mod) => mod.AssetsWorkspace),
-  { ssr: false, loading: () => <PageLoader /> }
-)
+import { AssetsWorkspace } from '@/components/pages/AssetsWorkspace'
 
 export default function HRAssetsPage() {
   return (

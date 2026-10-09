@@ -8,10 +8,10 @@ import Payslip from '@/models/Payslip'
 
 const STATUS_TRANSITIONS = {
   'REVIEW': ['DRAFT', 'PROCESSING'],
-  'APPROVED': ['REVIEW'],
-  'FINALIZED': ['APPROVED'],
-  'PAID': ['FINALIZED'],
-  'CANCELLED': ['DRAFT', 'REVIEW', 'APPROVED']
+  'APPROVED': ['DRAFT', 'PROCESSING', 'REVIEW'],
+  'FINALIZED': ['DRAFT', 'PROCESSING', 'REVIEW', 'APPROVED'],
+  'PAID': ['DRAFT', 'PROCESSING', 'REVIEW', 'APPROVED', 'FINALIZED'],
+  'CANCELLED': ['DRAFT', 'PROCESSING', 'REVIEW', 'APPROVED'],
 }
 
 export const PATCH = withApi(async (req, { params }) => {

@@ -46,7 +46,11 @@ export const POST = withApi(async (req) => {
   }
 
   const capturedLocation = normalizeAttendanceLocation(body)
-  const locationPolicy = await validateAttendanceLocationPolicy({ tenantId, location: capturedLocation })
+  const locationPolicy = await validateAttendanceLocationPolicy({
+    tenantId,
+    employeeId: session.userId,
+    location: capturedLocation,
+  })
   if (!locationPolicy.ok) {
     return fail(locationPolicy.message, 400, 'LOCATION_POLICY_VIOLATION', {
       status: locationPolicy.status,

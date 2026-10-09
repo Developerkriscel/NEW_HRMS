@@ -10,6 +10,13 @@ const RECRUITMENT_CACHE_TTL_MS = Number(process.env.NEXT_PUBLIC_RECRUITMENT_CACH
 function displayStatus(application, offer) {
   if (application.status === 'REJECTED' || application.status === 'WITHDRAWN') return 'Rejected'
   if (application.status === 'HIRED') return 'HIRED'
+
+  const stageName = String(application.stage || application.currentStageName || '').toLowerCase()
+  const isEarlyStage = stageName.includes('applied') || stageName.includes('screen') || stageName.includes('shortlist') || stageName.includes('interview') || stageName.includes('round') || stageName.includes('assessment')
+  if (isEarlyStage) {
+    return 'Pipeline'
+  }
+
   const offerStatus = offer?.status || offer?.offerStatus
   if (offerStatus && offerStatus !== 'DRAFT') return 'Offered'
   if (application.selectionStatus === 'SELECTED' || application.selectionStatus === 'SELECTION_APPROVAL_PENDING' || application.selectionStatus === 'SELECTION_APPROVED') return 'Selected'
@@ -91,7 +98,7 @@ export const useRecruitmentStore = create((set, get) => ({
     try {
       // Load raw applications from backend
       const { append: _append, force: _force, ...requestParams } = params
-      const res = await candidateApi.list({ ...requestParams, page, size });
+      const res = await candidateApi.list({ ...requestParams, page, size }, { skipCache: !!params.force, devMock: false });
       const data = res.data.data || {}
       const rows = data.content || [];
       
@@ -99,6 +106,7 @@ export const useRecruitmentStore = create((set, get) => ({
       const mappedCandidates = rows.map(a => ({
         id: a.applicationId,
         candidateId: a.candidateId,
+        jobId: a.jobId,
         name: a.candidateName,
         email: a.email,
         phone: a.phone,
@@ -227,6 +235,8 @@ export const useRecruitmentStore = create((set, get) => ({
       }
     } catch (e) {
       console.error(e);
+      set({ error: e.response?.data?.message || e.message || 'Failed to update candidate status' })
+      throw e
     }
   },
 
@@ -266,7 +276,7 @@ export const useRecruitmentStore = create((set, get) => ({
   scheduleInterview: async (candidateObj, data) => {
     try {
       const endTime = data.endTime || addOneHour(data.startTime)
-      await interviewApi.create({
+      const res = await interviewApi.create({
         applicationId: candidateObj.id,
         roundName: data.roundName || 'Interview',
         type: data.type || 'TECHNICAL',
@@ -284,7 +294,28 @@ export const useRecruitmentStore = create((set, get) => ({
         candidateEmail: data.candidateEmail || candidateObj.email || null,
         interviewers: data.interviewers || [],
       })
-      await get().fetchCandidates()
+      const createdData = res.data?.data || {}
+      const interview = createdData.interview
+      const newRoundName = data.roundName || 'Interview'
+      set((state) => patchCandidateInState(state, candidateObj.id, {
+        latestInterview: interview,
+        interviewAt: `${data.date}T${data.startTime}:00`,
+        interviewTime: data.startTime,
+        interviewEndTime: endTime,
+        interviewRoundName: newRoundName,
+        interviewMode: data.mode || 'ONLINE',
+        interviewStatus: 'SCHEDULED',
+        stage: newRoundName,
+        status: 'Pipeline',
+        backendStatus: 'ACTIVE',
+        email: data.candidateEmail || candidateObj.email,
+      }))
+      try {
+        await get().fetchCandidates({ force: true, job: candidateObj.jobId })
+      } catch (fErr) {
+        console.warn('Re-fetch candidates after scheduling skipped:', fErr)
+      }
+      return createdData
     } catch (e) {
       console.error(e)
       set({ error: e.response?.data?.message || 'Failed to schedule interview' })
@@ -388,7 +419,16 @@ export const useRecruitmentStore = create((set, get) => ({
 
   updateCandidateStage: async (candidateId, newStageName) => {
     const previous = get().candidates.find((candidate) => candidate.id === candidateId)
-    set((state) => patchCandidateInState(state, candidateId, { stage: newStageName }))
+    const stageLower = String(newStageName || '').toLowerCase()
+    const isEarlyStage = stageLower.includes('shortlist') || stageLower.includes('interview') || stageLower.includes('round') || stageLower.includes('applied') || stageLower.includes('screen') || stageLower.includes('assessment')
+    const updatedStatus = isEarlyStage ? 'Pipeline' : (stageLower.includes('hired') ? 'HIRED' : (stageLower.includes('offer') ? 'Offered' : (stageLower.includes('select') ? 'Selected' : previous?.status)))
+
+    set((state) => patchCandidateInState(state, candidateId, {
+      stage: newStageName,
+      status: updatedStatus,
+      selectionStatus: isEarlyStage ? null : previous?.selectionStatus,
+      readyForOffer: isEarlyStage ? false : previous?.readyForOffer,
+    }))
     try {
       const preferredCategory = /shortlist/i.test(newStageName) ? 'SCREENING'
         : /offer/i.test(newStageName) ? 'OFFER'
@@ -402,7 +442,10 @@ export const useRecruitmentStore = create((set, get) => ({
       const stage = res.data?.data?.stage
       set((state) => patchCandidateInState(state, candidateId, {
         stage: stage?.name || newStageName,
+        status: isEarlyStage ? 'Pipeline' : updatedStatus,
         backendStatus: res.data?.data?.application?.status || previous?.backendStatus,
+        selectionStatus: isEarlyStage ? null : (res.data?.data?.application?.selectionStatus || previous?.selectionStatus),
+        readyForOffer: isEarlyStage ? false : !!(res.data?.data?.application?.readyForOffer ?? previous?.readyForOffer),
       }))
     } catch (e) {
       console.error(e);

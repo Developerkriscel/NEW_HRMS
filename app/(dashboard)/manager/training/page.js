@@ -1,19 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import dynamic from 'next/dynamic'
-import { PageLoader } from '@/components/common/LoadingSpinner'
 import { GraduationCap, Users } from 'lucide-react'
-
-const EmployeeTrainingWorkspace = dynamic(
-  () => import('@/components/pages/EmployeeTrainingWorkspace').then((mod) => mod.EmployeeTrainingWorkspace),
-  { ssr: false, loading: () => <PageLoader /> }
-)
-
-const TrainingWorkspace = dynamic(
-  () => import('@/components/pages/TrainingWorkspace').then((mod) => mod.TrainingWorkspace),
-  { ssr: false, loading: () => <PageLoader /> }
-)
+import { EmployeeTrainingWorkspace } from '@/components/pages/EmployeeTrainingWorkspace'
+import { TrainingWorkspace } from '@/components/pages/TrainingWorkspace'
 
 export default function ManagerTrainingPage() {
   const [activeTab, setActiveTab] = useState('mine')

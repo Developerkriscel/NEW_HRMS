@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import {
   Users, Clock, CalendarOff, Banknote, Receipt, UserMinus,
   CalendarDays, Megaphone, CheckCircle, UserPlus, AlertCircle,
-  TrendingUp, Building2, ChevronRight, Activity
+  TrendingUp, Building2, ChevronRight, Activity, Filter
 } from 'lucide-react'
 import { Badge } from '@/components/common/Badge'
 import { Avatar } from '@/components/common/Avatar'
@@ -20,7 +20,11 @@ const EMPTY_HR_DASHBOARD = {
     present: 0,
     absent: 0,
     late: 0,
+    onLeaveCount: 0,
+    attendanceRate: 0,
+    newJoinersCount: 0,
     newJoinersThisMonth: 0,
+    newJoinersSuffix: 'this week',
     pendingLeaveCount: 0,
     pendingExpensesCount: 0,
     pendingResignationsCount: 0,
@@ -36,19 +40,20 @@ export function HRDashboardWorkspace({ headerAction }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [now, setNow] = useState(new Date())
+  const [timeFilter, setTimeFilter] = useState('This Week')
 
   useEffect(() => {
-    if (user?.devLogin) {
-      setData(EMPTY_HR_DASHBOARD)
-      setLoading(false)
-      return
-    }
-
-    dashboardApi.getHrSummary()
-      .then((res) => setData(res.data.data))
-      .catch((err) => console.error('Failed to load HR dashboard', err))
+    setLoading(true)
+    dashboardApi.getHrSummary({ period: timeFilter })
+      .then((res) => {
+        setData(res.data?.data || EMPTY_HR_DASHBOARD)
+      })
+      .catch((err) => {
+        console.error('Failed to load HR dashboard', err)
+        setData(EMPTY_HR_DASHBOARD)
+      })
       .finally(() => setLoading(false))
-  }, [user])
+  }, [user, timeFilter])
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000)
@@ -62,16 +67,29 @@ export function HRDashboardWorkspace({ headerAction }) {
     return 'Good Evening'
   }
 
-  if (loading) return <PageLoader />
+  if (loading && !data) return <PageLoader />
 
   const s = data?.stats || {}
-  const attendancePct = s.totalEmployees > 0 ? Math.round((s.present / s.totalEmployees) * 100) : 0
+  const attendancePct = s.attendanceRate !== undefined 
+    ? s.attendanceRate 
+    : (s.totalEmployees > 0 ? Math.round((s.present / s.totalEmployees) * 100) : 0)
+
+  const isSingleDay = timeFilter === 'Today' || timeFilter === 'Yesterday'
+  const presentLabel = timeFilter === 'Today' ? 'Present Today' : timeFilter === 'Yesterday' ? 'Present Yesterday' : `Present (${timeFilter})`
+  const absentLabel = timeFilter === 'Today' ? 'Absent Today' : timeFilter === 'Yesterday' ? 'Absent Yesterday' : `Absent (${timeFilter})`
 
   const kpis = [
     { label: 'Total Employees', value: s.totalEmployees ?? 0, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-500/10' },
-    { label: 'Present Today', value: s.present ?? 0, icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
-    { label: 'Absent Today', value: s.absent ?? 0, icon: CalendarOff, color: 'text-rose-600', bg: 'bg-rose-50 dark:bg-rose-500/10' },
-    { label: 'New Joiners', value: s.newJoinersThisMonth ?? 0, icon: UserPlus, color: 'text-indigo-600', bg: 'bg-indigo-50 dark:bg-indigo-500/10', suffix: 'this month' },
+    { label: presentLabel, value: s.present ?? 0, icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
+    { label: absentLabel, value: s.absent ?? 0, icon: CalendarOff, color: 'text-rose-600', bg: 'bg-rose-50 dark:bg-rose-500/10' },
+    { 
+      label: 'New Joiners', 
+      value: s.newJoinersCount ?? s.newJoinersThisMonth ?? 0, 
+      icon: UserPlus, 
+      color: 'text-indigo-600', 
+      bg: 'bg-indigo-50 dark:bg-indigo-500/10', 
+      suffix: s.newJoinersSuffix ? s.newJoinersSuffix : timeFilter.toLowerCase() 
+    },
   ]
 
   const pendingItems = [
@@ -98,9 +116,31 @@ export function HRDashboardWorkspace({ headerAction }) {
           <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full">
             {greeting()}, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">{user?.name?.split(' ')[0]}</span> 👋
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">Here's what's happening in your organization today.</p>
+          <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">
+            Here's what's happening in your organization {timeFilter.toLowerCase() === 'today' ? 'today' : timeFilter.toLowerCase()}.
+          </p>
         </div>
-        {headerAction && <div>{headerAction}</div>}
+        
+        {/* Right Header Actions */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mt-3 sm:mt-0 w-full sm:w-auto">
+          {/* Global Dashboard Filter */}
+          <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 shadow-sm w-full sm:w-auto">
+            <Filter className="w-4 h-4 text-slate-400" />
+            <select 
+              value={timeFilter}
+              onChange={(e) => setTimeFilter(e.target.value)}
+              className="bg-transparent text-sm font-semibold text-slate-700 dark:text-slate-300 outline-none cursor-pointer"
+            >
+              <option>Today</option>
+              <option>Yesterday</option>
+              <option>This Week</option>
+              <option>This Month</option>
+              <option>Last 6 Months</option>
+              <option>All Time</option>
+            </select>
+          </div>
+          {headerAction && <div className="w-full sm:w-auto flex overflow-x-auto pb-1 sm:pb-0 hide-scrollbar">{headerAction}</div>}
+        </div>
       </div>
 
       {/* Main Layout Grid */}
@@ -136,7 +176,9 @@ export function HRDashboardWorkspace({ headerAction }) {
                 <div>
                   <div className="flex items-center gap-2 mb-6">
                     <Activity className="w-5 h-5 text-indigo-400" />
-                    <h3 className="text-sm font-bold text-indigo-300 uppercase tracking-widest">Live Status</h3>
+                    <h3 className="text-sm font-bold text-indigo-300 uppercase tracking-widest">
+                      Live Status {isSingleDay ? '' : `• ${timeFilter}`}
+                    </h3>
                   </div>
                   
                   <div className="flex items-baseline gap-2 mb-2">
@@ -172,7 +214,7 @@ export function HRDashboardWorkspace({ headerAction }) {
                     <span className="font-bold text-white">{attendancePct}%</span>
                   </div>
                   <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-indigo-500 to-sky-400 rounded-full transition-all duration-1000" style={{ width: `${attendancePct}%` }}></div>
+                    <div className="h-full bg-gradient-to-r from-indigo-500 to-sky-400 rounded-full transition-all duration-1000" style={{ width: `${Math.min(100, Math.max(0, attendancePct))}%` }}></div>
                   </div>
                 </div>
               </div>
@@ -215,16 +257,16 @@ export function HRDashboardWorkspace({ headerAction }) {
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-widest flex items-center gap-2">
                   <UserPlus className="w-4 h-4 text-blue-500" /> New Joiners
                 </h3>
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Last 30 Days</span>
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{s.periodLabel || 'Recent'}</span>
               </div>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {data.newJoiners.map((emp) => (
                   <div key={emp._id} className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-700/30 hover:border-blue-200 dark:hover:border-blue-500/30 transition-colors">
-                    <Avatar name={`${emp.firstName} ${emp.lastName}`} size="md" />
-                    <div>
-                      <p className="text-sm font-bold text-slate-900 dark:text-white">{emp.firstName} {emp.lastName}</p>
-                      <p className="text-xs text-slate-500 mb-1">{emp.designation?.name || emp.department?.name || '—'}</p>
+                    <Avatar name={`${emp.firstName} ${emp.lastName}`} src={emp.avatar} size="md" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{emp.firstName} {emp.lastName}</p>
+                      <p className="text-xs text-slate-500 mb-1 truncate">{emp.designation?.name || emp.department?.name || '—'}</p>
                       <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 px-2 py-0.5 rounded-md">
                         Joined {formatDate(emp.joiningDate)}
                       </span>
@@ -289,7 +331,7 @@ export function HRDashboardWorkspace({ headerAction }) {
                     <p className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-tight">{a.title}</p>
                     <Badge variant="outline" className="text-[9px] shrink-0">{a.scope}</Badge>
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">{a.message}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">{a.body || a.message}</p>
                 </div>
               )) : (
                 <div className="text-center py-8">

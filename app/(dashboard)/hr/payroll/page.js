@@ -326,11 +326,19 @@ export default function HRPayrollPage() {
   const handleStatusChange = async (id, newStatus) => {
     try {
       await payrollApi.updatePayslipStatus(id, newStatus)
-      if (selectedPayslip?._id === id) {
-        setSelectedPayslip(prev => ({ ...prev, status: newStatus, paymentDate: newStatus === 'PAID' ? new Date().toISOString() : prev.paymentDate }))
-      }
+      // Update the open drawer immediately — ObjectId vs string requires String() coercion
+      setSelectedPayslip(prev => {
+        if (!prev) return prev
+        if (String(prev._id) === String(id)) {
+          return { ...prev, status: newStatus, paymentDate: newStatus === 'PAID' ? new Date().toISOString() : prev.paymentDate }
+        }
+        return prev
+      })
+      // Refresh the table list
       load()
     } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Failed to update status'
+      alert(`Error: ${msg}`)
       console.error(e)
     }
   }
@@ -494,8 +502,12 @@ export default function HRPayrollPage() {
     try {
       setLoading(true)
       await payrollApi.updateBulkStatus(month, year, status)
+      // If a drawer is open, refresh its status too
+      setSelectedPayslip(prev => prev ? { ...prev, status } : prev)
       load()
     } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Failed to update payroll status'
+      alert(`Error: ${msg}`)
       console.error(e)
       setLoading(false)
     }

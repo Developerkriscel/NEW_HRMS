@@ -63,7 +63,7 @@ export function BranchesSection() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(load, [])
+  useEffect(() => { load() }, [])
 
   function showMessage(text) {
     setMessage(text)
@@ -288,13 +288,26 @@ export function BranchesSection() {
                     <Phone className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
                     <span>{branch.phone || 'Phone not specified'}</span>
                   </div>
-                  <div className="flex gap-2 text-sm text-slate-600 dark:text-slate-300">
+                  <div className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
                     <Navigation className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-                    <span>
-                      {branch.latitude != null && branch.longitude != null
-                        ? `${branch.latitude}, ${branch.longitude} (${branch.geoFenceRadius || 100}m attendance radius)`
-                        : 'Attendance geo-fence not configured'}
-                    </span>
+                    <div>
+                      {branch.latitude != null && branch.longitude != null ? (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="inline-flex items-center gap-1.5 font-bold text-xs text-emerald-600 dark:text-emerald-400">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                            Geofence Active ({branch.geoFenceRadius || 100}m radius)
+                          </span>
+                          <span className="text-xs text-slate-400">
+                            Coords: {Number(branch.latitude).toFixed(5)}, {Number(branch.longitude).toFixed(5)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                          <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                          Geofence Inactive (Set Coordinates to Enforce)
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -394,6 +407,11 @@ export function BranchesSection() {
                       <input type="number" min="1" className="input-field bg-slate-50/70 focus:bg-white" placeholder="100" value={form.geoFenceRadius} onChange={(e) => updateField('geoFenceRadius', e.target.value)} />
                     </label>
                   </div>
+                  {(!form.latitude || !form.longitude) && (
+                    <p className="mt-2 text-xs font-medium text-amber-600 dark:text-amber-400">
+                      💡 Attendance geofencing radius will only be enforced when Latitude &amp; Longitude are set. Click &ldquo;Use Current Location&rdquo; if you are currently at this branch.
+                    </p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { 
   Clock, CheckCircle, Calendar, Plane, Megaphone, Receipt, Send, Activity, Filter
 } from 'lucide-react'
@@ -8,12 +8,9 @@ import { StatsCard } from '@/components/cards/StatsCard'
 import { PageLoader } from '@/components/common/LoadingSpinner'
 import { useAuthStore } from '@/store/authStore'
 import { attendanceApi } from '@/services/attendanceApi'
-import { leaveApi } from '@/services/leaveApi'
-import { teamRequestApi } from '@/services/teamRequestApi'
-import { announcementApi } from '@/services/announcementApi'
-import { payrollApi } from '@/services/payrollApi'
+import { employeeDashboardApi } from '@/services/employeeDashboardApi'
 import { CameraVerificationModal } from '@/components/attendance/CameraVerificationModal'
-import { GenericAreaChart, DepartmentPieChart, AttendanceBarChart, GenericLineChart } from '@/components/charts/DashboardCharts'
+import { DepartmentPieChart, AttendanceBarChart, GenericLineChart } from '@/components/charts/DashboardCharts'
 import { formatDate } from '@/lib/utils'
 
 const EMPTY_DASHBOARD_STATE = {
@@ -27,95 +24,14 @@ const EMPTY_DASHBOARD_STATE = {
   latestPayslip: null,
 }
 
-export function EmployeeDashboardWorkspace({ headerAction }) {
-  const { user } = useAuthStore()
-  const [loading, setLoading] = useState(true)
-  const [actionLoading, setActionLoading] = useState(false)
-  
-  const [todayRecord, setTodayRecord] = useState(null)
-  const [attendanceHistory, setAttendanceHistory] = useState([])
-  const [leaveBalances, setLeaveBalances] = useState([])
-  const [upcomingLeaves, setUpcomingLeaves] = useState([])
-  const [pendingRequests, setPendingRequests] = useState(0)
-  const [recentRequests, setRecentRequests] = useState([])
-  const [announcements, setAnnouncements] = useState([])
-  const [latestPayslip, setLatestPayslip] = useState(null)
-  
-  const [timeFilter, setTimeFilter] = useState('This Week')
-
-  // Real-time timer state
+function AttendanceHero({
+  todayRecord,
+  actionLoading,
+  onOpenCamera,
+  onBreakAction,
+}) {
   const [now, setNow] = useState(new Date())
-  
-  // UI states
-  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false)
-  const [cameraAction, setCameraAction] = useState(null)
 
-  // Fetch all dashboard data
-  const loadData = useCallback(async () => {
-    setLoading(true)
-    try {
-      if (user?.devLogin) {
-        setTodayRecord(EMPTY_DASHBOARD_STATE.todayRecord)
-        setAttendanceHistory(EMPTY_DASHBOARD_STATE.attendanceHistory)
-        setLeaveBalances(EMPTY_DASHBOARD_STATE.leaveBalances)
-        setUpcomingLeaves(EMPTY_DASHBOARD_STATE.upcomingLeaves)
-        setPendingRequests(EMPTY_DASHBOARD_STATE.pendingRequests)
-        setRecentRequests(EMPTY_DASHBOARD_STATE.recentRequests)
-        setAnnouncements(EMPTY_DASHBOARD_STATE.announcements)
-        setLatestPayslip(EMPTY_DASHBOARD_STATE.latestPayslip)
-        return
-      }
-
-      const currentMonth = new Date().getMonth() + 1
-      const currentYear = new Date().getFullYear()
-
-      const [
-        todayRes, 
-        historyRes, 
-        balRes, 
-        leavesRes,
-        requestsRes,
-        announcementRes
-      ] = await Promise.all([
-        attendanceApi.getTodayStatus().catch(() => ({ data: { data: null } })),
-        attendanceApi.getMyAttendance().catch(() => ({ data: { data: [] } })),
-        leaveApi.getBalance().catch(() => ({ data: { data: [] } })),
-        leaveApi.getMyLeaves({ status: 'APPROVED', size: 5 }).catch(() => ({ data: { data: { content: [] } } })),
-        teamRequestApi.list({ size: 5 }).catch(() => ({ data: { data: { content: [], totalElements: 0 } } })),
-        announcementApi.list({ size: 3 }).catch(() => ({ data: { data: { content: [] } } }))
-      ])
-
-      setTodayRecord(todayRes.data.data)
-      setAttendanceHistory(historyRes.data.data || [])
-      setLeaveBalances(balRes.data.data || [])
-      setUpcomingLeaves(leavesRes.data.data.content || [])
-      setRecentRequests(requestsRes.data.data.content || [])
-      setPendingRequests(requestsRes.data.data.content?.filter(r => r.status === 'PENDING').length || 0)
-      setAnnouncements(announcementRes.data.data.content || [])
-
-      // Try fetching payslip
-      try {
-        const empId = user?.employeeProfile?._id || user?._id
-        if (empId) {
-          const payslipRes = await payrollApi.getPayslip(empId, { month: currentMonth, year: currentYear })
-          setLatestPayslip(payslipRes.data.data)
-        }
-      } catch (e) {
-        // Ignore payroll errors
-      }
-
-    } catch (err) {
-      console.error('Failed to load dashboard data:', err)
-    } finally {
-      setLoading(false)
-    }
-  }, [user])
-
-  useEffect(() => {
-    loadData()
-  }, [loadData])
-
-  // Precise live timer
   useEffect(() => {
     const interval = setInterval(() => {
       setNow(new Date())
@@ -123,10 +39,9 @@ export function EmployeeDashboardWorkspace({ headerAction }) {
     return () => clearInterval(interval)
   }, [])
 
-  // Derived Values
   const isOnBreak = todayRecord?.breaks?.some(b => !b.end)
 
-  const calculateTimes = () => {
+  const times = useMemo(() => {
     if (!todayRecord?.checkInTime) return { work: '00h 00m 00s', break: '00h 00m 00s', msWork: 0 }
     
     const checkIn = new Date(todayRecord.checkInTime).getTime()
@@ -159,17 +74,141 @@ export function EmployeeDashboardWorkspace({ headerAction }) {
       break: formatMs(totalBreakMs),
       msWork: netWorkMs
     }
-  }
+  }, [now, todayRecord])
 
-  const times = calculateTimes()
-
-  const getStatusDisplay = () => {
+  const status = useMemo(() => {
     if (!todayRecord?.checkInTime) return { label: 'Not Checked In', color: 'from-slate-500 to-slate-400', ring: 'ring-slate-500/30' }
     if (todayRecord?.checkOutTime) return { label: 'Checked Out', color: 'from-slate-600 to-slate-500', ring: 'ring-slate-500/30' }
     if (isOnBreak) return { label: 'On Break', color: 'from-orange-500 to-amber-500', ring: 'ring-orange-500/30', glow: 'shadow-orange-500/40' }
     return { label: 'Working', color: 'from-emerald-500 to-teal-400', ring: 'ring-emerald-500/30', glow: 'shadow-emerald-500/40', pulse: true }
-  }
-  const status = getStatusDisplay()
+  }, [isOnBreak, todayRecord])
+
+  return (
+    <div className="relative rounded-2xl overflow-hidden bg-[#0f172a] shadow-lg border border-slate-800 p-3 sm:px-5 sm:py-3.5 isolation-auto group">
+      <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-[0.02] mix-blend-overlay pointer-events-none"></div>
+
+      <div className="relative z-10 flex flex-col sm:flex-row gap-4 items-center justify-between">
+        <div className="flex-1 w-full flex flex-col items-start justify-center">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 mb-1">
+            <span className="relative flex h-1.5 w-1.5">
+              {status.pulse && <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-gradient-to-r ${status.color}`}></span>}
+              <span className={`relative inline-flex rounded-full h-1.5 w-1.5 bg-gradient-to-r ${status.color}`}></span>
+            </span>
+            <span className="text-white text-[9px] font-bold tracking-wider uppercase">{status.label}</span>
+          </div>
+
+          <h2 className="text-2xl sm:text-3xl font-black text-white tabular-nums tracking-tighter drop-shadow-md">
+            {now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+            <span className="text-base text-white/50 ml-1">{now.toLocaleTimeString('en-US', { second: '2-digit' })}</span>
+          </h2>
+        </div>
+
+        <div className="flex-[1.5] w-full bg-white/[0.03] border border-white/10 rounded-xl p-2 sm:p-2.5 shadow-xl flex flex-col sm:flex-row gap-3 items-center">
+          <div className="flex flex-1 w-full gap-3">
+            <div className="flex-1 bg-black/20 rounded-lg p-2 border border-white/5 flex flex-col justify-center">
+              <div className="text-emerald-400 text-[9px] font-bold uppercase tracking-widest mb-0.5 opacity-90">Working</div>
+              <div className="text-xs sm:text-sm font-black text-white tabular-nums">{times.work}</div>
+            </div>
+            <div className="flex-1 bg-black/20 rounded-lg p-2 border border-white/5 flex flex-col justify-center">
+              <div className="text-orange-400 text-[9px] font-bold uppercase tracking-widest mb-0.5 opacity-90">On Break</div>
+              <div className="text-xs sm:text-sm font-black text-white tabular-nums">{times.break}</div>
+            </div>
+          </div>
+
+          <div className="w-full sm:w-auto flex gap-2">
+            {!todayRecord?.checkInTime ? (
+              <button 
+                onClick={() => onOpenCamera('check-in')}
+                disabled={actionLoading}
+                className="w-full sm:w-auto bg-[#22c55e] hover:bg-[#16a34a] text-white py-2 px-5 rounded-lg font-black text-[10px] sm:text-xs transition-colors flex justify-center items-center uppercase tracking-wider"
+              >
+                Check In Now
+              </button>
+            ) : !todayRecord?.checkOutTime ? (
+              <>
+                {isOnBreak ? (
+                   <button onClick={() => onBreakAction('end')} disabled={actionLoading} className="flex-1 sm:w-auto bg-indigo-500 hover:bg-indigo-600 text-white py-2 px-4 rounded-lg font-black text-[10px] sm:text-xs transition-colors flex justify-center items-center uppercase tracking-wider">Resume</button>
+                ) : (
+                   <button onClick={() => onBreakAction('start')} disabled={actionLoading} className="flex-1 sm:w-auto bg-white/10 hover:bg-white/20 text-white py-2 px-4 rounded-lg font-black text-[10px] sm:text-xs transition-colors flex justify-center items-center uppercase tracking-wider">Break</button>
+                )}
+                <button onClick={() => onOpenCamera('check-out')} disabled={actionLoading || isOnBreak} className="flex-1 sm:w-auto bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white py-2 px-4 rounded-lg font-black text-[10px] sm:text-xs transition-colors flex justify-center items-center uppercase tracking-wider">Check Out</button>
+              </>
+            ) : (
+              <div className="w-full sm:w-auto bg-emerald-500/10 text-emerald-400 py-2 px-4 rounded-lg font-black text-[10px] uppercase tracking-wider border border-emerald-500/20 flex items-center justify-center gap-1.5">
+                <CheckCircle className="w-3.5 h-3.5" /> Completed
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function EmployeeDashboardWorkspace({ headerAction }) {
+  const { user } = useAuthStore()
+  const [loading, setLoading] = useState(true)
+  const [actionLoading, setActionLoading] = useState(false)
+  
+  const [todayRecord, setTodayRecord] = useState(null)
+  const [attendanceHistory, setAttendanceHistory] = useState([])
+  const [leaveBalances, setLeaveBalances] = useState([])
+  const [upcomingLeaves, setUpcomingLeaves] = useState([])
+  const [pendingRequests, setPendingRequests] = useState(0)
+  const [recentRequests, setRecentRequests] = useState([])
+  const [announcements, setAnnouncements] = useState([])
+  const [latestPayslip, setLatestPayslip] = useState(null)
+  
+  const [timeFilter, setTimeFilter] = useState('This Week')
+  
+  // UI states
+  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false)
+  const [cameraAction, setCameraAction] = useState(null)
+
+  // Fetch all dashboard data
+  const loadData = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true)
+    try {
+      if (user?.devLogin) {
+        setTodayRecord(EMPTY_DASHBOARD_STATE.todayRecord)
+        setAttendanceHistory(EMPTY_DASHBOARD_STATE.attendanceHistory)
+        setLeaveBalances(EMPTY_DASHBOARD_STATE.leaveBalances)
+        setUpcomingLeaves(EMPTY_DASHBOARD_STATE.upcomingLeaves)
+        setPendingRequests(EMPTY_DASHBOARD_STATE.pendingRequests)
+        setRecentRequests(EMPTY_DASHBOARD_STATE.recentRequests)
+        setAnnouncements(EMPTY_DASHBOARD_STATE.announcements)
+        setLatestPayslip(EMPTY_DASHBOARD_STATE.latestPayslip)
+        return
+      }
+
+      const res = await employeeDashboardApi.get()
+      const data = res.data.data || EMPTY_DASHBOARD_STATE
+
+      setTodayRecord(data.todayRecord || null)
+      setAttendanceHistory(data.attendanceHistory || [])
+      setLeaveBalances(data.leaveBalances || [])
+      setUpcomingLeaves(data.upcomingLeaves || [])
+      setPendingRequests(data.pendingRequests || 0)
+      setRecentRequests(data.recentRequests || [])
+      setAnnouncements(data.announcements || [])
+      setLatestPayslip(data.latestPayslip || null)
+
+    } catch (err) {
+      console.error('Failed to load dashboard data:', err)
+    } finally {
+      if (!silent) setLoading(false)
+    }
+  }, [user])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  const isOnBreak = todayRecord?.breaks?.some(b => !b.end)
+  const currentDate = useMemo(() => (
+    new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  ), [])
+  const workingMinutes = todayRecord?.workingMinutes || 0
 
   const handleCameraConfirm = async (data) => {
     setActionLoading(true)
@@ -177,9 +216,10 @@ export function EmployeeDashboardWorkspace({ headerAction }) {
       const payload = { photo: data.photo, location: data.location, source: 'WEB' }
       if (cameraAction === 'check-in') await attendanceApi.checkIn(payload)
       else if (cameraAction === 'check-out') await attendanceApi.checkOut(payload)
-      await loadData()
+      await loadData({ silent: true })
     } catch (err) {
-      alert(err.response?.data?.message || 'Action failed')
+      console.error('Camera confirm action failed:', err)
+      throw err
     } finally {
       setActionLoading(false)
     }
@@ -190,7 +230,7 @@ export function EmployeeDashboardWorkspace({ headerAction }) {
     try {
       if (action === 'start') await attendanceApi.startBreak()
       else await attendanceApi.endBreak()
-      await loadData()
+      await loadData({ silent: true })
     } catch (err) {
       alert(err.response?.data?.message || 'Action failed')
     } finally {
@@ -206,7 +246,7 @@ export function EmployeeDashboardWorkspace({ headerAction }) {
   }
 
   // Chart computations
-  const getWeeklyData = () => {
+  const weeklyData = useMemo(() => {
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
     return days.map(day => ({
       day,
@@ -214,17 +254,17 @@ export function EmployeeDashboardWorkspace({ headerAction }) {
       absent: Math.floor(Math.random() * 3),
       leave: Math.floor(Math.random() * 2)
     }))
-  }
+  }, [])
   
-  const getLeaveTrendData = () => {
+  const leaveTrendData = useMemo(() => {
     const months = ['Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug']
     return months.map((month, i) => ({
       month,
       requests: [12, 18, 15, 22, 10, 0][i]
     }))
-  }
+  }, [])
 
-  const getMonthlyAttendancePie = () => {
+  const monthlyAttendancePie = useMemo(() => {
     const present = attendanceHistory.filter(r => r.status === 'PRESENT').length
     const absent = attendanceHistory.filter(r => r.status === 'ABSENT').length
     const leave = attendanceHistory.filter(r => r.status === 'ON_LEAVE').length
@@ -233,11 +273,13 @@ export function EmployeeDashboardWorkspace({ headerAction }) {
       { name: 'Absent', value: absent },
       { name: 'Leave', value: leave }
     ].filter(x => x.value > 0)
-  }
+  }, [attendanceHistory])
 
-  const attendanceRate = attendanceHistory.length 
-    ? Math.round((attendanceHistory.filter(r => r.status === 'PRESENT').length / attendanceHistory.length) * 100) 
-    : 100
+  const workingDays = attendanceHistory.filter(r => !['HOLIDAY', 'WEEKEND', 'UPCOMING', 'NOT_JOINED'].includes(r.status))
+  const attendedDays = workingDays.filter(r => ['PRESENT', 'HALF_DAY', 'WFH'].includes(r.status))
+  const attendanceRate = workingDays.length 
+    ? Math.round((attendedDays.length / workingDays.length) * 100) 
+    : 0
 
   if (loading) return <PageLoader />
 
@@ -257,7 +299,7 @@ export function EmployeeDashboardWorkspace({ headerAction }) {
           </div>
           <div className="mt-1.5 flex items-center gap-4">
             <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-              {now.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+              {currentDate}
             </p>
           </div>
         </div>
@@ -286,7 +328,7 @@ export function EmployeeDashboardWorkspace({ headerAction }) {
 
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
         <StatsCard title="Today's Status" value={todayRecord?.checkInTime ? (todayRecord?.checkOutTime ? 'Completed' : isOnBreak ? 'On Break' : 'Working') : 'Not In'} icon={Activity} accentColor="bg-indigo-500" />
-        <StatsCard title="Working Hours" value={`${Math.floor(times.msWork / 3600000)}h ${Math.floor((times.msWork % 3600000) / 60000)}m`} icon={Clock} accentColor="bg-sky-500" />
+        <StatsCard title="Working Hours" value={`${Math.floor(workingMinutes / 60)}h ${workingMinutes % 60}m`} icon={Clock} accentColor="bg-sky-500" />
         <StatsCard title="Leave Balance" value={`${leaveBalances.reduce((acc, b) => acc + ((b.totalDays || 0) - (b.usedDays || 0)), 0)} Days`} icon={Plane} accentColor="bg-amber-500" />
         <StatsCard title="Pending Requests" value={pendingRequests} icon={Send} accentColor="bg-rose-500" />
         <StatsCard title="Monthly Attendance" value={`${attendanceRate}%`} icon={Calendar} accentColor="bg-emerald-500" />
@@ -298,65 +340,15 @@ export function EmployeeDashboardWorkspace({ headerAction }) {
         {/* Left Column - 8 cols wide */}
         <div className="lg:col-span-8 space-y-6">
           
-          {/* Main Hero Card - COMPACT VERSION */}
-          <div className="relative rounded-2xl overflow-hidden bg-[#0f172a] shadow-lg border border-slate-800 p-3 sm:px-5 sm:py-3.5 isolation-auto group">
-            <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-[0.02] mix-blend-overlay pointer-events-none"></div>
-
-            <div className="relative z-10 flex flex-col sm:flex-row gap-4 items-center justify-between">
-              <div className="flex-1 w-full flex flex-col items-start justify-center">
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 mb-1">
-                  <span className="relative flex h-1.5 w-1.5">
-                    {status.pulse && <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-gradient-to-r ${status.color}`}></span>}
-                    <span className={`relative inline-flex rounded-full h-1.5 w-1.5 bg-gradient-to-r ${status.color}`}></span>
-                  </span>
-                  <span className="text-white text-[9px] font-bold tracking-wider uppercase">{status.label}</span>
-                </div>
-
-                <h2 className="text-2xl sm:text-3xl font-black text-white tabular-nums tracking-tighter drop-shadow-md">
-                  {now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                  <span className="text-base text-white/50 ml-1">{now.toLocaleTimeString('en-US', { second: '2-digit' })}</span>
-                </h2>
-              </div>
-
-              <div className="flex-[1.5] w-full bg-white/[0.03] border border-white/10 rounded-xl p-2 sm:p-2.5 shadow-xl flex flex-col sm:flex-row gap-3 items-center">
-                <div className="flex flex-1 w-full gap-3">
-                  <div className="flex-1 bg-black/20 rounded-lg p-2 border border-white/5 flex flex-col justify-center">
-                    <div className="text-emerald-400 text-[9px] font-bold uppercase tracking-widest mb-0.5 opacity-90">Working</div>
-                    <div className="text-xs sm:text-sm font-black text-white tabular-nums">{times.work}</div>
-                  </div>
-                  <div className="flex-1 bg-black/20 rounded-lg p-2 border border-white/5 flex flex-col justify-center">
-                    <div className="text-orange-400 text-[9px] font-bold uppercase tracking-widest mb-0.5 opacity-90">On Break</div>
-                    <div className="text-xs sm:text-sm font-black text-white tabular-nums">{times.break}</div>
-                  </div>
-                </div>
-
-                <div className="w-full sm:w-auto flex gap-2">
-                  {!todayRecord?.checkInTime ? (
-                    <button 
-                      onClick={() => { setCameraAction('check-in'); setIsCameraModalOpen(true); }}
-                      disabled={actionLoading}
-                      className="w-full sm:w-auto bg-[#22c55e] hover:bg-[#16a34a] text-white py-2 px-5 rounded-lg font-black text-[10px] sm:text-xs transition-colors flex justify-center items-center uppercase tracking-wider"
-                    >
-                      Check In Now
-                    </button>
-                  ) : !todayRecord?.checkOutTime ? (
-                    <>
-                      {isOnBreak ? (
-                         <button onClick={() => handleBreakAction('end')} disabled={actionLoading} className="flex-1 sm:w-auto bg-indigo-500 hover:bg-indigo-600 text-white py-2 px-4 rounded-lg font-black text-[10px] sm:text-xs transition-colors flex justify-center items-center uppercase tracking-wider">Resume</button>
-                      ) : (
-                         <button onClick={() => handleBreakAction('start')} disabled={actionLoading} className="flex-1 sm:w-auto bg-white/10 hover:bg-white/20 text-white py-2 px-4 rounded-lg font-black text-[10px] sm:text-xs transition-colors flex justify-center items-center uppercase tracking-wider">Break</button>
-                      )}
-                      <button onClick={() => { setCameraAction('check-out'); setIsCameraModalOpen(true); }} disabled={actionLoading || isOnBreak} className="flex-1 sm:w-auto bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white py-2 px-4 rounded-lg font-black text-[10px] sm:text-xs transition-colors flex justify-center items-center uppercase tracking-wider">Check Out</button>
-                    </>
-                  ) : (
-                    <div className="w-full sm:w-auto bg-emerald-500/10 text-emerald-400 py-2 px-4 rounded-lg font-black text-[10px] uppercase tracking-wider border border-emerald-500/20 flex items-center justify-center gap-1.5">
-                      <CheckCircle className="w-3.5 h-3.5" /> Completed
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
+          <AttendanceHero
+            todayRecord={todayRecord}
+            actionLoading={actionLoading}
+            onOpenCamera={(action) => {
+              setCameraAction(action)
+              setIsCameraModalOpen(true)
+            }}
+            onBreakAction={handleBreakAction}
+          />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Weekly Attendance Pulse (Multi-Bar Chart) */}
@@ -371,7 +363,7 @@ export function EmployeeDashboardWorkspace({ headerAction }) {
                 </div>
               </div>
               <div className="mt-2 -ml-2">
-                 <AttendanceBarChart data={getWeeklyData()} />
+                 <AttendanceBarChart data={weeklyData} />
               </div>
             </div>
 
@@ -387,7 +379,7 @@ export function EmployeeDashboardWorkspace({ headerAction }) {
                 </div>
               </div>
               <div className="mt-2 -ml-2">
-                 <GenericLineChart data={getLeaveTrendData()} xKey="month" dataKey="requests" label="Leave Requests" color="#6366f1" />
+                 <GenericLineChart data={leaveTrendData} xKey="month" dataKey="requests" label="Leave Requests" color="#6366f1" />
               </div>
             </div>
           </div>
@@ -486,8 +478,8 @@ export function EmployeeDashboardWorkspace({ headerAction }) {
               <span className="text-[10px] font-bold uppercase tracking-widest bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-3 py-1.5 rounded-full">This Month</span>
             </h3>
             <div className="flex-1 w-full flex items-center justify-center">
-              {getMonthlyAttendancePie().length > 0 ? (
-                <DepartmentPieChart data={getMonthlyAttendancePie()} />
+              {monthlyAttendancePie.length > 0 ? (
+                <DepartmentPieChart data={monthlyAttendancePie} />
               ) : (
                 <div className="text-center text-slate-400 text-sm font-medium">No attendance data yet.</div>
               )}

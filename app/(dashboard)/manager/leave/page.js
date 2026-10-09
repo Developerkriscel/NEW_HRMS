@@ -1,19 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import dynamic from 'next/dynamic'
-import { PageLoader } from '@/components/common/LoadingSpinner'
 import { CalendarOff, CheckSquare } from 'lucide-react'
-
-const EmployeeLeaveWorkspace = dynamic(
-  () => import('@/components/pages/EmployeeLeaveWorkspace').then((mod) => mod.EmployeeLeaveWorkspace),
-  { ssr: false, loading: () => <PageLoader /> }
-)
-
-const ManagerApprovalsWorkspace = dynamic(
-  () => import('@/components/pages/ManagerApprovalsWorkspace').then((mod) => mod.ManagerApprovalsWorkspace),
-  { ssr: false, loading: () => <PageLoader /> }
-)
+import { EmployeeLeaveWorkspace } from '@/components/pages/EmployeeLeaveWorkspace'
+import { ManagerApprovalsWorkspace } from '@/components/pages/ManagerApprovalsWorkspace'
 
 export default function ManagerMyLeavePage() {
   const [activeTab, setActiveTab] = useState('team')

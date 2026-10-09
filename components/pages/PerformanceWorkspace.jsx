@@ -34,7 +34,7 @@ export function PerformanceWorkspace({ title, subtitle }) {
       .finally(() => setLoading(false))
   }
 
-  useEffect(load, [])
+  useEffect(() => { load() }, [])
 
   async function assignKra(e) {
     e.preventDefault()

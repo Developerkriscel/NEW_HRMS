@@ -15,5 +15,6 @@ const AnnouncementSchema = new mongoose.Schema(
 )
 
 AnnouncementSchema.index({ tenantId: 1, scope: 1, team: 1 })
+AnnouncementSchema.index({ tenantId: 1, scope: 1, team: 1, createdAt: -1 })
 
 export default model('Announcement', AnnouncementSchema)

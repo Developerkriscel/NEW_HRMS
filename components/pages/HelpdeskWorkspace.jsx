@@ -21,6 +21,7 @@ const PRIORITY_COLORS = {
 export function HelpdeskWorkspace({ title, subtitle, canRaise = false, canManage = false }) {
   const [tickets, setTickets] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [statusFilter, setStatusFilter] = useState('')
   const [form, setForm] = useState({ subject: '', category: '', priority: 'MEDIUM', description: '' })
@@ -32,23 +33,30 @@ export function HelpdeskWorkspace({ title, subtitle, canRaise = false, canManage
   const [commentText, setCommentText] = useState('')
   const commentsEndRef = useRef(null)
 
-  function load() {
-    setLoading(true)
-    const params = { size: 100 }
-    if (statusFilter) params.status = statusFilter
-    helpdeskApi.list(params)
-      .then((res) => {
-        setTickets(res.data.data.content || [])
-        // If a ticket is currently open in the drawer, update its data
-        if (selectedTicket) {
-          const updated = res.data.data.content?.find(t => t._id === selectedTicket._id)
-          if (updated) setSelectedTicket(updated)
-        }
-      })
-      .finally(() => setLoading(false))
+  function syncTicketList(items = []) {
+    setTickets(items)
+    if (selectedTicket) {
+      const updated = items.find(t => t._id === selectedTicket._id)
+      if (updated) setSelectedTicket(updated)
+    }
   }
 
-  useEffect(load, [statusFilter]) // eslint-disable-line react-hooks/exhaustive-deps
+  function load({ silent = false } = {}) {
+    if (silent) setRefreshing(true)
+    else setLoading(true)
+    const params = { size: 100 }
+    if (statusFilter) params.status = statusFilter
+    return helpdeskApi.list(params)
+      .then((res) => {
+        syncTicketList(res.data.data.content || [])
+      })
+      .finally(() => {
+        if (silent) setRefreshing(false)
+        else setLoading(false)
+      })
+  }
+
+  useEffect(() => { load() }, [statusFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Scroll to bottom of comments when selectedTicket changes
   useEffect(() => {
@@ -68,11 +76,13 @@ export function HelpdeskWorkspace({ title, subtitle, canRaise = false, canManage
     setSaving(true)
     setMessage('')
     try {
-      await helpdeskApi.raise(form)
+      const res = await helpdeskApi.raise(form)
+      const created = res.data?.data
       setForm({ subject: '', category: '', priority: 'MEDIUM', description: '' })
       setMessage('Ticket raised successfully')
       setShowForm(false)
-      load()
+      if (created?._id) setTickets((current) => [created, ...current])
+      load({ silent: true }).catch(() => {})
     } catch (err) {
       setMessage(err.response?.data?.message || 'Failed to raise ticket')
     } finally {
@@ -84,8 +94,11 @@ export function HelpdeskWorkspace({ title, subtitle, canRaise = false, canManage
     if (!selectedTicket || selectedTicket.status === nextStatus) return
     setSaving(true)
     try {
-      await helpdeskApi.setStatus(selectedTicket._id, nextStatus)
-      load()
+      const res = await helpdeskApi.setStatus(selectedTicket._id, nextStatus)
+      const updated = res.data?.data || { ...selectedTicket, status: nextStatus }
+      setSelectedTicket(updated)
+      setTickets((current) => current.map((ticket) => ticket._id === updated._id ? { ...ticket, ...updated } : ticket))
+      load({ silent: true }).catch(() => {})
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to update status')
     } finally {
@@ -100,9 +113,9 @@ export function HelpdeskWorkspace({ title, subtitle, canRaise = false, canManage
     try {
       const res = await helpdeskApi.addComment(selectedTicket._id, commentText)
       setCommentText('')
-      // Update the local selected ticket immediately for snappy UI, while load() runs in background
       setSelectedTicket(res.data.data)
-      load()
+      setTickets((current) => current.map((ticket) => ticket._id === res.data.data._id ? { ...ticket, ...res.data.data } : ticket))
+      load({ silent: true }).catch(() => {})
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to add comment')
     } finally {
@@ -196,6 +209,11 @@ export function HelpdeskWorkspace({ title, subtitle, canRaise = false, canManage
       )}
 
       <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
+        {refreshing && (
+          <div className="px-5 pt-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            Refreshing in background...
+          </div>
+        )}
         <DataTable
           columns={columns}
           data={tickets}

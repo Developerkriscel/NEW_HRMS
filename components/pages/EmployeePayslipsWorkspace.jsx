@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Badge } from '@/components/common/Badge'
 import { useAuthStore } from '@/store/authStore'
 import { employeeApi } from '@/services/employeeApi'
@@ -12,6 +12,16 @@ export function EmployeePayslipsWorkspace({ headerAction }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [downloading, setDownloading] = useState(null)
+  const hasUser = Boolean(user)
+  const employeeId = useMemo(() => (
+    user?.employeeProfile?._id ||
+    user?.employee?._id ||
+    user?.employeeId ||
+    user?.id ||
+    user?._id ||
+    user?.userId ||
+    'me'
+  ), [user?.employeeProfile?._id, user?.employee?._id, user?.employeeId, user?.id, user?._id, user?.userId])
 
   async function handleDownload(payslipId) {
     try {
@@ -42,12 +52,14 @@ export function EmployeePayslipsWorkspace({ headerAction }) {
   }
 
   useEffect(() => {
-    if (!user?.id) return
-    employeeApi.getPayslips(user.id)
-      .then((res) => setPayslips(res.data.data))
+    if (!hasUser) return
+    setLoading(true)
+    setError(false)
+    employeeApi.getPayslips(employeeId)
+      .then((res) => setPayslips(res.data?.data || []))
       .catch(() => setError(true))
       .finally(() => setLoading(false))
-  }, [user?.id])
+  }, [employeeId, hasUser])
 
   return (
     <div className="animate-fade-in space-y-8 pb-12">
@@ -100,7 +112,7 @@ export function EmployeePayslipsWorkspace({ headerAction }) {
                       {new Date(2000, p.month - 1, 1).toLocaleString('default', { month: 'long' })} {p.year}
                     </h3>
                   </div>
-                  <Badge variant={p.status === 'PAID' ? 'success' : 'warning'}>{p.status}</Badge>
+                  <Badge>{p.status}</Badge>
                 </div>
                 <div className="space-y-4 mb-6">
                   <div className="flex justify-between items-end">

@@ -283,7 +283,7 @@ export function OffboardingWorkspace() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(load, [status])
+  useEffect(() => { load() }, [status])
 
   async function decide(row, decision) {
     setSaving(true)

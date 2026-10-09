@@ -35,6 +35,10 @@ export const PATCH = withApi(async (req, { params }) => {
   // hand (status, manual skill tags), not the whole Candidate Master.
   if (body.status !== undefined) candidate.status = body.status
   if (body.skills !== undefined) candidate.skills = body.skills
+  if (body.email !== undefined) candidate.email = body.email ? String(body.email).trim() : candidate.email
+  if (body.phone !== undefined) candidate.phone = body.phone ? String(body.phone).trim() : candidate.phone
+  if (body.firstName !== undefined) candidate.firstName = body.firstName ? String(body.firstName).trim() : candidate.firstName
+  if (body.lastName !== undefined) candidate.lastName = body.lastName ? String(body.lastName).trim() : candidate.lastName
   candidate.updatedBy = session.sub
   await candidate.save()
 

@@ -61,7 +61,7 @@ export function DepartmentsSection() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(load, [])
+  useEffect(() => { load() }, [])
 
   const stats = useMemo(() => ({
     total: departments.length,

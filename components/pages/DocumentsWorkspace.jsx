@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { FilePlus, Plus, X, FileText, ExternalLink, Check, Trash2, Upload } from 'lucide-react'
+import { useEffect, useState, useMemo } from 'react'
+import { FilePlus, Plus, X, FileText, ExternalLink, Check, Trash2, Upload, Eye } from 'lucide-react'
 import { Badge } from '@/components/common/Badge'
 import { DataTable } from '@/components/tables/DataTable'
 import { documentApi } from '@/services/documentApi'
@@ -10,11 +10,65 @@ import { formatDate } from '@/lib/utils'
 import { Portal } from '@/components/common/Portal'
 
 const STATUSES = ['PENDING', 'SUBMITTED', 'VERIFIED', 'REJECTED']
+const REQUIRED_DOCS = [
+  { title: 'Offer Letter', category: 'OFFER_LETTER' },
+  { title: 'Appointment Letter', category: 'APPOINTMENT_LETTER' },
+  { title: 'Aadhaar Card', category: 'IDENTITY' },
+  { title: 'PAN Card', category: 'IDENTITY' },
+  { title: 'Bank Proof', category: 'FINANCIAL' },
+  { title: 'Education Certificate', category: 'EDUCATION' },
+  { title: 'Other Employee Documents', category: 'GENERAL' },
+]
+
+function getEmployeeId(value) {
+  if (!value) return ''
+  if (typeof value === 'string') return value
+  return value._id || value.id || ''
+}
+
+function sameDocumentSlot(document, requiredDocument) {
+  return document.title === requiredDocument.title || document.category === requiredDocument.category
+}
+
+function buildDocumentChecklist(documents, employee = null) {
+  const employeeId = getEmployeeId(employee)
+  const scopedDocuments = employeeId
+    ? documents.filter((doc) => getEmployeeId(doc.employee) === employeeId)
+    : documents
+  const usedDocIds = new Set()
+  const checklist = []
+
+  REQUIRED_DOCS.forEach((requiredDocument) => {
+    const matchingDocs = scopedDocuments.filter((doc) => sameDocumentSlot(doc, requiredDocument))
+    if (matchingDocs.length > 0) {
+      matchingDocs.forEach((doc) => {
+        checklist.push(doc)
+        usedDocIds.add(doc._id)
+      })
+    } else {
+      checklist.push({
+        ...requiredDocument,
+        status: 'PENDING',
+        employee,
+        employeeId,
+        _id: `placeholder_${employeeId || 'me'}_${requiredDocument.category}`,
+        isPlaceholder: true,
+      })
+    }
+  })
+
+  scopedDocuments.forEach((doc) => {
+    if (!usedDocIds.has(doc._id)) checklist.push(doc)
+  })
+
+  return checklist
+}
 
 export function DocumentsWorkspace({ title, subtitle, employeeMode = false }) {
   const [documents, setDocuments] = useState([])
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -22,9 +76,10 @@ export function DocumentsWorkspace({ title, subtitle, employeeMode = false }) {
   const [selectedFile, setSelectedFile] = useState(null)
   const [isRequestMode, setIsRequestMode] = useState(false)
 
-  function load() {
-    setLoading(true)
-    Promise.all([
+  function load({ silent = false } = {}) {
+    if (silent) setRefreshing(true)
+    else setLoading(true)
+    return Promise.all([
       documentApi.list(),
       employeeMode ? Promise.resolve(null) : employeeApi.getAll({ size: 50 }),
     ])
@@ -32,10 +87,13 @@ export function DocumentsWorkspace({ title, subtitle, employeeMode = false }) {
         setDocuments(docRes.data.data || [])
         if (employeeRes) setEmployees(employeeRes.data.data.content || [])
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (silent) setRefreshing(false)
+        else setLoading(false)
+      })
   }
 
-  useEffect(load, [employeeMode])
+  useEffect(() => { load() }, [employeeMode])
 
   async function addDocument(e) {
     e.preventDefault()
@@ -50,12 +108,14 @@ export function DocumentsWorkspace({ title, subtitle, employeeMode = false }) {
         finalFileUrl = uploadRes.data?.data?.url || uploadRes.data?.url
       }
       
-      await documentApi.create({ ...form, fileUrl: finalFileUrl })
+      const res = await documentApi.create({ ...form, fileUrl: finalFileUrl })
+      const createdDocument = res.data.data
       setForm({ employeeId: '', title: '', category: 'GENERAL', fileUrl: '', notes: '' })
       setSelectedFile(null)
       setMessage('Document added successfully')
       setShowForm(false)
-      load()
+      if (createdDocument?._id) setDocuments(prev => [createdDocument, ...prev])
+      load({ silent: true }).catch(() => {})
     } catch (err) {
       setMessage(err.response?.data?.message || 'Failed to add document')
     } finally {
@@ -67,9 +127,11 @@ export function DocumentsWorkspace({ title, subtitle, employeeMode = false }) {
     setSaving(true)
     setMessage('')
     try {
-      await documentApi.update(row._id, { status })
+      const res = await documentApi.update(row._id, { status })
+      const updatedDocument = res.data.data
       setMessage('Document updated')
-      load()
+      setDocuments(prev => prev.map(doc => doc._id === row._id ? (updatedDocument || { ...doc, status }) : doc))
+      load({ silent: true }).catch(() => {})
     } catch (err) {
       setMessage(err.response?.data?.message || 'Failed to update document')
     } finally {
@@ -84,7 +146,8 @@ export function DocumentsWorkspace({ title, subtitle, employeeMode = false }) {
     try {
       await documentApi.remove(id)
       setMessage('Document removed')
-      load()
+      setDocuments(prev => prev.filter(doc => doc._id !== id))
+      load({ silent: true }).catch(() => {})
     } catch (err) {
       setMessage(err.response?.data?.message || 'Failed to remove document')
     } finally {
@@ -102,9 +165,25 @@ export function DocumentsWorkspace({ title, subtitle, employeeMode = false }) {
       const uploadRes = await documentApi.upload(formData)
       const fileUrl = uploadRes.data?.data?.url || uploadRes.data?.url
       
-      await documentApi.update(doc._id, { fileUrl, status: 'SUBMITTED' })
+      let res;
+      let updatedDocument;
+      if (doc._id && !doc.isPlaceholder) {
+        res = await documentApi.update(doc._id, { fileUrl, status: 'SUBMITTED' })
+        updatedDocument = res.data.data
+        setDocuments(prev => prev.map(item => item._id === doc._id ? (updatedDocument || { ...item, fileUrl, status: 'SUBMITTED' }) : item))
+      } else {
+        res = await documentApi.create({
+          title: doc.title,
+          category: doc.category,
+          fileUrl,
+          status: 'SUBMITTED',
+          ...(doc.employeeId ? { employeeId: doc.employeeId } : {}),
+        })
+        updatedDocument = res.data.data
+        setDocuments(prev => [updatedDocument, ...prev])
+      }
       setMessage('File uploaded successfully')
-      load()
+      load({ silent: true }).catch(() => {})
     } catch (err) {
       setMessage(err.response?.data?.message || 'Failed to upload file')
     } finally {
@@ -117,29 +196,33 @@ export function DocumentsWorkspace({ title, subtitle, employeeMode = false }) {
       const isValidUrl = row.fileUrl && (row.fileUrl.startsWith('http') || row.fileUrl.startsWith('/api') || row.fileUrl.startsWith('data:'));
       return (
         <div>
-          <div className="flex items-center gap-2">
-            <p className="font-medium text-slate-800 dark:text-slate-100">{row.title}</p>
-            {isValidUrl && (
-              <a href={row.fileUrl} target="_blank" rel="noreferrer" title="View Document" className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors bg-indigo-50 dark:bg-indigo-500/10 p-1.5 rounded-lg">
-                <ExternalLink className="w-4 h-4" />
-              </a>
-            )}
-          </div>
+          <p className="font-medium text-slate-800 dark:text-slate-100">{row.title}</p>
           <p className="text-xs text-slate-400 mt-0.5">{row.category || 'GENERAL'} {row.fileUrl && !isValidUrl ? `(${row.fileUrl})` : ''}</p>
         </div>
       )
     } },
     { header: 'Employee', accessor: 'employee', render: (v) => v ? `${v.firstName} ${v.lastName}` : 'Me' },
     { header: 'Status', accessor: 'status', render: (v) => <Badge>{v}</Badge> },
-    { header: 'Expires', accessor: 'expiresAt', render: (v) => formatDate(v) },
-    { header: 'Action', key: 'action', sortable: false, render: (_, row) => {
+    { header: 'Action', key: 'action', align: 'right', sortable: false, render: (_, row) => {
       const isValidUrl = row.fileUrl && (row.fileUrl.startsWith('http') || row.fileUrl.startsWith('/api') || row.fileUrl.startsWith('data:'));
-      if (isValidUrl) return null;
+      
       return (
-        <label className="inline-flex items-center justify-center p-2 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-400 dark:hover:bg-indigo-500/20 cursor-pointer transition-colors shadow-sm" title="Upload File">
-          <Upload className="w-4 h-4" />
-          <input type="file" className="hidden" onChange={(e) => uploadToExistingDocument(row, e.target.files[0])} disabled={saving} />
-        </label>
+        <div className="flex justify-end items-center gap-2">
+          {isValidUrl && (
+            <a href={row.fileUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center p-2 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 cursor-pointer transition-colors shadow-sm" title="View Document">
+              <Eye className="w-4 h-4" />
+            </a>
+          )}
+          
+          {isValidUrl && row.status === 'VERIFIED' ? (
+            <span className="text-xs text-slate-400 font-medium whitespace-nowrap ml-1">Approved & Locked</span>
+          ) : (
+            <label className="inline-flex items-center justify-center p-2 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-400 dark:hover:bg-indigo-500/20 cursor-pointer transition-colors shadow-sm" title={isValidUrl ? "Re-upload File" : "Upload File"}>
+              <Upload className="w-4 h-4" />
+              <input type="file" className="hidden" onChange={(e) => uploadToExistingDocument(row, e.target.files[0])} disabled={saving} />
+            </label>
+          )}
+        </div>
       )
     }}
   ]
@@ -165,8 +248,7 @@ export function DocumentsWorkspace({ title, subtitle, employeeMode = false }) {
       key: 'documents',
       sortable: false,
       render: (_, employee) => {
-        const empDocs = documents.filter(d => d.employee?._id === employee._id || d.employee === employee._id)
-        if (empDocs.length === 0) return <p className="text-sm text-slate-400 italic font-medium">No documents uploaded</p>
+        const empDocs = buildDocumentChecklist(documents, employee)
         
         return (
           <div className="flex flex-wrap gap-3">
@@ -224,12 +306,14 @@ export function DocumentsWorkspace({ title, subtitle, employeeMode = false }) {
                     
                     <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1"></div>
                     
-                    <button 
-                      type="button" disabled={saving} onClick={() => removeDocument(doc._id)} title="Remove Document"
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {!doc.isPlaceholder && (
+                      <button 
+                        type="button" disabled={saving} onClick={() => removeDocument(doc._id)} title="Remove Document"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               )
@@ -240,7 +324,10 @@ export function DocumentsWorkspace({ title, subtitle, employeeMode = false }) {
     }
   ]
 
-  const dataToRender = employeeMode ? documents : employees
+  const dataToRender = useMemo(() => (
+    employeeMode ? buildDocumentChecklist(documents) : employees
+  ), [employeeMode, documents, employees]);
+
   const columnsToRender = employeeMode ? columns : adminColumns
   const searchPlaceholder = employeeMode ? "Search documents..." : "Search employees..."
 
@@ -256,12 +343,14 @@ export function DocumentsWorkspace({ title, subtitle, employeeMode = false }) {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button 
-            className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 px-5 rounded-xl font-bold text-sm transition-all shadow-[0_0_20px_-5px_rgba(79,70,229,0.5)] flex items-center gap-2" 
-            onClick={() => { setMessage(''); setShowForm(true); }}
-          >
-            <Plus className="w-4 h-4" /> Add Document
-          </button>
+          {!employeeMode && (
+            <button 
+              className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 px-5 rounded-xl font-bold text-sm transition-all shadow-[0_0_20px_-5px_rgba(79,70,229,0.5)] flex items-center gap-2" 
+              onClick={() => { setMessage(''); setShowForm(true); }}
+            >
+              <Plus className="w-4 h-4" /> Add Document
+            </button>
+          )}
         </div>
       </div>
 
@@ -345,7 +434,8 @@ export function DocumentsWorkspace({ title, subtitle, employeeMode = false }) {
       )}
 
       {message && <p className="text-sm text-slate-500 dark:text-slate-400">{message}</p>}
-      <DataTable columns={columnsToRender} data={dataToRender} isLoading={loading} searchPlaceholder={searchPlaceholder} emptyMessage="No records found" />
+      {refreshing && <p className="text-xs font-semibold text-slate-400">Refreshing in background...</p>}
+      <DataTable columns={columnsToRender} data={dataToRender} isLoading={loading} searchPlaceholder={searchPlaceholder} emptyMessage="No records found" pageSize={50} />
     </div>
   )
 }

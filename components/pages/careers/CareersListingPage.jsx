@@ -32,7 +32,7 @@ export function CareersListingPage({ companySlug }) {
       .catch((err) => { if (err.response?.status === 404) setNotFound(true) })
       .finally(() => setLoading(false))
   }
-  useEffect(load, [filters, companySlug])
+  useEffect(() => { load() }, [filters, companySlug])
 
   function updateFilter(key, value) {
     setFilters((f) => ({ ...f, [key]: value }))

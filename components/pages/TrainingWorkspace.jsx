@@ -13,6 +13,7 @@ export function TrainingWorkspace() {
   const [sessions, setSessions] = useState([])
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [viewTraining, setViewTraining] = useState(null)
@@ -35,27 +36,33 @@ export function TrainingWorkspace() {
     return saved + activeDiff
   }
 
-  function load() {
-    setLoading(true)
-    Promise.all([trainingApi.list({ size: 20 }), employeeApi.getAll({ size: 50 })])
+  function load({ silent = false } = {}) {
+    if (silent) setRefreshing(true)
+    else setLoading(true)
+    return Promise.all([trainingApi.list({ size: 20 }), employeeApi.getAll({ size: 50 })])
       .then(([trainingRes, employeeRes]) => {
         setSessions(trainingRes.data.data || [])
         setEmployees(employeeRes.data.data.content || [])
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (silent) setRefreshing(false)
+        else setLoading(false)
+      })
   }
 
-  useEffect(load, [])
+  useEffect(() => { load() }, [])
 
   async function createTraining(e) {
     e.preventDefault()
     setSaving(true)
     setMessage('')
     try {
-      await trainingApi.create(form)
+      const res = await trainingApi.create(form)
+      const created = res.data?.data
       setForm({ title: '', category: '', trainer: '', scheduledAt: '', attendeeIds: [] })
       setIsModalOpen(false)
-      load()
+      if (created?._id) setSessions((current) => [created, ...current])
+      load({ silent: true }).catch(() => {})
     } catch (err) {
       setMessage(err.response?.data?.message || 'Failed to create training')
     } finally {
@@ -88,9 +95,8 @@ export function TrainingWorkspace() {
         }
         setSessions((prev) => prev.map(mergeTraining))
         setViewTraining((current) => mergeTraining(current))
-      } else {
-        load()
       }
+      load({ silent: true }).catch(() => {})
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to update training')
     } finally {
@@ -199,6 +205,7 @@ export function TrainingWorkspace() {
         </button>
       </div>
 
+      {refreshing && <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Refreshing in background...</p>}
       <DataTable columns={columns} data={sessions} isLoading={loading} searchPlaceholder="Search training..." emptyMessage="No training sessions found" />
 
       {/* Premium Modal Overlay */}

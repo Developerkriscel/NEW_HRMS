@@ -16,6 +16,7 @@ const LeaveBalanceSchema = new mongoose.Schema(
 )
 
 LeaveBalanceSchema.index({ employee: 1, leaveType: 1, year: 1 }, { unique: true })
+LeaveBalanceSchema.index({ tenantId: 1, employee: 1, year: 1 })
 
 LeaveBalanceSchema.methods.getAvailableDays = function () {
   return this.totalDays + this.carryForwardDays - this.usedDays - this.pendingDays

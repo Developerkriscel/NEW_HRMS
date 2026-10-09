@@ -1,7 +1,7 @@
 import api from './api'
 
 export const payrollApi = {
-  run: (month, year, employeeIds) => api.post('/payroll/run', { month, year, employeeIds }),
+  run: (month, year, employeeIds, allowOverwrite = false) => api.post('/payroll/run', { month, year, employeeIds, allowOverwrite }),
   getEligibility: (month, year) => api.get('/payroll/eligibility', { params: { month, year } }),
   getMonthly: (params) => api.get('/payroll/monthly', { params }),
   getPayslip: (employeeId, params) => api.get(`/payroll/payslip/${employeeId}`, { params }),

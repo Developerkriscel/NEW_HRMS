@@ -28,7 +28,7 @@ export function ManagerTasksWorkspace() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(load, [])
+  useEffect(() => { load() }, [])
 
   async function assignTask(e) {
     e.preventDefault()

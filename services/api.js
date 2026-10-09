@@ -16,6 +16,10 @@ const getCache = new Map()
 const DEV_LOGIN_STORAGE_KEY = 'nexahr_dev_login'
 const DEV_MOCK_BLOCKED_GET_PATHS = new Set([
   '/recruitment/dashboard',
+  '/attendance',
+  '/attendance/today',
+  '/attendance/my-attendance',
+  '/attendance/monthly-report',
 ])
 
 function isDevLoginMockEnabled() {
@@ -351,8 +355,7 @@ function shouldMockDevGet(config) {
   if (!isDevLoginMockEnabled()) return false
 
   const path = normalizePath(config.url)
-  if (DEV_MOCK_BLOCKED_GET_PATHS.has(path)) return false
-  if (path.startsWith('/auth/') || path.startsWith('/public/') || path.startsWith('/candidate/')) return false
+  if (path.startsWith('/auth/') || path.startsWith('/public/') || path.startsWith('/candidate/') || path.startsWith('/attendance') || path.startsWith('/payroll')) return false
   return true
 }
 

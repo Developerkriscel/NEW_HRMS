@@ -55,7 +55,7 @@ export function EmployeeDetail({ basePath }) {
       })
       .finally(() => setLoading(false))
   }
-  useEffect(load, [id])
+  useEffect(() => { load() }, [id])
 
   useEffect(() => {
     if (!canEdit) return

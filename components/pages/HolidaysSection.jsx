@@ -55,7 +55,7 @@ export function HolidaysSection() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(load, [year])
+  useEffect(() => { load() }, [year])
 
   const filteredHolidays = useMemo(() => {
     if (typeFilter === 'mandatory') return holidays.filter((holiday) => !holiday.optional)

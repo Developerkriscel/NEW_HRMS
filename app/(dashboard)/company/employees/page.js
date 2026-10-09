@@ -1,17 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import dynamic from 'next/dynamic'
-import { PageLoader } from '@/components/common/LoadingSpinner'
 import { RolesPermissionsSection } from '@/components/pages/RolesPermissionsSection'
 import { HierarchySection } from '@/components/pages/HierarchySection'
 import { Users, ShieldCheck, Network, Plus } from 'lucide-react'
 import { AddEmployeePage } from '@/components/pages/AddEmployeePage'
-
-const EmployeesList = dynamic(
-  () => import('@/components/pages/EmployeesList').then((mod) => mod.EmployeesList),
-  { ssr: false, loading: () => <PageLoader /> }
-)
+import { EmployeesList } from '@/components/pages/EmployeesList'
 
 export default function CompanyEmployeesPage() {
   const [activeTab, setActiveTab] = useState('directory')

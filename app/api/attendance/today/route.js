@@ -12,6 +12,13 @@ export const GET = withApi(async () => {
   const tomorrow = new Date(today)
   tomorrow.setDate(today.getDate() + 1)
 
-  const attendance = await Attendance.findOne({ employee: session.userId, date: { $gte: today, $lt: tomorrow }, tenantId })
+  const attendance = await Attendance.findOne({
+    employee: session.userId,
+    date: { $gte: today, $lt: tomorrow },
+    tenantId,
+  })
+    .select('-checkInPhoto -checkOutPhoto')
+    .lean()
+
   return ok(attendance || null)
 })

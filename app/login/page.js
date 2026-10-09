@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Mail, Lock, Eye, EyeOff, Sparkles, Shield, Building2, UserCheck, Users, Briefcase, DollarSign, Terminal } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, Sparkles, Shield, Building2, UserCheck, Users, Briefcase } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 
 const ROLE_DASHBOARDS = {
@@ -23,8 +23,6 @@ const QUICK_LOGINS = [
   { label: 'HR Manager', role: 'HR_MANAGER', email: 'hr@acme.com', password: 'Password@123', icon: UserCheck, color: 'from-purple-600 to-pink-600 text-purple-700 bg-purple-50/80 border-purple-200' },
   { label: 'Manager', role: 'MANAGER', email: 'manager@acme.com', password: 'Password@123', icon: Users, color: 'from-amber-600 to-orange-600 text-amber-700 bg-amber-50/80 border-amber-200' },
   { label: 'Employee', role: 'EMPLOYEE', email: 'employee@acme.com', password: 'Password@123', icon: Briefcase, color: 'from-sky-600 to-cyan-600 text-sky-700 bg-sky-50/80 border-sky-200' },
-  { label: 'Finance', role: 'FINANCE', email: 'finance@acme.com', password: 'Password@123', icon: DollarSign, color: 'from-rose-600 to-red-600 text-rose-700 bg-rose-50/80 border-rose-200' },
-  { label: 'IT Admin', role: 'IT_ADMIN', email: 'itadmin@acme.com', password: 'Password@123', icon: Terminal, color: 'from-slate-700 to-slate-900 text-slate-700 bg-slate-100 border-slate-300' },
 ]
 
 function loginErrorMessage(err, fallback) {

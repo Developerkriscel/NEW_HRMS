@@ -26,6 +26,8 @@ const TeamRequestSchema = new mongoose.Schema(
 )
 
 TeamRequestSchema.index({ tenantId: 1, employee: 1 })
+TeamRequestSchema.index({ tenantId: 1, employee: 1, createdAt: -1 })
+TeamRequestSchema.index({ tenantId: 1, employee: 1, status: 1 })
 TeamRequestSchema.index({ tenantId: 1, type: 1, status: 1 })
 
 export default model('TeamRequest', TeamRequestSchema)

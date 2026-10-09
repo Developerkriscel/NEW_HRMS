@@ -1,12 +1,4 @@
-'use client'
-
-import dynamic from 'next/dynamic'
-import { PageLoader } from '@/components/common/LoadingSpinner'
-
-const DocumentsWorkspace = dynamic(
-  () => import('@/components/pages/DocumentsWorkspace').then((mod) => mod.DocumentsWorkspace),
-  { ssr: false, loading: () => <PageLoader /> }
-)
+import { DocumentsWorkspace } from '@/components/pages/DocumentsWorkspace'
 
 export default function ManagerDocumentsPage() {
   return (

@@ -5,11 +5,13 @@ import { getPanelNotifications, createNotification } from '@/lib/notifications'
 
 export const GET = withApi(async () => {
   const session = await requireAuth()
-  if (session.devLogin && process.env.NODE_ENV !== 'production') {
+  try {
+    const data = await getPanelNotifications(session)
+    return ok(data || { notifications: [], unreadCount: 0 })
+  } catch (err) {
+    console.error('Failed to get notifications:', err)
     return ok({ notifications: [], unreadCount: 0 })
   }
-  const data = await getPanelNotifications(session)
-  return ok(data)
 })
 
 export const POST = withApi(async (req) => {

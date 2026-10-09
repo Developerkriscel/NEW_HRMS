@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { CalendarDays, CalendarOff, Clock, Star, Users, Megaphone, CheckCircle } from 'lucide-react'
+import { CalendarDays, CalendarOff, Clock, Star, Users, Megaphone, CheckCircle, Filter } from 'lucide-react'
 import { StatsCard } from '@/components/cards/StatsCard'
 import { Badge } from '@/components/common/Badge'
 import { PageLoader } from '@/components/common/LoadingSpinner'
@@ -24,6 +24,7 @@ export function ManagerDashboardWorkspace({ headerAction }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [now, setNow] = useState(new Date())
+  const [timeFilter, setTimeFilter] = useState('This Week')
 
   useEffect(() => {
     if (user?.devLogin) {
@@ -63,7 +64,7 @@ export function ManagerDashboardWorkspace({ headerAction }) {
     <div className="animate-fade-in space-y-6 w-full pb-12">
       
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div className="flex-1">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-emerald-500 after:to-transparent after:rounded-full flex items-center gap-2">
@@ -72,13 +73,33 @@ export function ManagerDashboardWorkspace({ headerAction }) {
               </span>
               <span className="inline-block text-black drop-shadow-sm filter-none" style={{ WebkitTextFillColor: 'initial' }}>👋</span>
             </h1>
-            {headerAction && <div>{headerAction}</div>}
           </div>
           <div className="mt-1.5">
             <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
               {now.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
           </div>
+        </div>
+        
+        {/* Right Header Actions */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mt-3 sm:mt-0 w-full sm:w-auto">
+          {/* Global Dashboard Filter */}
+          <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 shadow-sm w-full sm:w-auto">
+            <Filter className="w-4 h-4 text-slate-400" />
+            <select 
+              value={timeFilter}
+              onChange={(e) => setTimeFilter(e.target.value)}
+              className="bg-transparent text-sm font-semibold text-slate-700 dark:text-slate-300 outline-none cursor-pointer"
+            >
+              <option>Today</option>
+              <option>Yesterday</option>
+              <option>This Week</option>
+              <option>This Month</option>
+              <option>Last 6 Months</option>
+              <option>All Time</option>
+            </select>
+          </div>
+          {headerAction && <div className="w-full sm:w-auto flex overflow-x-auto pb-1 sm:pb-0 hide-scrollbar">{headerAction}</div>}
         </div>
       </div>
 
@@ -97,36 +118,36 @@ export function ManagerDashboardWorkspace({ headerAction }) {
         <div className="lg:col-span-2 space-y-6">
           
           {/* Main Hero Card */}
-          <div className="relative rounded-3xl overflow-hidden bg-slate-900 shadow-xl border border-slate-800 p-4 sm:p-5 isolation-auto">
+          <div className="relative rounded-2xl overflow-hidden bg-slate-900 shadow-md border border-slate-800 p-2 sm:p-3 isolation-auto">
             <div className="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none animate-pulse"></div>
             <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-10 mix-blend-overlay pointer-events-none"></div>
 
-            <div className="relative z-10 flex flex-col sm:flex-row gap-4 items-center justify-between">
-              <div className="flex-1 w-full flex flex-col items-start">
-                <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10 backdrop-blur-md mb-2">
-                  <span className="relative flex h-3 w-3">
+            <div className="relative z-10 flex flex-col sm:flex-row gap-2 items-center justify-between">
+              <div className="flex-1 w-full flex flex-col items-start px-2">
+                <div className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-full bg-white/5 border border-white/10 backdrop-blur-md mb-1">
+                  <span className="relative flex h-1.5 w-1.5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-gradient-to-r from-emerald-500 to-teal-400"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-gradient-to-r from-emerald-500 to-teal-400"></span>
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-gradient-to-r from-emerald-500 to-teal-400"></span>
                   </span>
-                  <span className="text-white text-[10px] font-semibold tracking-wide uppercase">Live Status</span>
+                  <span className="text-white text-[8px] font-semibold tracking-wide uppercase">Live Status</span>
                 </div>
 
-                <h2 className="text-3xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-white/60 tabular-nums tracking-tighter mb-0.5">
+                <h2 className="text-xl sm:text-2xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-white/60 tabular-nums tracking-tighter">
                   {now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                  <span className="text-lg text-white/40 ml-1">{now.toLocaleTimeString('en-US', { second: '2-digit' })}</span>
+                  <span className="text-sm text-white/40 ml-1">{now.toLocaleTimeString('en-US', { second: '2-digit' })}</span>
                 </h2>
               </div>
 
-              <div className="flex-[1.2] w-full bg-black/40 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-2xl">
-                <h3 className="text-emerald-400 text-xs font-bold uppercase tracking-wider mb-3">Team Attendance Overview</h3>
-                <div className="flex items-end justify-between mb-2">
-                  <span className="text-2xl font-black text-white">{data?.presentToday || 0}<span className="text-sm font-medium text-white/50"> / {data?.teamSize || 0}</span></span>
-                  <span className="text-sm font-bold text-white">{attendancePercentage}%</span>
+              <div className="flex-[1.5] w-full bg-black/40 backdrop-blur-xl border border-white/10 rounded-lg p-2.5 shadow-xl">
+                <h3 className="text-emerald-400 text-[9px] font-bold uppercase tracking-wider mb-1.5">Team Attendance Overview</h3>
+                <div className="flex items-end justify-between mb-1">
+                  <span className="text-lg font-black text-white">{data?.presentToday || 0}<span className="text-[10px] font-medium text-white/50"> / {data?.teamSize || 0}</span></span>
+                  <span className="text-[10px] font-bold text-white">{attendancePercentage}%</span>
                 </div>
-                <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
+                <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
                   <div className="h-full bg-gradient-to-r from-emerald-400 to-teal-300 rounded-full" style={{ width: `${attendancePercentage}%` }}></div>
                 </div>
-                <p className="text-xs text-white/50 mt-2 text-right">Team members present today</p>
+                <p className="text-[9px] text-white/50 mt-1 text-right">Team members present today</p>
               </div>
             </div>
           </div>

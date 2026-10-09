@@ -19,7 +19,7 @@ export function LeaveApprovals({ title = 'Leave Approvals', subtitle = 'Pending 
       .then((res) => setLeaves(res.data.data.content))
       .finally(() => setLoading(false))
   }
-  useEffect(load, [])
+  useEffect(() => { load() }, [])
 
   async function approve(id) {
     await leaveApi.approve(id, '')

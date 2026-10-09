@@ -124,22 +124,27 @@ export function ManagerApprovalsWorkspace({ headerAction, title = 'Approvals', s
   const [statusFilter, setStatusFilter] = useState('ALL')
     const [employeeFilter, setEmployeeFilter] = useState('ALL')
     const [dateRangeFilter, setDateRangeFilter] = useState('ALL')
-    const [customStartDate, setCustomStartDate] = useState('')
-    const [customEndDate, setCustomEndDate] = useState('')
+  const [customStartDate, setCustomStartDate] = useState('')
+  const [customEndDate, setCustomEndDate] = useState('')
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [savingId, setSavingId] = useState('')
   const [message, setMessage] = useState('')
   const [selectedLeave, setSelectedLeave] = useState(null)
 
-  function load() {
-    setLoading(true)
+  function load({ silent = false } = {}) {
+    if (silent) setRefreshing(true)
+    else setLoading(true)
     const params = { ...(type && { type }), scope }
-    managerApi.getApprovals(params)
+    return managerApi.getApprovals(params)
       .then((res) => setItems(res.data.data || []))
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (silent) setRefreshing(false)
+        else setLoading(false)
+      })
   }
 
-  useEffect(load, [type])
+  useEffect(() => { load() }, [type])
 
   async function decide(item, approved) {
     setSavingId(item.id)
@@ -184,6 +189,10 @@ export function ManagerApprovalsWorkspace({ headerAction, title = 'Approvals', s
         }
         return i
       }))
+      setSelectedLeave((current) => current?.id === item.id
+        ? { ...current, status: approved ? (item.type === 'RESIGNATION' ? 'FORWARDED_TO_HR' : 'APPROVED') : 'REJECTED' }
+        : current)
+      load({ silent: true }).catch(() => {})
     } catch (err) {
       setMessage(err.response?.data?.message || 'Failed to update approval')
     } finally {
@@ -407,6 +416,7 @@ export function ManagerApprovalsWorkspace({ headerAction, title = 'Approvals', s
       </div>
 
       {message && <p className="text-sm text-slate-500 dark:text-slate-400">{message}</p>}
+      {refreshing && <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Refreshing in background...</p>}
       <DataTable pageSize={50} columns={requestCategory === 'LEAVE' ? leaveColumns : columns} data={displayItems} isLoading={loading} searchPlaceholder="Search approvals..." emptyMessage={`No pending ${requestCategory === 'LEAVE' ? 'leave' : 'other'} approvals`} />
       <LeaveApprovalDrawer item={selectedLeave} onClose={() => setSelectedLeave(null)} onDecide={decide} saving={savingId} />
     </div>

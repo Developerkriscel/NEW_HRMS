@@ -1,12 +1,4 @@
-'use client'
-
-import dynamic from 'next/dynamic'
-import { PageLoader } from '@/components/common/LoadingSpinner'
-
-const OffboardingWorkspace = dynamic(
-  () => import('@/components/pages/OffboardingWorkspace').then((mod) => mod.OffboardingWorkspace),
-  { ssr: false, loading: () => <PageLoader /> }
-)
+import { OffboardingWorkspace } from '@/components/pages/OffboardingWorkspace'
 
 export default function OffboardingPage() {
   return <OffboardingWorkspace />

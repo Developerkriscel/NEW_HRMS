@@ -12,34 +12,41 @@ const TYPES = ['SHIFT_CHANGE', 'OVERTIME', 'WORK_FROM_HOME', 'TRAVEL', 'DOCUMENT
 export function EmployeeRequestsWorkspace() {
   const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [form, setForm] = useState({ type: 'WORK_FROM_HOME', fromDate: '', toDate: '', reason: '', detailText: '' })
 
-  function load() {
-    setLoading(true)
-    teamRequestApi.list({ size: 100 })
+  function load({ silent = false } = {}) {
+    if (silent) setRefreshing(true)
+    else setLoading(true)
+    return teamRequestApi.list({ size: 100 })
       .then((res) => setRequests(res.data.data.content || []))
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (silent) setRefreshing(false)
+        else setLoading(false)
+      })
   }
 
-  useEffect(load, [])
+  useEffect(() => { load() }, [])
 
   async function submitRequest(e) {
     e.preventDefault()
     setSaving(true)
     setMessage('')
     try {
-      await teamRequestApi.submit({
+      const res = await teamRequestApi.submit({
         type: form.type,
         fromDate: form.fromDate || null,
         toDate: form.toDate || null,
         reason: form.reason,
         details: { note: form.detailText },
       })
+      const created = res.data?.data
       setForm({ type: 'WORK_FROM_HOME', fromDate: '', toDate: '', reason: '', detailText: '' })
       setMessage('Request submitted')
-      load()
+      if (created?._id) setRequests((current) => [created, ...current])
+      load({ silent: true }).catch(() => {})
     } catch (err) {
       setMessage(err.response?.data?.message || 'Failed to submit request')
     } finally {
@@ -76,6 +83,7 @@ export function EmployeeRequestsWorkspace() {
       </form>
 
       {message && <p className="text-sm text-slate-500 dark:text-slate-400">{message}</p>}
+      {refreshing && <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Refreshing in background...</p>}
       <DataTable columns={columns} data={requests} isLoading={loading} searchPlaceholder="Search requests..." emptyMessage="No requests found" />
     </div>
   )

@@ -8,6 +8,9 @@ import {
   INTERVIEW_VIEW_ROLES, INTERVIEW_MANAGE_ROLES, INTERVIEW_STATUS, PANEL_ROLE, SCHEDULE_HISTORY_ACTION,
 } from '@/lib/interviewConstants'
 import { ACTIVITY_ENTRY_TYPE, APPLICATION_STATUS } from '@/lib/candidateConstants'
+import { PIPELINE_STAGE_CATEGORY } from '@/lib/jobConstants'
+import { STAGE_HISTORY_ACTION } from '@/lib/pipelineConstants'
+import { applyStageMove, recordStageHistory } from '@/lib/pipelineHelpers'
 import { checkAvailability } from '@/lib/interviewHelpers'
 import { getActorName } from '@/lib/candidateHelpers'
 import { assertTenantMailReady } from '@/lib/tenantMail'
@@ -17,11 +20,11 @@ import InterviewPanelMember from '@/models/InterviewPanelMember'
 import InterviewScheduleHistory from '@/models/InterviewScheduleHistory'
 import Application from '@/models/Application'
 import Employee from '@/models/Employee'
+import JobPipelineStage from '@/models/JobPipelineStage'
 import '@/models/Candidate'
 import '@/models/Job'
 
-// GET — list, with the Interview page's tabs computed server-side from a
-// `tab` query param rather than duplicating the same logic client-side.
+// GET list with Interview page tabs computed server-side from the `tab` query param.
 export const GET = withApi(async (req) => {
   const session = await requireAuth()
   await requireRole(session, INTERVIEW_VIEW_ROLES)
@@ -47,14 +50,24 @@ export const GET = withApi(async (req) => {
   if (mode) query.mode = mode
   if (status) query.status = status
 
-  const todayStart = new Date(); todayStart.setUTCHours(0, 0, 0, 0)
-  const todayEnd = new Date(); todayEnd.setUTCHours(23, 59, 59, 999)
+  const todayStart = new Date()
+  todayStart.setUTCHours(0, 0, 0, 0)
+  const todayEnd = new Date()
+  todayEnd.setUTCHours(23, 59, 59, 999)
 
-  if (tab === 'upcoming') { query.status = { $in: ['SCHEDULED', 'CONFIRMED', 'RESCHEDULED'] }; query.date = { $gte: todayStart } }
-  else if (tab === 'today') { query.date = { $gte: todayStart, $lte: todayEnd }; query.status = { $nin: ['CANCELLED'] } }
-  else if (tab === 'completed') { query.status = INTERVIEW_STATUS.COMPLETED }
-  else if (tab === 'feedbackPending') { query.status = INTERVIEW_STATUS.FEEDBACK_PENDING }
-  else if (tab === 'cancelled') { query.status = { $in: ['CANCELLED', 'NO_SHOW'] } }
+  if (tab === 'upcoming') {
+    query.status = { $in: ['SCHEDULED', 'CONFIRMED', 'RESCHEDULED'] }
+    query.date = { $gte: todayStart }
+  } else if (tab === 'today') {
+    query.date = { $gte: todayStart, $lte: todayEnd }
+    query.status = { $nin: ['CANCELLED'] }
+  } else if (tab === 'completed') {
+    query.status = INTERVIEW_STATUS.COMPLETED
+  } else if (tab === 'feedbackPending') {
+    query.status = INTERVIEW_STATUS.FEEDBACK_PENDING
+  } else if (tab === 'cancelled') {
+    query.status = { $in: ['CANCELLED', 'NO_SHOW'] }
+  }
 
   if (dateFrom || dateTo) {
     query.date = query.date || {}
@@ -62,11 +75,9 @@ export const GET = withApi(async (req) => {
     if (dateTo) query.date.$lte = new Date(dateTo)
   }
 
-  let interviewerFilterIds = null
   if (interviewer) {
     const panelRows = await InterviewPanelMember.find({ tenantId, employeeId: interviewer }).select('interviewId')
-    interviewerFilterIds = panelRows.map((p) => p.interviewId)
-    query._id = { $in: interviewerFilterIds }
+    query._id = { $in: panelRows.map((p) => p.interviewId) }
   }
 
   const totalElements = await Interview.countDocuments(query)
@@ -85,19 +96,32 @@ export const GET = withApi(async (req) => {
   }
 
   const rows = interviews.map((i) => ({
-    _id: i._id, roundName: i.roundName, type: i.type, date: i.date, startTime: i.startTime, endTime: i.endTime, timezone: i.timezone,
-    mode: i.mode, meetingProvider: i.meetingProvider, status: i.status,
-    candidateId: i.candidateId?._id, candidateName: i.candidateId ? `${i.candidateId.firstName} ${i.candidateId.lastName}` : null,
-    jobId: i.jobId?._id, jobTitle: i.jobId?.publicTitle || i.jobId?.jobTitle,
-    panel: (panelByInterview.get(String(i._id)) || []).map((p) => ({ employeeId: p.employeeId, name: p.employeeName, role: p.role, feedbackStatus: p.feedbackStatus })),
+    _id: i._id,
+    roundName: i.roundName,
+    type: i.type,
+    date: i.date,
+    startTime: i.startTime,
+    endTime: i.endTime,
+    timezone: i.timezone,
+    mode: i.mode,
+    meetingProvider: i.meetingProvider,
+    status: i.status,
+    candidateId: i.candidateId?._id,
+    candidateName: i.candidateId ? `${i.candidateId.firstName} ${i.candidateId.lastName}` : null,
+    jobId: i.jobId?._id,
+    jobTitle: i.jobId?.publicTitle || i.jobId?.jobTitle,
+    panel: (panelByInterview.get(String(i._id)) || []).map((p) => ({
+      employeeId: p.employeeId,
+      name: p.employeeName,
+      role: p.role,
+      feedbackStatus: p.feedbackStatus,
+    })),
   }))
 
   return ok(paged(rows, page, size, totalElements))
 })
 
-// POST — Schedule Interview. Availability conflicts are *warned about*,
-// never silently allowed to double-book without HR knowing — but per spec
-// item 3, a conflict doesn't hard-block scheduling; HR sees it and decides.
+// Schedule Interview. Availability conflicts warn HR but do not block scheduling.
 export const POST = withApi(async (req) => {
   const session = await requireAuth()
   await requireRole(session, INTERVIEW_MANAGE_ROLES)
@@ -115,10 +139,10 @@ export const POST = withApi(async (req) => {
   if ([APPLICATION_STATUS.REJECTED, APPLICATION_STATUS.WITHDRAWN].includes(application.status)) {
     return fail(`Cannot schedule an interview for a ${application.status.toLowerCase()} application`, 400, 'INVALID_STATE')
   }
+
   const shouldSendCandidateEmail = body.sendCandidateEmail !== false
-  if (shouldSendCandidateEmail) {
-    if (!application.candidateId?.email && !body.candidateEmail) return fail('Candidate email is missing. Add candidate email before sending interview invite.', 400, 'VALIDATION_ERROR')
-    await assertTenantMailReady(tenantId)
+  if (shouldSendCandidateEmail && !application.candidateId?.email && !body.candidateEmail) {
+    return fail('Candidate email is missing. Add candidate email before sending interview invite.', 400, 'VALIDATION_ERROR')
   }
 
   const employeeIds = requestedInterviewers.map((i) => i.employeeId).filter(Boolean)
@@ -128,15 +152,27 @@ export const POST = withApi(async (req) => {
   const actorName = await getActorName(session)
   const interview = await Interview.create({
     tenantId,
-    applicationId: application._id, candidateId: application.candidateId._id || application.candidateId, jobId: application.jobId._id || application.jobId,
+    applicationId: application._id,
+    candidateId: application.candidateId._id || application.candidateId,
+    jobId: application.jobId._id || application.jobId,
     pipelineStageId: body.pipelineStageId || application.currentStage || null,
-    roundName: body.roundName, type: body.type,
-    date: new Date(body.date), startTime: body.startTime, endTime: body.endTime, timezone: body.timezone || 'Asia/Kolkata',
-    mode: body.mode, meetingProvider: body.meetingProvider || null, meetingUrl: body.meetingUrl || null, location: body.location || null,
-    candidateInstructions: body.candidateInstructions || body.candidateEmailBody || null, internalNotes: body.internalNotes || null,
+    roundName: body.roundName,
+    type: body.type,
+    date: new Date(body.date),
+    startTime: body.startTime,
+    endTime: body.endTime,
+    timezone: body.timezone || 'Asia/Kolkata',
+    mode: body.mode,
+    meetingProvider: body.meetingProvider || null,
+    meetingUrl: body.meetingUrl || null,
+    location: body.location || null,
+    candidateInstructions: body.candidateInstructions || body.candidateEmailBody || null,
+    internalNotes: body.internalNotes || null,
     scorecardTemplateId: body.scorecardTemplateId || null,
     status: INTERVIEW_STATUS.SCHEDULED,
-    scheduledBy: session.userId, scheduledByName: actorName, scheduledAt: new Date(),
+    scheduledBy: session.userId,
+    scheduledByName: actorName,
+    scheduledAt: new Date(),
   })
 
   if (shouldSendCandidateEmail) {
@@ -149,6 +185,7 @@ export const POST = withApi(async (req) => {
     interview.candidateInviteSubject = draft.subject
     interview.candidateInstructions = draft.body
     try {
+      await assertTenantMailReady(tenantId)
       await sendInterviewInviteEmail({
         tenantId,
         candidate: application.candidateId,
@@ -164,7 +201,6 @@ export const POST = withApi(async (req) => {
       interview.candidateInviteStatus = 'FAILED'
       interview.candidateInviteError = err.message || 'Interview invite email failed'
       await interview.save()
-      return fail(interview.candidateInviteError, 400, 'INTERVIEW_INVITE_EMAIL_FAILED', { interview })
     }
   }
 
@@ -172,17 +208,62 @@ export const POST = withApi(async (req) => {
     const employees = await Employee.find({ _id: { $in: employeeIds }, tenantId }).select('firstName lastName')
     const employeeById = new Map(employees.map((e) => [String(e._id), e]))
     await InterviewPanelMember.insertMany(requestedInterviewers.map((p) => ({
-      tenantId, interviewId: interview._id, employeeId: p.employeeId,
+      tenantId,
+      interviewId: interview._id,
+      employeeId: p.employeeId,
       employeeName: employeeById.get(String(p.employeeId)) ? `${employeeById.get(String(p.employeeId)).firstName} ${employeeById.get(String(p.employeeId)).lastName}` : null,
       role: p.role === PANEL_ROLE.PRIMARY ? PANEL_ROLE.PRIMARY : PANEL_ROLE.PANELIST,
     })))
   }
 
   await InterviewScheduleHistory.create({
-    tenantId, interviewId: interview._id, action: SCHEDULE_HISTORY_ACTION.SCHEDULED,
-    newDate: interview.date, newStartTime: interview.startTime, newEndTime: interview.endTime,
-    changedBy: session.userId, changedByName: actorName, changedAt: new Date(),
+    tenantId,
+    interviewId: interview._id,
+    action: SCHEDULE_HISTORY_ACTION.SCHEDULED,
+    newDate: interview.date,
+    newStartTime: interview.startTime,
+    newEndTime: interview.endTime,
+    changedBy: session.userId,
+    changedByName: actorName,
+    changedAt: new Date(),
   })
+
+  if (body.candidateEmail && application.candidateId) {
+    if (!application.candidateId.email || application.candidateId.email !== body.candidateEmail) {
+      application.candidateId.email = body.candidateEmail
+      try {
+        await application.candidateId.save()
+      } catch (e) {
+        console.warn('Could not save candidate email update:', e.message)
+      }
+    }
+  }
+
+  // Auto-advance application to the Interview round/stage if it's currently in early stages (Applied/Screening/Shortlisted)
+  const isEarlyStage = !application.currentStage || application.currentStageName === 'Applied' || /screen|shortlist/i.test(application.currentStageName || '')
+  if (isEarlyStage) {
+    const stages = await JobPipelineStage.find({ tenantId, jobId: application.jobId._id || application.jobId, isActive: true }).sort({ order: 1 })
+    const roundStage = stages.find(s => s.name?.toLowerCase() === body.roundName?.toLowerCase())
+    const interviewStage = roundStage || stages.find(s => s.category === PIPELINE_STAGE_CATEGORY.INTERVIEW || /interview|round/i.test(s.name || ''))
+    if (interviewStage) {
+      const fromStageId = application.currentStage
+      const fromStageName = application.currentStageName
+      applyStageMove(application, interviewStage, { comment: `Interview scheduled: ${body.roundName}`, actorName })
+      await recordStageHistory({
+        tenantId,
+        application,
+        fromStageId,
+        toStageId: interviewStage._id,
+        fromStageName,
+        toStageName: interviewStage.name,
+        action: STAGE_HISTORY_ACTION.MOVED,
+        comment: `Interview scheduled: ${body.roundName}`,
+        session,
+      })
+      interview.pipelineStageId = interviewStage._id
+      await interview.save()
+    }
+  }
 
   application.activityLog.push({
     type: ACTIVITY_ENTRY_TYPE.UPDATED,
@@ -193,5 +274,17 @@ export const POST = withApi(async (req) => {
 
   await logAction(session, { action: 'INTERVIEW_SCHEDULED', entityType: 'Interview', entityId: interview._id, description: `Scheduled ${body.roundName} for application ${application.applicationCode}`, req })
 
-  return ok({ interview, availability, conflictCount }, conflictCount > 0 ? `Interview scheduled — ${conflictCount} interviewer(s) have scheduling conflicts` : 'Interview scheduled', 201)
+  const emailWarning = interview.candidateInviteStatus === 'FAILED'
+    ? ` Interview invite email was not sent: ${interview.candidateInviteError || 'mail service is not available'}.`
+    : ''
+  const message = conflictCount > 0
+    ? `Interview scheduled - ${conflictCount} interviewer(s) have scheduling conflicts`
+    : 'Interview scheduled'
+
+  return ok({
+    interview,
+    availability,
+    conflictCount,
+    emailWarning: emailWarning.trim() || null,
+  }, `${message}${emailWarning}`, 201)
 })

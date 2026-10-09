@@ -9,15 +9,16 @@ export const GET = withApi(async (_req, { params }) => {
   const session = await requireAuth()
   const tenantId = requireTenantId(session)
   const selfServiceRole = ['EMPLOYEE', 'MANAGER'].includes(session.role)
-  if (selfServiceRole && String(params.id) !== String(session.userId)) {
+  const targetId = params.id === 'me' ? String(session.userId) : String(params.id)
+  if (selfServiceRole && targetId !== String(session.userId)) {
     return fail('You can only view your own payslips', 403)
   }
   if (!selfServiceRole && !['HR_MANAGER', 'FINANCE', 'COMPANY_ADMIN', 'SUPER_ADMIN'].includes(session.role)) {
     return fail('You do not have permission to view payslips', 403)
   }
-  const query = { employee: params.id, tenantId, deleted: false }
+  const query = { employee: targetId, tenantId, deleted: false }
   if (selfServiceRole) {
-    query.status = { $in: ['FINALIZED', 'PAID'] }
+    query.status = { $in: ['APPROVED', 'FINALIZED', 'PAID'] }
   }
   const payslips = await Payslip.find(query).sort({ year: -1, month: -1 })
   return ok(payslips)

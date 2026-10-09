@@ -21,7 +21,7 @@ export const GET = withApi(async (req, { params }) => {
   if (!selfServiceRole && !['HR_MANAGER', 'FINANCE', 'COMPANY_ADMIN', 'SUPER_ADMIN'].includes(session.role)) {
     return fail('You do not have permission to download payslips', 403)
   }
-  if (selfServiceRole && !['FINALIZED', 'PAID'].includes(payslip.status)) {
+  if (selfServiceRole && !['APPROVED', 'FINALIZED', 'PAID'].includes(payslip.status)) {
     return fail('Payslip is not available yet', 403)
   }
 

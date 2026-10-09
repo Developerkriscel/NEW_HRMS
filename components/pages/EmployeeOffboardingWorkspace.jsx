@@ -11,30 +11,37 @@ import { Portal } from '@/components/common/Portal'
 export function EmployeeOffboardingWorkspace() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ resignationDate: '', lastWorkingDate: '', reason: '' })
 
-  function load() {
-    setLoading(true)
-    resignationApi.list({ size: 50, myResignation: true })
+  function load({ silent = false } = {}) {
+    if (silent) setRefreshing(true)
+    else setLoading(true)
+    return resignationApi.list({ size: 50, myResignation: true })
       .then((res) => setItems(res.data.data.content || []))
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (silent) setRefreshing(false)
+        else setLoading(false)
+      })
   }
 
-  useEffect(load, [])
+  useEffect(() => { load() }, [])
 
   async function submitResignation(e) {
     e.preventDefault()
     setSaving(true)
     setMessage('')
     try {
-      await resignationApi.submit(form)
+      const res = await resignationApi.submit(form)
+      const created = res.data?.data
       setForm({ resignationDate: '', lastWorkingDate: '', reason: '' })
       setMessage('Resignation submitted successfully')
       setShowForm(false)
-      load()
+      if (created?._id) setItems((current) => [created, ...current])
+      load({ silent: true }).catch(() => {})
     } catch (err) {
       setMessage(err.response?.data?.message || 'Failed to submit resignation')
     } finally {
@@ -129,6 +136,7 @@ export function EmployeeOffboardingWorkspace() {
       )}
 
       {message && <p className="text-sm text-slate-500 dark:text-slate-400">{message}</p>}
+      {refreshing && <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Refreshing in background...</p>}
       <DataTable columns={columns} data={items} isLoading={loading} searchPlaceholder="Search resignations..." emptyMessage="No resignation records found" />
     </div>
   )

@@ -20,6 +20,12 @@ export const GET = withApi(async () => {
     types = await LeaveType.find({ tenantId, active: true, deleted: false }).sort({ name: 1 })
   }
 
+  if (!types.some(t => t.code === 'LWP')) {
+    const lwpType = await LeaveType.create({ name: 'Leave Without Pay (LWP)', code: 'LWP', defaultDays: 0, paidLeave: false, tenantId, createdBy: session.sub })
+    types.push(lwpType)
+    types.sort((a, b) => a.name.localeCompare(b.name))
+  }
+
   return ok(types)
 })
 

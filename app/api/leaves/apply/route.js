@@ -30,7 +30,8 @@ export const POST = withApi(async (req) => {
     return fail('You already have a leave request overlapping these dates', 400)
   }
 
-  const days = Math.floor((endDate - startDate) / 86400000) + 1
+  const totalDays = Math.floor((endDate - startDate) / 86400000) + 1
+  const days = body.halfDay ? 0.5 : totalDays
 
   const balance = await LeaveBalance.findOne({
     employee: session.userId,

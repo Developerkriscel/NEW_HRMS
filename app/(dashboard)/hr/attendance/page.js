@@ -1,20 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import dynamic from 'next/dynamic'
 import { Check, X, Clock, Users, Building2, ChevronRight } from 'lucide-react'
 import { AttendanceDetailsDrawer } from '@/components/attendance/AttendanceDetailsDrawer'
 import { DataTable } from '@/components/tables/DataTable'
 import { Badge } from '@/components/common/Badge'
 import { Avatar } from '@/components/common/Avatar'
-import { PageLoader } from '@/components/common/LoadingSpinner'
 import { attendanceApi } from '@/services/attendanceApi'
 import { employeeApi } from '@/services/employeeApi'
-
-const EmployeeAttendanceWorkspace = dynamic(
-  () => import('@/components/pages/EmployeeAttendanceWorkspace').then((mod) => mod.EmployeeAttendanceWorkspace),
-  { ssr: false, loading: () => <PageLoader /> }
-)
+import { EmployeeAttendanceWorkspace } from '@/components/pages/EmployeeAttendanceWorkspace'
 
 function CompanyAttendanceTab({ headerAction }) {
   const [records, setRecords] = useState([])

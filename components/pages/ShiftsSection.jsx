@@ -55,7 +55,7 @@ export function ShiftsSection() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(load, [])
+  useEffect(() => { load() }, [])
 
   function showMessage(text) {
     setMessage(text)

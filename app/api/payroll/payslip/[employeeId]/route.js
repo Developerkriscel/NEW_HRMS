@@ -26,7 +26,7 @@ export const GET = withApi(async (req, { params }) => {
   const payslip = await Payslip.findOne({ employee: params.employeeId, month, year, tenantId, deleted: false })
     .populate('employee', 'firstName lastName employeeCode')
   if (!payslip) return fail('Payslip not found', 404)
-  if (selfServiceRole && !['FINALIZED', 'PAID'].includes(payslip.status)) {
+  if (selfServiceRole && !['APPROVED', 'FINALIZED', 'PAID'].includes(payslip.status)) {
     return fail('Payslip is not available yet', 403)
   }
 

@@ -1,20 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import dynamic from 'next/dynamic'
 import { DataTable } from '@/components/tables/DataTable'
 import { Avatar } from '@/components/common/Avatar'
 import { Badge } from '@/components/common/Badge'
-import { PageLoader } from '@/components/common/LoadingSpinner'
 import { attendanceApi } from '@/services/attendanceApi'
 import { Clock, Users } from 'lucide-react'
+import { EmployeeAttendanceWorkspace } from '@/components/pages/EmployeeAttendanceWorkspace'
 
-const EmployeeAttendanceWorkspace = dynamic(
-  () => import('@/components/pages/EmployeeAttendanceWorkspace').then((mod) => mod.EmployeeAttendanceWorkspace),
-  { ssr: false, loading: () => <PageLoader /> }
-)
-
-function TeamAttendanceTab() {
+function TeamAttendanceTab({ headerAction }) {
   const [team, setTeam] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -67,10 +61,10 @@ function TeamAttendanceTab() {
   ]
 
   return (
-    <div className="animate-fade-in space-y-8 mt-6">
+    <div className="animate-fade-in space-y-8">
       
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-slate-900 to-slate-600 dark:from-white dark:to-slate-400 flex items-center gap-3">
             Team Attendance
@@ -79,6 +73,7 @@ function TeamAttendanceTab() {
             Monitor real-time presence and activity for your direct reports
           </p>
         </div>
+        {headerAction && <div className="shrink-0">{headerAction}</div>}
       </div>
 
       {/* Analytics Cards */}
@@ -149,34 +144,38 @@ function TeamAttendanceTab() {
 export default function ManagerAttendancePage() {
   const [activeTab, setActiveTab] = useState('mine')
 
-  return (
-    <div className="animate-fade-in space-y-6">
-      <div className="flex bg-slate-100 dark:bg-slate-800/50 p-1 rounded-2xl w-fit">
-        <button
-          onClick={() => setActiveTab('mine')}
-          className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${
-            activeTab === 'mine'
-              ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
-              : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50'
-          }`}
-        >
-          <Clock className="w-4 h-4" /> My Attendance
-        </button>
-        <button
-          onClick={() => setActiveTab('team')}
-          className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${
-            activeTab === 'team'
-              ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
-              : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50'
-          }`}
-        >
-          <Users className="w-4 h-4" /> Team Attendance
-        </button>
-      </div>
+  const tabs = (
+    <div className="flex bg-slate-100 dark:bg-slate-800/50 p-1 rounded-2xl w-fit">
+      <button
+        onClick={() => setActiveTab('mine')}
+        className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${
+          activeTab === 'mine'
+            ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
+            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50'
+        }`}
+      >
+        <Clock className="w-4 h-4" /> My Attendance
+      </button>
+      <button
+        onClick={() => setActiveTab('team')}
+        className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${
+          activeTab === 'team'
+            ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
+            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50'
+        }`}
+      >
+        <Users className="w-4 h-4" /> Team Attendance
+      </button>
+    </div>
+  )
 
-      <div className="mt-6">
-        {activeTab === 'mine' ? <EmployeeAttendanceWorkspace /> : <TeamAttendanceTab />}
-      </div>
+  return (
+    <div className="animate-fade-in">
+      {activeTab === 'mine' ? (
+        <EmployeeAttendanceWorkspace headerAction={tabs} />
+      ) : (
+        <TeamAttendanceTab headerAction={tabs} />
+      )}
     </div>
   )
 }
