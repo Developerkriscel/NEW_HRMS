@@ -701,12 +701,19 @@ export default function RecruitmentDashboardPage() {
         }
         const arrayBuffer = await file.arrayBuffer()
         const workbook = XLSX.read(arrayBuffer, { type: 'array' })
-        const sheetName = workbook.SheetNames[0]
-        const sheet = workbook.Sheets[sheetName]
-        // Convert sheet to array of objects using header row
-        const jsonRows = XLSX.utils.sheet_to_json(sheet, { defval: '' })
+        const sheetData = workbook.SheetNames
+          .map((sheetName) => {
+            const sheet = workbook.Sheets[sheetName]
+            const rows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false })
+              .filter((row) => Object.values(row).some((value) => String(value || '').trim()))
+            return { sheetName, rows }
+          })
+          .find((entry) => entry.rows.length > 0)
+
+        // Convert first non-empty sheet to array of objects using header row.
+        const jsonRows = sheetData?.rows || []
         if (!jsonRows || jsonRows.length === 0) {
-          setUploadError('No data rows found in the Excel file. Please add candidate data below the header row.')
+          setUploadError('No data rows found in the Excel file. Please add candidate data below the header row in at least one sheet.')
           setCandidatePhase('upload')
           return
         }
@@ -789,7 +796,7 @@ export default function RecruitmentDashboardPage() {
         setCandidatePhase('upload')
       }
     } else {
-      setUploadError('Unsupported file type. Please upload a PDF, DOCX for resume — or CSV / Excel (.xlsx) for bulk import.')
+      setUploadError('Unsupported file type. Please upload a resume (PDF, DOC, DOCX) or a spreadsheet (CSV, TSV, XLS, XLSX, XLSM, XLSB, ODS).')
     }
   }
 
@@ -1894,7 +1901,7 @@ export default function RecruitmentDashboardPage() {
               <div className="mb-6">
                 <h2 className="text-lg font-bold text-slate-900 dark:text-white">Import Candidate Data</h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-normal">
-                  Upload candidate spreadsheets (.xlsx, .csv) or multiple resumes (.pdf, .docx) for automated parsing and candidate matching.
+                  Upload candidate spreadsheets (.csv, .tsv, .xls, .xlsx, .xlsm, .xlsb, .ods) or multiple resumes (.pdf, .docx) for automated parsing and candidate matching.
                 </p>
               </div>
 
@@ -1913,7 +1920,7 @@ export default function RecruitmentDashboardPage() {
                       if (e.dataTransfer.files?.length) handleFilesUpload(e.dataTransfer.files)
                     }}
                   >
-                    <input type="file" ref={fileInputRef} className="hidden" accept=".csv,.xlsx,.xls" onChange={(e) => {
+                    <input type="file" ref={fileInputRef} className="hidden" accept=".csv,.tsv,.txt,.xls,.xlsx,.xlsm,.xlsb,.ods" onChange={(e) => {
                       if(e.target.files?.[0]) {
                         handleFilesUpload(e.target.files)
                         e.target.value = '' // reset so same file can be re-uploaded
@@ -1932,12 +1939,12 @@ export default function RecruitmentDashboardPage() {
                     
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Drag and drop your files here</h3>
                     <p className="text-sm text-slate-500 dark:text-slate-400 text-center max-w-md mb-8 font-normal">
-                      Upload candidate spreadsheets (.xlsx, .csv) or multiple resumes (.pdf, .docx, .doc) to run automated parsing and AI shortlisting.
+                      Upload candidate spreadsheets (.csv, .tsv, .xls, .xlsx, .xlsm, .xlsb, .ods) or multiple resumes (.pdf, .docx, .doc) to run automated parsing and AI shortlisting.
                     </p>
                     
                     <div className="flex flex-col sm:flex-row flex-wrap justify-center gap-4 mt-6">
                       <button onClick={() => fileInputRef.current?.click()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-semibold text-xs shadow-md shadow-indigo-500/20 transition-all flex items-center justify-center gap-2">
-                        <UploadCloud className="w-4 h-4" /> Upload Candidate Spreadsheet (.xlsx / .csv)
+                        <UploadCloud className="w-4 h-4" /> Upload Candidate Spreadsheet
                       </button>
 
                       <button onClick={() => resumeInputRef.current?.click()} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-semibold text-xs shadow-md shadow-emerald-500/20 transition-all flex items-center justify-center gap-2">
