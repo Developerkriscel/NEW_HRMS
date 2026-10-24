@@ -1,16 +1,23 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { LifeBuoy, AlertCircle, Search, Filter, Plus } from 'lucide-react'
 import { PageLoader } from '@/components/common/LoadingSpinner'
 import { cn } from '@/lib/utils'
+import SupportTicketModal from '@/components/pages/support/SupportTicketModal'
 
 export default function CompanySupportDashboardPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [loading, setLoading] = useState(true)
   const [tickets, setTickets] = useState([])
   const [stats, setStats] = useState({ open: 0, resolved: 0 })
+  const [showCreateModal, setShowCreateModal] = useState(false)
+
+  useEffect(() => {
+    if (searchParams.get('create') === '1') setShowCreateModal(true)
+  }, [searchParams])
 
   useEffect(() => {
     fetchTickets()
@@ -46,7 +53,7 @@ export default function CompanySupportDashboardPage() {
           </h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Get help, track support requests, and connect with platform support.</p>
         </div>
-        <button onClick={() => router.push('/company/support/create')} className="btn-primary flex items-center gap-2">
+        <button onClick={() => setShowCreateModal(true)} className="btn-primary flex items-center gap-2">
           <Plus className="w-4 h-4" /> Create Ticket
         </button>
       </div>
@@ -129,6 +136,18 @@ export default function CompanySupportDashboardPage() {
           </table>
         </div>
       </div>
+      <SupportTicketModal
+        open={showCreateModal}
+        onClose={() => {
+          setShowCreateModal(false)
+          if (searchParams.get('create') === '1') router.replace('/company/support')
+        }}
+        onCreated={(ticket) => {
+          setShowCreateModal(false)
+          fetchTickets()
+          router.push(`/company/support/${ticket._id}`)
+        }}
+      />
     </div>
   )
 }

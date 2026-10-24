@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { AlertTriangle, Laptop, Send, Plus, X, AlertOctagon, Check, Trash2, Edit2, RotateCcw, Package, Settings, Wrench, Search, Users, Eye, Calendar, User, FileText, Activity } from 'lucide-react'
+import { AlertTriangle, Laptop, Send, Plus, X, AlertOctagon, Check, Trash2, Edit2, RotateCcw, Package, Settings, Wrench, Search, Users, Eye, Calendar, User, FileText, Activity, CreditCard } from 'lucide-react'
 import { Badge } from '@/components/common/Badge'
 import { DataTable } from '@/components/tables/DataTable'
 import { assetApi } from '@/services/assetApi'
+import { assetSubscriptionApi } from '@/services/subscriptionApi'
 import { employeeApi } from '@/services/employeeApi'
 import { formatDate } from '@/lib/utils'
 import { PageLoader } from '@/components/common/LoadingSpinner'
@@ -14,6 +15,7 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
   const [activeTab, setActiveTab] = useState('directory')
   const [assets, setAssets] = useState([])
   const [requests, setRequests] = useState([])
+  const [subscriptions, setSubscriptions] = useState([])
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -44,6 +46,12 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
   const [recoverAssetId, setRecoverAssetId] = useState('')
   const [recoverCondition, setRecoverCondition] = useState('Good')
   const [recoverStatus, setRecoverStatus] = useState('AVAILABLE')
+  const [showSubscriptionForm, setShowSubscriptionForm] = useState(false)
+  const [editingSubscription, setEditingSubscription] = useState(null)
+  const [subscriptionForm, setSubscriptionForm] = useState({
+    name: '', provider: '', category: 'Software', billingCycle: 'MONTHLY', cost: '', currency: 'INR',
+    seats: 1, usedSeats: 0, startDate: '', renewalDate: '', autoRenew: true, status: 'ACTIVE', ownerEmployee: '', url: '', notes: '',
+  })
 
   function load({ silent = false } = {}) {
     if (silent) setRefreshing(true)
@@ -51,11 +59,13 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
     return Promise.all([
       assetApi.list(),
       assetApi.listRequests({ size: 100 }),
+      reviewMode ? assetSubscriptionApi.list() : Promise.resolve({ data: { data: [] } }),
       reviewMode ? employeeApi.getAll({ size: 50 }).catch(() => ({ data: { data: { content: [] } } })) : Promise.resolve({ data: { data: { content: [] } } })
     ])
-      .then(([assetRes, requestRes, empRes]) => {
+      .then(([assetRes, requestRes, subscriptionRes, empRes]) => {
         setAssets(assetRes.data.data || [])
         setRequests(requestRes.data.data?.content || [])
+        setSubscriptions(subscriptionRes.data.data || [])
         if (reviewMode && empRes.data?.data?.content) {
           setEmployees(empRes.data.data.content)
         }
@@ -210,6 +220,54 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
     }
   }
 
+  function resetSubscriptionForm() {
+    setSubscriptionForm({ name: '', provider: '', category: 'Software', billingCycle: 'MONTHLY', cost: '', currency: 'INR', seats: 1, usedSeats: 0, startDate: '', renewalDate: '', autoRenew: true, status: 'ACTIVE', ownerEmployee: '', url: '', notes: '' })
+    setEditingSubscription(null)
+  }
+
+  function editSubscription(subscription) {
+    setEditingSubscription(subscription)
+    setSubscriptionForm({
+      name: subscription.name || '', provider: subscription.provider || '', category: subscription.category || 'Software', billingCycle: subscription.billingCycle || 'MONTHLY', cost: subscription.cost ?? '', currency: subscription.currency || 'INR',
+      seats: subscription.seats || 1, usedSeats: subscription.usedSeats || 0, startDate: subscription.startDate ? new Date(subscription.startDate).toISOString().slice(0, 10) : '', renewalDate: subscription.renewalDate ? new Date(subscription.renewalDate).toISOString().slice(0, 10) : '', autoRenew: subscription.autoRenew !== false, status: subscription.status || 'ACTIVE', ownerEmployee: subscription.ownerEmployee?._id || subscription.ownerEmployee || '', url: subscription.url || '', notes: subscription.notes || '',
+    })
+    setShowSubscriptionForm(true)
+  }
+
+  async function saveSubscription(e) {
+    e.preventDefault()
+    setSaving(true)
+    setMessage('')
+    try {
+      const response = editingSubscription
+        ? await assetSubscriptionApi.update(editingSubscription._id, subscriptionForm)
+        : await assetSubscriptionApi.create(subscriptionForm)
+      const saved = response.data.data
+      setSubscriptions((previous) => editingSubscription ? previous.map((item) => item._id === saved._id ? saved : item) : [saved, ...previous])
+      setShowSubscriptionForm(false)
+      resetSubscriptionForm()
+      setMessage(`Subscription ${editingSubscription ? 'updated' : 'created'} successfully`)
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'Failed to save subscription')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function deleteSubscription(subscription) {
+    if (!confirm(`Delete ${subscription.name} subscription?`)) return
+    setSaving(true)
+    try {
+      await assetSubscriptionApi.delete(subscription._id)
+      setSubscriptions((previous) => previous.filter((item) => item._id !== subscription._id))
+      setMessage('Subscription deleted successfully')
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'Failed to delete subscription')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   // Tables
   const assetColumns = [
     { header: 'Asset Details', accessor: 'name', render: (_, row) => (
@@ -303,6 +361,16 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
     { header: 'Date', accessor: 'createdAt', render: (v) => formatDate(v) },
   ]
 
+  const subscriptionColumns = [
+    { header: 'Subscription', accessor: 'name', render: (_, row) => <div><p className="font-semibold text-slate-800 dark:text-slate-100">{row.name}</p><p className="text-xs text-slate-400">{row.provider} · {row.category || 'Software'}</p></div> },
+    { header: 'Billing', accessor: 'cost', render: (_, row) => <div><p className="font-semibold text-slate-700 dark:text-slate-200">{row.currency || 'INR'} {Number(row.cost || 0).toLocaleString('en-IN')}</p><p className="text-xs text-slate-400">{String(row.billingCycle || 'MONTHLY').toLowerCase().replace('_', ' ')}</p></div> },
+    { header: 'Seats', accessor: 'seats', render: (_, row) => <span className="text-sm font-medium text-slate-600 dark:text-slate-300">{row.usedSeats || 0} / {row.seats || 0} used</span> },
+    { header: 'Renewal', accessor: 'renewalDate', render: (_, row) => <div><p className="text-sm font-medium text-slate-600 dark:text-slate-300">{row.renewalDate ? formatDate(row.renewalDate) : 'No renewal date'}</p><p className="text-xs text-slate-400">Auto-renew: {row.autoRenew ? 'Yes' : 'No'}</p></div> },
+    { header: 'Owner', accessor: 'ownerEmployee', render: (value) => value ? `${value.firstName || ''} ${value.lastName || ''}`.trim() : <span className="text-slate-400">Unassigned</span> },
+    { header: 'Status', accessor: 'status', render: (value) => <Badge>{value}</Badge> },
+    { header: 'Actions', key: 'subscriptionActions', sortable: false, render: (_, row) => <div className="flex gap-2"><button type="button" onClick={() => editSubscription(row)} className="rounded-lg p-1.5 text-slate-400 transition hover:bg-indigo-50 hover:text-indigo-600" title="Edit subscription"><Edit2 className="h-4 w-4" /></button><button type="button" onClick={() => deleteSubscription(row)} className="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600" title="Delete subscription"><Trash2 className="h-4 w-4" /></button></div> },
+  ]
+
   if (reviewMode) {
     requestColumns.push({
       header: 'Action',
@@ -332,6 +400,9 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
       <button onClick={() => setActiveTab('requests')} className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-bold text-xs transition-all duration-300 ${activeTab === 'requests' ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-slate-200 dark:ring-slate-700' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800'}`}>
         <Package className="w-3.5 h-3.5" /> Requests {requests.filter(r => r.status === 'PENDING').length > 0 && <span className="bg-rose-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{requests.filter(r => r.status === 'PENDING').length}</span>}
       </button>
+      {reviewMode && <button onClick={() => setActiveTab('subscriptions')} className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-bold text-xs transition-all duration-300 ${activeTab === 'subscriptions' ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-slate-200 dark:ring-slate-700' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800'}`}>
+        <CreditCard className="w-3.5 h-3.5" /> Subscriptions
+      </button>}
     </div>
   )
 
@@ -354,6 +425,12 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
               onClick={() => { setMessage(''); setShowAddForm(true); }}
             >
               <Plus className="w-4 h-4" /> Add Asset
+            </button>
+          )}
+
+          {reviewMode && activeTab === 'subscriptions' && (
+            <button className="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-xl font-bold text-sm transition-all shadow-md flex items-center gap-2" onClick={() => { resetSubscriptionForm(); setMessage(''); setShowSubscriptionForm(true) }}>
+              <Plus className="w-4 h-4" /> Add Subscription
             </button>
           )}
 
@@ -418,6 +495,9 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
               actions={tabSwitcher}
             />
           </div>
+        )}
+        {activeTab === 'subscriptions' && reviewMode && (
+          <DataTable columns={subscriptionColumns} data={subscriptions} isLoading={loading} searchPlaceholder="Search subscriptions..." emptyMessage="No subscriptions found" actions={tabSwitcher} />
         )}
       </div>
 
@@ -826,6 +906,41 @@ export function AssetsWorkspace({ title, subtitle, employeeMode = false, reviewM
         </div></Portal>
       )}
 
+      {showSubscriptionForm && reviewMode && (
+        <Portal><div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowSubscriptionForm(false)}></div>
+          <div className="relative max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-6 py-5 dark:border-slate-800 dark:bg-slate-800/20">
+              <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-500/20"><CreditCard className="h-5 w-5 text-indigo-600 dark:text-indigo-400" /></div><div><h2 className="text-xl font-bold text-slate-900 dark:text-white">{editingSubscription ? 'Edit Subscription' : 'Add Subscription'}</h2><p className="text-xs font-medium text-slate-500">Track a software or service subscription</p></div></div>
+              <button type="button" onClick={() => setShowSubscriptionForm(false)} className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-slate-200 dark:hover:bg-slate-700"><X className="h-5 w-5 text-slate-500" /></button>
+            </div>
+            <form onSubmit={saveSubscription} className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2">
+              {message && <div className="sm:col-span-2 rounded-lg border border-rose-100 bg-rose-50 p-3 text-sm font-medium text-rose-700">{message}</div>}
+              <Field label="Subscription Name *"><input required className="input-field" placeholder="e.g. Slack Business" value={subscriptionForm.name} onChange={(e) => setSubscriptionForm({ ...subscriptionForm, name: e.target.value })} /></Field>
+              <Field label="Provider *"><input required className="input-field" placeholder="e.g. Slack Technologies" value={subscriptionForm.provider} onChange={(e) => setSubscriptionForm({ ...subscriptionForm, provider: e.target.value })} /></Field>
+              <Field label="Category"><input className="input-field" placeholder="Software, SaaS, Internet..." value={subscriptionForm.category} onChange={(e) => setSubscriptionForm({ ...subscriptionForm, category: e.target.value })} /></Field>
+              <Field label="Billing Cycle"><select className="input-field" value={subscriptionForm.billingCycle} onChange={(e) => setSubscriptionForm({ ...subscriptionForm, billingCycle: e.target.value })}><option value="MONTHLY">Monthly</option><option value="QUARTERLY">Quarterly</option><option value="YEARLY">Yearly</option><option value="ONE_TIME">One time</option></select></Field>
+              <Field label="Cost"><input type="number" min="0" step="0.01" className="input-field" value={subscriptionForm.cost} onChange={(e) => setSubscriptionForm({ ...subscriptionForm, cost: e.target.value })} /></Field>
+              <Field label="Currency"><input maxLength={3} className="input-field" value={subscriptionForm.currency} onChange={(e) => setSubscriptionForm({ ...subscriptionForm, currency: e.target.value.toUpperCase() })} /></Field>
+              <Field label="Total Seats"><input required type="number" min="1" className="input-field" value={subscriptionForm.seats} onChange={(e) => setSubscriptionForm({ ...subscriptionForm, seats: e.target.value })} /></Field>
+              <Field label="Used Seats"><input required type="number" min="0" max={subscriptionForm.seats || undefined} className="input-field" value={subscriptionForm.usedSeats} onChange={(e) => setSubscriptionForm({ ...subscriptionForm, usedSeats: e.target.value })} /></Field>
+              <Field label="Start Date *"><input required type="date" className="input-field" value={subscriptionForm.startDate} onChange={(e) => setSubscriptionForm({ ...subscriptionForm, startDate: e.target.value })} /></Field>
+              <Field label="Renewal Date"><input type="date" className="input-field" value={subscriptionForm.renewalDate} onChange={(e) => setSubscriptionForm({ ...subscriptionForm, renewalDate: e.target.value })} /></Field>
+              <Field label="Owner"><select className="input-field" value={subscriptionForm.ownerEmployee} onChange={(e) => setSubscriptionForm({ ...subscriptionForm, ownerEmployee: e.target.value })}><option value="">Unassigned</option>{employees.map((employee) => <option key={employee._id} value={employee._id}>{employee.firstName} {employee.lastName} ({employee.employeeCode})</option>)}</select></Field>
+              <Field label="Status"><select className="input-field" value={subscriptionForm.status} onChange={(e) => setSubscriptionForm({ ...subscriptionForm, status: e.target.value })}><option value="ACTIVE">Active</option><option value="TRIAL">Trial</option><option value="PAUSED">Paused</option><option value="EXPIRED">Expired</option><option value="CANCELLED">Cancelled</option></select></Field>
+              <Field label="Website / Admin URL"><input type="url" className="input-field" placeholder="https://..." value={subscriptionForm.url} onChange={(e) => setSubscriptionForm({ ...subscriptionForm, url: e.target.value })} /></Field>
+              <label className="flex items-center gap-2 pt-7 text-sm font-semibold text-slate-700 dark:text-slate-300"><input type="checkbox" checked={subscriptionForm.autoRenew} onChange={(e) => setSubscriptionForm({ ...subscriptionForm, autoRenew: e.target.checked })} className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" /> Auto-renew enabled</label>
+              <Field label="Notes" className="sm:col-span-2"><textarea rows={3} className="input-field resize-none" placeholder="Contract notes, renewal contact, or procurement details" value={subscriptionForm.notes} onChange={(e) => setSubscriptionForm({ ...subscriptionForm, notes: e.target.value })} /></Field>
+              <div className="flex gap-3 pt-2 sm:col-span-2"><button type="button" onClick={() => setShowSubscriptionForm(false)} className="flex-1 rounded-xl bg-slate-100 px-5 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-200">Cancel</button><button type="submit" disabled={saving} className="flex-[2] rounded-xl bg-indigo-600 py-2.5 text-sm font-bold text-white shadow-md hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60">{saving ? 'Saving...' : editingSubscription ? 'Update Subscription' : 'Save Subscription'}</button></div>
+            </form>
+          </div>
+        </div></Portal>
+      )}
+
     </div>
   )
+}
+
+function Field({ label, className = '', children }) {
+  return <div className={`space-y-1.5 ${className}`}><label className="ml-1 text-xs font-bold uppercase text-slate-500">{label}</label>{children}</div>
 }

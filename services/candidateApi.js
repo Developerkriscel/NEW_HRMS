@@ -1,7 +1,7 @@
 import api from './api'
 
 export const candidateApi = {
-  list: (params, config = {}) => api.get('/recruitment/candidates', { ...config, params }),
+  list: (params, config = {}) => api.get('/recruitment/candidates', { timeout: 30000, ...config, params }),
   get: (id) => api.get(`/recruitment/candidates/${id}`),
   create: (data) => api.post('/recruitment/candidates', data),
   bulkApply: (data) => api.post('/recruitment/candidates/bulk-apply', data),
@@ -14,6 +14,7 @@ export const candidateApi = {
     `/recruitment/applications/${id}/move-stage`,
     typeof stageOrPayload === 'object' ? stageOrPayload : { stageId: stageOrPayload, comment }
   ),
+  undoStage: (id) => api.post(`/recruitment/applications/${id}/undo-stage`),
   addApplicationNote: (id, note) => api.post(`/recruitment/applications/${id}/notes`, { note }),
   getStageHistory: (id) => api.get(`/recruitment/applications/${id}/stage-history`),
   assignRecruiter: (id, recruiterId) => api.post(`/recruitment/applications/${id}/assign-recruiter`, { recruiterId }),
@@ -27,6 +28,7 @@ export const candidateApi = {
   hold: (id, data) => api.post(`/recruitment/applications/${id}/hold`, data),
   reject: (id, data) => api.post(`/recruitment/applications/${id}/reject`, data),
   restore: (id, data) => api.post(`/recruitment/applications/${id}/restore`, data),
+  deleteApplication: (id) => api.delete(`/recruitment/applications/${id}/delete`),
   talentPool: (id, comment) => api.post(`/recruitment/applications/${id}/talent-pool`, { comment }),
   withdraw: (id, data) => api.post(`/recruitment/applications/${id}/withdraw`, data),
   compare: (applicationIds) => api.get('/recruitment/applications/compare', { params: { ids: applicationIds.join(',') } }),

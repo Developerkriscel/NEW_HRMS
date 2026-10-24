@@ -21,6 +21,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { notificationApi } from '@/services/notificationApi'
+import { interviewApi } from '@/services/interviewApi'
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
 
@@ -47,6 +48,7 @@ const CATEGORY_CONFIG = {
   document: { label: 'Document', icon: FileText, color: 'text-orange-600 bg-orange-50 dark:bg-orange-950/40 dark:text-orange-400 border-orange-200 dark:border-orange-800' },
   system: { label: 'System', icon: Sparkles, color: 'text-sky-600 bg-sky-50 dark:bg-sky-950/40 dark:text-sky-400 border-sky-200 dark:border-sky-800' },
   general: { label: 'General', icon: Bell, color: 'text-slate-600 bg-slate-50 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700' },
+  interview: { label: 'Interview', icon: Calendar, color: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800' },
 }
 
 export default function NotificationsPage() {
@@ -59,6 +61,7 @@ export default function NotificationsPage() {
   const [activeTab, setActiveTab] = useState('all') // 'all' | 'unread' | 'read'
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [assignmentActionLoading, setAssignmentActionLoading] = useState(null)
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -150,6 +153,21 @@ export default function NotificationsPage() {
     }
   }
 
+  const handleAssignmentResponse = async (notification, decision, e) => {
+    e?.stopPropagation()
+    const metadata = notification?.metadata
+    if (!metadata?.interviewId || assignmentActionLoading) return
+    setAssignmentActionLoading(`${notification.id}:${decision}`)
+    try {
+      await interviewApi.respondToAssignment(metadata.interviewId, { decision, notificationId: notification.id })
+      setServerNotifications((previous) => previous.map((item) => item.id === notification.id ? { ...item, read: true, metadata: { ...item.metadata, decision } } : item))
+    } catch (error) {
+      console.error('Failed to respond to interview assignment:', error)
+    } finally {
+      setAssignmentActionLoading(null)
+    }
+  }
+
   const handleItemClick = (n) => {
     if (!n.read) {
       handleMarkAsRead(n.id)
@@ -168,6 +186,7 @@ export default function NotificationsPage() {
     { key: 'security', label: 'Security' },
     { key: 'announcement', label: 'Announcements' },
     { key: 'system', label: 'System' },
+    { key: 'interview', label: 'Interviews' },
   ]
 
   return (
@@ -398,6 +417,13 @@ export default function NotificationsPage() {
                     <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
                       {n.message}
                     </p>
+
+                    {n.metadata?.kind === 'INTERVIEW_ASSIGNMENT' && n.metadata?.decision === 'PENDING' && (
+                      <div className="mt-3 flex gap-2" onClick={(e) => e.stopPropagation()}>
+                        <button type="button" disabled={!!assignmentActionLoading} onClick={(e) => handleAssignmentResponse(n, 'ACCEPTED', e)} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">{assignmentActionLoading === `${n.id}:ACCEPTED` ? 'Approving...' : 'Approve assignment'}</button>
+                        <button type="button" disabled={!!assignmentActionLoading} onClick={(e) => handleAssignmentResponse(n, 'REJECTED', e)} className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 disabled:opacity-50 dark:bg-rose-950/40 dark:text-rose-300">{assignmentActionLoading === `${n.id}:REJECTED` ? 'Rejecting...' : 'Reject assignment'}</button>
+                      </div>
+                    )}
 
                     {/* Bottom Action Footer */}
                     <div className="flex items-center justify-between gap-3 mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80">

@@ -101,7 +101,7 @@ export default function HRSettingsPage() {
 
       <div className="flex flex-col md:flex-row gap-6 items-start">
         {/* Sidebar Menu */}
-        <div className="w-full md:w-72 flex-shrink-0 flex md:flex-col gap-2 overflow-x-auto pb-2 md:pb-0 hide-scrollbar relative">
+        <div className="w-full md:w-72 flex-shrink-0 rounded-[24px] border border-slate-200/80 bg-white/75 p-3 shadow-sm backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/70 flex md:flex-col gap-1.5 overflow-x-auto pb-2 md:pb-3 hide-scrollbar relative">
           {MENU.map((item) => {
             const Icon = item.icon
             const isActive = activeTab === item.id
@@ -112,7 +112,7 @@ export default function HRSettingsPage() {
                 className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl text-sm font-semibold transition-all duration-300 whitespace-nowrap relative overflow-hidden group ${
                   isActive 
                     ? 'bg-blue-600 text-white shadow-[0_8px_20px_rgba(37,99,235,0.25)]'
-                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-100'
+                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50/80 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-100 border border-transparent hover:border-slate-200 dark:hover:border-slate-700'
                 }`}
               >
                 {isActive && <div className="absolute inset-0 bg-white/20 w-full h-full skew-x-12 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]" />}

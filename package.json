@@ -19,6 +19,7 @@
     "lint": "next lint",
     "seed": "node scripts/seed.mjs",
     "seed:platform": "node scripts/seedPlatformRbac.mjs",
+    "bootstrap:platform": "npm run seed && npm run seed:platform",
     "indexes:sync": "node scripts/syncIndexes.mjs",
     "r2:check": "node scripts/checkR2.mjs",
     "r2:migrate-local": "node scripts/migrateLocalFilesToR2.mjs",

@@ -18,6 +18,7 @@ export const tenantApi = {
   getRevenue: (params) => api.get('/super-admin/revenue', { params, devMock: false }),
   getPlans: () => api.get('/super-admin/plans', { devMock: false }),
   createPlan: (data) => api.post('/super-admin/plans', data),
+  createPlans: (plans) => api.post('/super-admin/plans/bulk', { plans }),
   updatePlan: (id, data) => api.put(`/super-admin/plans/${id}`, data),
   deletePlan: (id) => api.delete(`/super-admin/plans/${id}`),
   getAuditLogsGlobal: (params) => api.get('/super-admin/audit-logs', { params, devMock: false }),

@@ -84,8 +84,8 @@ export const GET = withApi(async () => {
   const month = now.getMonth() + 1
 
   const [tenant, employee] = await Promise.all([
-    Tenant.findById(tenantId).select('timezone hrSettings.weeklyOff').lean(),
-    Employee.findById(employeeId).select('joiningDate weekOff reportingManager').lean(),
+    Tenant.findById(tenantId).select('companyName logoUrl timezone hrSettings.weeklyOff').lean(),
+    Employee.findById(employeeId).select('firstName lastName profilePhotoUrl joiningDate weekOff reportingManager').lean(),
   ])
 
   const timezone = tenant?.timezone || 'Asia/Kolkata'
@@ -160,6 +160,14 @@ export const GET = withApi(async () => {
   ])
 
   return ok({
+    company: {
+      name: tenant?.companyName || session.companyName || '',
+      logoUrl: tenant?.logoUrl || '',
+    },
+    userProfile: {
+      name: employee ? `${employee.firstName || ''} ${employee.lastName || ''}`.trim() : session.name || '',
+      photoUrl: employee?.profilePhotoUrl || '',
+    },
     todayRecord: todayRecord || null,
     attendanceHistory: buildAttendanceHistory(attendanceRecords, employee, tenant, timezone),
     leaveBalances,

@@ -14,7 +14,7 @@ import { useAuthStore } from '@/store/authStore'
 import { HR_RESTRICTABLE_ROLES, MODULE_ACCESS_OPTIONS } from '@/lib/moduleAccess'
 
 const STATUSES = ['ACTIVE', 'INACTIVE', 'PROBATION', 'NOTICE_PERIOD', 'RESIGNED', 'TERMINATED', 'ABSCONDED', 'RETIRED']
-const ROLES = ['COMPANY_ADMIN', 'HR_MANAGER', 'MANAGER', 'EMPLOYEE', 'FINANCE', 'IT_ADMIN', 'SUPPORT_AGENT']
+const ROLES = ['COMPANY_ADMIN', 'HR_MANAGER', 'MANAGER', 'EMPLOYEE', 'SUPPORT_AGENT']
 
 export function EmployeeDetail({ basePath }) {
   const { id } = useParams()

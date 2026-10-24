@@ -2,9 +2,15 @@
 
 import React, { useEffect, useState } from 'react'
 import { Building, Briefcase, CreditCard, Clock, Save, Edit3, X, Sparkles } from 'lucide-react'
-import { branchApi, departmentApi, designationApi, shiftApi } from '@/services/departmentApi'
+import { branchApi, departmentApi, shiftApi } from '@/services/departmentApi'
 import { preboardingApi } from '@/services/preboardingApi'
 import { employeeApi } from '@/services/employeeApi'
+
+const DEFAULT_DESIGNATIONS = [
+  { value: 'HR_MANAGER', label: 'HR Manager' },
+  { value: 'MANAGER', label: 'Manager' },
+  { value: 'EMPLOYEE', label: 'Employee' },
+]
 
 function SectionCard({ icon: Icon, title, description, children, tone = 'blue' }) {
   const tones = {
@@ -72,7 +78,6 @@ export function OnboardingJoiningDetails({ record, onRefresh }) {
   const [saveMessage, setSaveMessage] = useState('')
   const [saveError, setSaveError] = useState('')
   const [departments, setDepartments] = useState([])
-  const [designations, setDesignations] = useState([])
   const [shifts, setShifts] = useState([])
   const [branches, setBranches] = useState([])
   const [managers, setManagers] = useState([])
@@ -83,7 +88,6 @@ export function OnboardingJoiningDetails({ record, onRefresh }) {
   const [formData, setFormData] = useState({
     department: record.department?._id || record.departmentId || record.offer?.departmentId || record.department || '',
     designation: record.designationId || record.offer?.designationId || '',
-    role: 'EMPLOYEE',
     employmentType: record.employmentType || 'Full Time',
     workMode: record.workMode || 'On-site',
     workLocation: record.workLocation || record.offer?.location || '',
@@ -117,23 +121,16 @@ export function OnboardingJoiningDetails({ record, onRefresh }) {
   useEffect(() => {
     Promise.allSettled([
       departmentApi.getAll(),
-      designationApi.getAll(),
       branchApi.getAll(),
       shiftApi.getAll(),
       employeeApi.getAll({ size: 50 })
-    ]).then(([departmentResult, designationResult, branchResult, shiftResult, employeeResult]) => {
+    ]).then(([departmentResult, branchResult, shiftResult, employeeResult]) => {
       if (departmentResult.status === 'fulfilled') {
         setDepartments((departmentResult.value.data.data || []).filter((department) => department.active !== false))
         setDepartmentError(false)
       } else {
         setDepartments([])
         setDepartmentError(true)
-      }
-
-      if (designationResult.status === 'fulfilled') {
-        setDesignations((designationResult.value.data.data || []).filter((designation) => designation.active !== false))
-      } else {
-        setDesignations([])
       }
 
       if (branchResult.status === 'fulfilled') {
@@ -259,15 +256,7 @@ export function OnboardingJoiningDetails({ record, onRefresh }) {
     value: department._id,
     label: department.name,
   }))
-  const designationOptions = designations
-    .filter((designation) => {
-      const departmentId = designation.department?._id || designation.department
-      return !formData.department || !departmentId || String(departmentId) === String(formData.department)
-    })
-    .map((designation) => ({
-      value: designation._id,
-      label: designation.name,
-    }))
+  const designationOptions = DEFAULT_DESIGNATIONS
   const shiftOptions = shifts.map((shift) => ({
     value: shift._id,
     label: `${shift.name} (${shift.startTime} - ${shift.endTime})`,
@@ -351,8 +340,9 @@ export function OnboardingJoiningDetails({ record, onRefresh }) {
               {departmentError && <p className="mt-1 text-[11px] font-medium text-rose-500">Unable to load departments from settings.</p>}
               {!departmentError && departments.length === 0 && <p className="mt-1 text-[11px] font-medium text-amber-600">Create a department in Settings first.</p>}
             </div>
-            {renderField('Designation', 'designation', 'text', designationOptions)}
-            {renderField('Authority / Role', 'role', 'text', ['EMPLOYEE', 'MANAGER', 'HR_MANAGER', 'FINANCE', 'IT_ADMIN'])}
+            <div>
+              {renderField('Designation', 'designation', 'text', designationOptions)}
+            </div>
             {renderField('Employment Type', 'employmentType', 'text', ['Full Time', 'Part Time', 'Contract', 'Intern'])}
             {renderField('Joining Date', 'joiningDate', 'date')}
             {renderField('Reporting Manager', 'reportingManager', 'text', managerOptions)}

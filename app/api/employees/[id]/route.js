@@ -13,6 +13,8 @@ import '@/models/Department'
 import '@/models/Designation'
 import '@/models/Shift'
 
+const VALID_GENDERS = ['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY']
+
 const UPDATABLE_FIELDS = [
   'firstName', 'lastName', 'phone', 'alternatePhone', 'dateOfBirth', 'gender',
   'maritalStatus', 'bloodGroup', 'nationality', 'religion', 'address', 'city',
@@ -63,9 +65,12 @@ export const PUT = withApi(async (req, { params }) => {
   if (body.moduleAccess !== undefined && !['COMPANY_ADMIN', 'SUPER_ADMIN'].includes(session.role)) {
     return fail('Only a Company Admin can update HR module access', 403, 'FORBIDDEN')
   }
+  if (body.gender && !VALID_GENDERS.includes(body.gender)) return fail('Invalid gender', 400)
 
   for (const field of UPDATABLE_FIELDS) {
-    if (body[field] !== undefined && body[field] !== null) {
+    if (field === 'gender' && (body[field] === '' || body[field] === null)) {
+      employee.gender = null
+    } else if (body[field] !== undefined && body[field] !== null) {
       employee[field] = field === 'moduleAccess' ? sanitizeModuleAccess(body[field]) : body[field]
     }
   }

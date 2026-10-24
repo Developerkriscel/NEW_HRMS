@@ -11,7 +11,9 @@ export const departmentApi = {
 }
 
 export const designationApi = {
-  getAll: () => api.get('/designations'),
+  // Designations are tenant data and must always come from the database.
+  // Do not let the local dev GET mock replace this list with an empty array.
+  getAll: () => api.get('/designations', { devMock: false, skipCache: true }),
   create: (data) => api.post('/designations', data),
 }
 

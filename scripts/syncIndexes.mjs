@@ -5,6 +5,7 @@ dotenv.config({ path: '.env.local' })
 dotenv.config()
 
 const MONGODB_URI = process.env.MONGODB_DIRECT_URI || process.env.MONGODB_URI
+const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME || 'krisceltech_platform_admin'
 if (!MONGODB_URI) {
   console.error('MONGODB_URI is not set')
   process.exit(1)
@@ -19,6 +20,7 @@ async function createIndexes(db, collectionName, indexes) {
 
 async function main() {
   await mongoose.connect(MONGODB_URI, {
+    dbName: MONGODB_DB_NAME,
     serverSelectionTimeoutMS: Number(process.env.MONGODB_CONNECT_TIMEOUT_MS || 4000),
     connectTimeoutMS: Number(process.env.MONGODB_CONNECT_TIMEOUT_MS || 4000),
     socketTimeoutMS: Number(process.env.MONGODB_SOCKET_TIMEOUT_MS || 15000),
@@ -54,6 +56,10 @@ async function main() {
       [{ tenantId: 1, deleted: 1, role: 1 }],
       [{ tenantId: 1, deleted: 1, createdAt: -1 }],
       [{ tenantId: 1, firstName: 1 }],
+      [{ tenantId: 1, deleted: 1, firstName: 1 }],
+      [{ tenantId: 1, deleted: 1, role: 1, firstName: 1 }],
+      [{ tenantId: 1, deleted: 1, employmentType: 1, firstName: 1 }],
+      [{ tenantId: 1, deleted: 1, reportingManager: 1, firstName: 1 }],
     ])
     await createIndexes(db, 'attendances', [
       [{ employee: 1, date: 1 }, { unique: true }],

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState, useRef } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Briefcase, Edit, Eye, GraduationCap, Plus, ShieldCheck, Trash2, UserRound, Users } from 'lucide-react'
 import { DataTable } from '@/components/tables/DataTable'
@@ -36,7 +36,7 @@ function humanizeEnum(value) {
     .replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
-export function EmployeesList({ basePath, hideHeader }) {
+export const EmployeesList = memo(function EmployeesList({ basePath, hideHeader }) {
   const router = useRouter()
   const [employees, setEmployees] = useState([])
   const [activeDirectoryTab, setActiveDirectoryTab] = useState('all')
@@ -77,7 +77,10 @@ export function EmployeesList({ basePath, hideHeader }) {
     load(0, false, activeDirectoryTab)
   }, [activeDirectoryTab, load])
 
-  const pageTitle = `${DIRECTORY_TABS.find((tab) => tab.id === activeDirectoryTab)?.label || 'All'} Directory`
+  const pageTitle = useMemo(
+    () => `${DIRECTORY_TABS.find((tab) => tab.id === activeDirectoryTab)?.label || 'All'} Directory`,
+    [activeDirectoryTab]
+  )
   const hasMore = employees.length < totalElements
 
   useEffect(() => {
@@ -90,13 +93,14 @@ export function EmployeesList({ basePath, hideHeader }) {
       { threshold: 0.1 }
     )
 
-    if (observerTarget.current) {
-      observer.observe(observerTarget.current)
+    const target = observerTarget.current
+    if (target) {
+      observer.observe(target)
     }
 
     return () => {
-      if (observerTarget.current) {
-        observer.unobserve(observerTarget.current)
+      if (target) {
+        observer.unobserve(target)
       }
     }
   }, [hasMore, loading, loadingMore, page, activeDirectoryTab, load])
@@ -115,7 +119,7 @@ export function EmployeesList({ basePath, hideHeader }) {
     }
   }
 
-  const columns = [
+  const columns = useMemo(() => [
     {
       header: 'Employee',
       accessor: 'firstName',
@@ -151,7 +155,11 @@ export function EmployeesList({ basePath, hideHeader }) {
         </div>
       ),
     },
-  ]
+  ], [basePath, router])
+
+  const handleRowClick = useCallback((row) => {
+    router.push(`${basePath}/${row._id}`)
+  }, [basePath, router])
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -204,7 +212,7 @@ export function EmployeesList({ basePath, hideHeader }) {
         columns={columns}
         data={employees}
         isLoading={loading}
-        onRowClick={(row) => router.push(`${basePath}/${row._id}`)}
+        onRowClick={handleRowClick}
         searchPlaceholder={`Search ${pageTitle.toLowerCase()}...`}
         emptyMessage="No employees found in this group"
         pageSize={10000}
@@ -233,4 +241,4 @@ export function EmployeesList({ basePath, hideHeader }) {
       />
     </div>
   )
-}
+})

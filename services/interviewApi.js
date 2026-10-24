@@ -4,6 +4,7 @@ export const interviewApi = {
   list: (params) => api.get('/recruitment/interviews', { params }),
   listForApplication: (applicationId) => api.get(`/recruitment/applications/${applicationId}/interviews`),
   create: (data) => api.post('/recruitment/interviews', data, { timeout: 60000 }),
+  resendInvite: (id, data = {}) => api.post(`/recruitment/interviews/${id}/resend`, data),
   get: (id) => api.get(`/recruitment/interviews/${id}`),
   availability: (params) => api.get('/recruitment/interviews/availability', { params }),
 
@@ -14,6 +15,7 @@ export const interviewApi = {
 
   submitFeedback: (id, data) => api.post(`/recruitment/interviews/${id}/feedback`, data),
   getPanelFeedback: (id) => api.get(`/recruitment/interviews/${id}/panel-feedback`),
+  respondToAssignment: (id, data) => api.post(`/recruitment/interviews/${id}/panel-response`, data),
 
   listScorecardTemplates: () => api.get('/recruitment/interview-scorecard-templates'),
   createScorecardTemplate: (data) => api.post('/recruitment/interview-scorecard-templates', data),

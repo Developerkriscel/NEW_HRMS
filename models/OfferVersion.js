@@ -20,6 +20,7 @@ const OfferVersionSchema = new mongoose.Schema(
     supersedes: { type: mongoose.Schema.Types.ObjectId, ref: 'OfferVersion', default: null },
 
     designationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Designation', default: null },
+    designationName: { type: String, default: null },
     departmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Department', default: null },
     managerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', default: null },
 

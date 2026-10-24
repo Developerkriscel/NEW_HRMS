@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic'
 
+import mongoose from 'mongoose'
 import { withApi } from '@/lib/handler'
 import { ok, fail, paged } from '@/lib/apiResponse'
 import { requireAuth, requireRole, requireTenantId, hashPassword, validatePasswordStrength } from '@/lib/auth'
@@ -12,6 +13,8 @@ import Employee from '@/models/Employee'
 import Tenant from '@/models/Tenant'
 import '@/models/Department'
 import '@/models/Designation'
+
+const VALID_GENDERS = ['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY']
 
 export const GET = withApi(async (req) => {
   const session = await requireAuth()
@@ -60,14 +63,26 @@ export const GET = withApi(async (req) => {
   const baseCountQuery = { tenantId, deleted: false }
   if (session.role === 'MANAGER') baseCountQuery.reportingManager = session.userId
 
-  const [totalElements, groupCounts, content] = await Promise.all([
-    Employee.countDocuments(query),
-    Promise.all([
-      Employee.countDocuments(baseCountQuery),
-      Employee.countDocuments({ ...baseCountQuery, role: 'HR_MANAGER' }),
-      Employee.countDocuments({ ...baseCountQuery, role: 'MANAGER' }),
-      Employee.countDocuments({ ...baseCountQuery, role: 'EMPLOYEE', employmentType: { $not: /intern/i } }),
-      Employee.countDocuments({ ...baseCountQuery, employmentType: /intern/i }),
+  // Keep all directory counts in one database round trip. Aggregation does
+  // not cast ObjectIds automatically, unlike countDocuments/find.
+  const aggregateTenantId = mongoose.Types.ObjectId.isValid(String(tenantId))
+    ? new mongoose.Types.ObjectId(String(tenantId))
+    : tenantId
+  const aggregateQuery = { ...query, tenantId: aggregateTenantId }
+  const aggregateBaseQuery = { ...baseCountQuery, tenantId: aggregateTenantId }
+
+  const [countResult, content] = await Promise.all([
+    Employee.aggregate([
+      {
+        $facet: {
+          total: [{ $match: aggregateQuery }, { $count: 'value' }],
+          all: [{ $match: aggregateBaseQuery }, { $count: 'value' }],
+          hr: [{ $match: { ...aggregateBaseQuery, role: 'HR_MANAGER' } }, { $count: 'value' }],
+          managers: [{ $match: { ...aggregateBaseQuery, role: 'MANAGER' } }, { $count: 'value' }],
+          employees: [{ $match: { ...aggregateBaseQuery, role: 'EMPLOYEE', employmentType: { $not: /intern/i } } }, { $count: 'value' }],
+          interns: [{ $match: { ...aggregateBaseQuery, employmentType: /intern/i } }, { $count: 'value' }],
+        },
+      },
     ]),
     Employee.find(query)
       .select('-password')
@@ -76,10 +91,22 @@ export const GET = withApi(async (req) => {
       .populate('reportingManager', 'firstName lastName')
       .sort({ [sortBy]: sortDir })
       .skip(page * size)
-      .limit(size),
+      .limit(size)
+      .lean(),
   ])
 
-  const sanitized = content.map((e) => sanitizeForManager(e.toObject(), session.role))
+  const counts = countResult[0] || {}
+  const countValue = (key) => counts[key]?.[0]?.value || 0
+  const totalElements = countValue('total')
+  const groupCounts = [
+    countValue('all'),
+    countValue('hr'),
+    countValue('managers'),
+    countValue('employees'),
+    countValue('interns'),
+  ]
+
+  const sanitized = content.map((e) => sanitizeForManager(e, session.role))
   const response = paged(sanitized, page, size, totalElements)
   response.groupCounts = {
     all: groupCounts[0],
@@ -100,6 +127,7 @@ export const POST = withApi(async (req) => {
   if (!body.email || !body.firstName || !body.lastName) {
     return fail('firstName, lastName and email are required', 400)
   }
+  if (body.gender && !VALID_GENDERS.includes(body.gender)) return fail('Invalid gender', 400)
   if (body.moduleAccess?.length && !['COMPANY_ADMIN', 'SUPER_ADMIN'].includes(session.role)) {
     return fail('Only a Company Admin can assign HR module access', 403, 'FORBIDDEN')
   }
@@ -138,7 +166,7 @@ export const POST = withApi(async (req) => {
     moduleAccess: ['COMPANY_ADMIN', 'SUPER_ADMIN'].includes(session.role) ? sanitizeModuleAccess(body.moduleAccess) : [],
     status: 'PROBATION', // new employees always start on probation, regardless of request body
     dateOfBirth: body.dateOfBirth || null,
-    gender: body.gender,
+    gender: body.gender || undefined,
     department: body.departmentId || null,
     designation: body.designationId || null,
     branch: body.branchId || null,

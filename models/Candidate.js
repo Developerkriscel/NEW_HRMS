@@ -61,6 +61,8 @@ const CandidateSchema = new mongoose.Schema(
     // activity-entry shape as Job/JobRequisition (type NOTE) rather than a
     // separate collection.
     skills: [{ type: String }],
+    // Values entered in custom columns from the in-app candidate spreadsheet.
+    customFields: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
     activityLog: [ActivityEntrySchema],
 
     ...tenantFields,

@@ -6,10 +6,24 @@ import { selectionApi } from '@/services/selectionApi'
 
 const CANDIDATE_PAGE_SIZE = 50
 const RECRUITMENT_CACHE_TTL_MS = Number(process.env.NEXT_PUBLIC_RECRUITMENT_CACHE_TTL_MS || 60000)
+let latestCandidateRequest = 0
 
 function displayStatus(application, offer) {
   if (application.status === 'REJECTED' || application.status === 'WITHDRAWN') return 'Rejected'
   if (application.status === 'HIRED') return 'HIRED'
+
+  // Lifecycle status is authoritative over the display name of the stage.
+  // A sent/accepted offer must never remain in Selected just because its
+  // stage is still named "Technical Round" or another custom label.
+  const offerStatus = offer?.status || offer?.offerStatus
+  if (offerStatus === 'ACCEPTED') return 'HIRED'
+  if (['SENT', 'VIEWED'].includes(offerStatus)) return 'Offered'
+  if (application.selectionStatus === 'SELECTED' || application.selectionStatus === 'SELECTION_APPROVAL_PENDING' || application.selectionStatus === 'SELECTION_APPROVED') return 'Selected'
+
+  const stageCategory = String(application.stageCategory || application.pipelineStageCategory || application.currentStageCategory || '').toUpperCase()
+  if (stageCategory === 'HIRED') return 'HIRED'
+  if (stageCategory === 'OFFER') return 'Offered'
+  if (stageCategory === 'SELECTED') return 'Selected'
 
   const stageName = String(application.stage || application.currentStageName || '').toLowerCase()
   const isEarlyStage = stageName.includes('applied') || stageName.includes('screen') || stageName.includes('shortlist') || stageName.includes('interview') || stageName.includes('round') || stageName.includes('assessment')
@@ -17,9 +31,6 @@ function displayStatus(application, offer) {
     return 'Pipeline'
   }
 
-  const offerStatus = offer?.status || offer?.offerStatus
-  if (offerStatus && offerStatus !== 'DRAFT') return 'Offered'
-  if (application.selectionStatus === 'SELECTED' || application.selectionStatus === 'SELECTION_APPROVAL_PENDING' || application.selectionStatus === 'SELECTION_APPROVED') return 'Selected'
   return application.status
 }
 
@@ -78,29 +89,36 @@ export const useRecruitmentStore = create((set, get) => ({
   candidatePage: 0,
   candidateTotal: 0,
   hasMoreCandidates: false,
+  candidatePageSize: CANDIDATE_PAGE_SIZE,
+  lastRequestParams: {},
   lastFetchedAt: 0,
+  lastFetchKey: null,
 
   fetchCandidates: async (params = {}) => {
     const append = !!params.append
     const page = Number(params.page ?? (append ? get().candidatePage + 1 : 0))
     const size = Number(params.size || CANDIDATE_PAGE_SIZE)
     const current = get()
+    const { append: _append, force: _force, page: _page, size: _size, ...requestParams } = params
+    const fetchKey = JSON.stringify({ ...requestParams, page: 0, size })
     if (
       !append
       && !params.force
       && current.candidates.length
       && current.lastFetchedAt
+      && current.lastFetchKey === fetchKey
       && Date.now() - current.lastFetchedAt < RECRUITMENT_CACHE_TTL_MS
     ) {
       return current.candidates
     }
+    const requestId = ++latestCandidateRequest
     set({ [append ? 'loadingMore' : 'loading']: true, error: null });
     try {
       // Load raw applications from backend
-      const { append: _append, force: _force, ...requestParams } = params
       const res = await candidateApi.list({ ...requestParams, page, size }, { skipCache: !!params.force, devMock: false });
       const data = res.data.data || {}
       const rows = data.content || [];
+      if (requestId !== latestCandidateRequest) return
       
       // Transform backend shape (application) into the UI candidate card shape
       const mappedCandidates = rows.map(a => ({
@@ -112,6 +130,8 @@ export const useRecruitmentStore = create((set, get) => ({
         phone: a.phone,
         role: a.jobTitle,
         stage: a.stage || 'Applied',
+        stageId: a.stageId || null,
+        stageCategory: a.stageCategory || a.pipelineStageCategory || a.currentStageCategory || null,
         score: a.aiMatchScore || 0,
         status: displayStatus(a, { status: a.offerStatus }),
         backendStatus: a.status,
@@ -128,13 +148,14 @@ export const useRecruitmentStore = create((set, get) => ({
         appliedAt: a.appliedAt,
         stageEnteredAt: a.stageEnteredAt,
         shortlistedAt: a.shortlistedAt,
+        interviewStageAt: a.interviewStageAt || null,
         interviewAt: combineInterviewDateTime(a.latestInterview),
         interviewTime: a.latestInterview?.startTime || null,
         interviewEndTime: a.latestInterview?.endTime || null,
         interviewRoundName: a.latestInterview?.roundName || null,
         interviewMode: a.latestInterview?.mode || null,
         interviewStatus: a.latestInterview?.status || null,
-        selectedAt: a.selectionStatus === 'SELECTED' ? (a.decision?.decidedAt || a.stageEnteredAt) : null,
+        selectedAt: a.selectedAt || (a.selectionStatus === 'SELECTED' ? (a.decision?.decidedAt || a.stageEnteredAt) : null),
       }));
 
       const nextCandidates = append
@@ -150,15 +171,27 @@ export const useRecruitmentStore = create((set, get) => ({
         candidatePage: page,
         candidateTotal: data.totalElements || nextCandidates.length,
         hasMoreCandidates: nextCandidates.length < (data.totalElements || nextCandidates.length),
+        candidatePageSize: size,
+        lastRequestParams: requestParams,
         lastFetchedAt: Date.now(),
+        lastFetchKey: fetchKey,
       });
     } catch (e) {
       console.error(e);
-      set({ error: 'Failed to fetch candidates', loading: false, loadingMore: false });
+      const message = e.response?.data?.message
+        || e.response?.data?.error
+        || e.message
+        || 'Failed to fetch candidates'
+      set({ error: message, loading: false, loadingMore: false });
+      throw e
     }
   },
 
-  loadMoreCandidates: async () => get().fetchCandidates({ append: true }),
+  loadMoreCandidates: async () => get().fetchCandidates({
+    ...get().lastRequestParams,
+    append: true,
+    size: get().candidatePageSize,
+  }),
 
   shortlistCandidate: async (candidateObj) => {
     const previous = get().candidates.find((candidate) => candidate.id === candidateObj.id)
@@ -175,6 +208,7 @@ export const useRecruitmentStore = create((set, get) => ({
       set((state) => patchCandidateInState(state, candidateObj.id, {
         status: displayStatus(result),
         backendStatus: result.status || 'ACTIVE',
+        stageId: result.currentStage || result.stage?._id || null,
         stage: result.currentStageName || 'Shortlisted',
         stageEnteredAt: result.stageEnteredAt || new Date().toISOString(),
         shortlistedAt: result.shortlistedAt || result.stageEnteredAt || new Date().toISOString(),
@@ -206,7 +240,7 @@ export const useRecruitmentStore = create((set, get) => ({
          const previous = get().candidates.find((candidate) => candidate.id === candidateObj.id)
          const restoreStage = candidateObj.stage || 'Applied'
          set((state) => patchCandidateInState(state, candidateObj.id, {
-           status: 'ACTIVE',
+           status: 'Pipeline',
            backendStatus: 'ACTIVE',
            stage: restoreStage,
            selectionStatus: null,
@@ -219,9 +253,11 @@ export const useRecruitmentStore = create((set, get) => ({
            })
            const result = res.data?.data || {}
            set((state) => patchCandidateInState(state, candidateObj.id, {
-             status: 'ACTIVE',
+             status: 'Pipeline',
              backendStatus: result.application?.status || 'ACTIVE',
              stage: result.stage?.name || result.application?.currentStageName || restoreStage,
+             stageId: result.stage?._id || result.application?.currentStage || null,
+             stageCategory: result.stage?.category || null,
              selectionStatus: result.application?.selectionStatus || null,
              readyForOffer: !!result.application?.readyForOffer,
            }))
@@ -236,6 +272,26 @@ export const useRecruitmentStore = create((set, get) => ({
     } catch (e) {
       console.error(e);
       set({ error: e.response?.data?.message || e.message || 'Failed to update candidate status' })
+      throw e
+    }
+  },
+
+  deleteRejectedCandidate: async (candidateObj) => {
+    if (!candidateObj?.id) throw new Error('Application id is required')
+    try {
+      await candidateApi.deleteApplication(candidateObj.id)
+      set((state) => {
+        const candidates = state.candidates.filter((candidate) => candidate.id !== candidateObj.id)
+        return {
+          candidates,
+          offers: candidates.filter((candidate) => ['Selected', 'Offered', 'HIRED'].includes(candidate.status)),
+          rejected: candidates.filter((candidate) => candidate.status === 'Rejected'),
+          candidateTotal: Math.max(0, state.candidateTotal - 1),
+        }
+      })
+    } catch (e) {
+      console.error(e)
+      set({ error: e.response?.data?.message || e.message || 'Failed to delete rejected application' })
       throw e
     }
   },
@@ -275,9 +331,16 @@ export const useRecruitmentStore = create((set, get) => ({
 
   scheduleInterview: async (candidateObj, data) => {
     try {
+      const applicationId = candidateObj?.applicationId || candidateObj?.id
+      if (!applicationId) {
+        throw new Error('This candidate is missing its application ID. Refresh the recruitment page and try again.')
+      }
+      if (!data?.date || !data?.startTime) {
+        throw new Error('Interview date and start time are required.')
+      }
       const endTime = data.endTime || addOneHour(data.startTime)
       const res = await interviewApi.create({
-        applicationId: candidateObj.id,
+        applicationId,
         roundName: data.roundName || 'Interview',
         type: data.type || 'TECHNICAL',
         date: data.date,
@@ -310,11 +373,6 @@ export const useRecruitmentStore = create((set, get) => ({
         backendStatus: 'ACTIVE',
         email: data.candidateEmail || candidateObj.email,
       }))
-      try {
-        await get().fetchCandidates({ force: true, job: candidateObj.jobId })
-      } catch (fErr) {
-        console.warn('Re-fetch candidates after scheduling skipped:', fErr)
-      }
       return createdData
     } catch (e) {
       console.error(e)
@@ -370,12 +428,7 @@ export const useRecruitmentStore = create((set, get) => ({
         : get().offers.find((item) => item.id === candidateOrId) || get().candidates.find((item) => item.id === candidateOrId)
       if (!candidate?.offerId) throw new Error('No sent offer found for this candidate')
       
-      const job = get().selectedPositionForCandidates;
-      let hiredStageName = 'Hired';
-      if (job?.pipelineStages?.length > 0) {
-        const hiredStage = job.pipelineStages.find(s => s.category === 'HIRED' || s.name.toLowerCase() === 'hired');
-        if (hiredStage) hiredStageName = hiredStage.name;
-      }
+      const hiredStageName = 'Hired';
 
       await offerApi.accept(candidate.offerId, {
         fullName: candidate.name,
@@ -441,6 +494,7 @@ export const useRecruitmentStore = create((set, get) => ({
       })
       const stage = res.data?.data?.stage
       set((state) => patchCandidateInState(state, candidateId, {
+        stageId: stage?._id || null,
         stage: stage?.name || newStageName,
         status: isEarlyStage ? 'Pipeline' : updatedStatus,
         backendStatus: res.data?.data?.application?.status || previous?.backendStatus,
@@ -451,6 +505,32 @@ export const useRecruitmentStore = create((set, get) => ({
       console.error(e);
       if (previous) set((state) => patchCandidateInState(state, candidateId, previous))
       set({ error: e.response?.data?.message || e.message || 'Failed to move candidate stage' })
+      throw e
+    }
+  }
+  ,
+  undoCandidateStage: async (candidateObj) => {
+    const previous = get().candidates.find((candidate) => candidate.id === candidateObj.id)
+    try {
+      const res = await candidateApi.undoStage(candidateObj.id)
+      const result = res.data?.data || {}
+      set((state) => patchCandidateInState(state, candidateObj.id, {
+        stage: result.stage?.name || 'Applied',
+        stageId: result.stage?._id || null,
+        stageCategory: result.stage?.category || null,
+        status: 'Pipeline',
+        backendStatus: result.application?.status || 'ACTIVE',
+        selectionStatus: null,
+        readyForOffer: false,
+        selectedAt: null,
+        offerId: null,
+        offerStatus: null,
+        backendOfferStatus: null,
+      }))
+      return result
+    } catch (e) {
+      if (previous) set((state) => patchCandidateInState(state, candidateObj.id, previous))
+      set({ error: e.response?.data?.message || e.message || 'Failed to undo candidate stage' })
       throw e
     }
   }

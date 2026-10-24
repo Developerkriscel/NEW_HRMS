@@ -6,9 +6,10 @@ dotenv.config({ path: '.env.local' })
 dotenv.config()
 
 const MONGODB_URI = process.env.MONGODB_DIRECT_URI || process.env.MONGODB_URI
+const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME || 'krisceltech_platform_admin'
 
 async function run() {
-  await mongoose.connect(MONGODB_URI)
+  await mongoose.connect(MONGODB_URI, { dbName: MONGODB_DB_NAME })
   console.log('Connected to MongoDB')
 
   const PlatformOperatorSchema = new mongoose.Schema({}, { strict: false, collection: 'superadminusers' })

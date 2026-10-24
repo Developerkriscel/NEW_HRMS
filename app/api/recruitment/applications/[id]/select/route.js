@@ -11,6 +11,7 @@ import { getRecruitmentSettings, computeVacancyStatus } from '@/lib/selectionHel
 import { PIPELINE_STAGE_CATEGORY } from '@/lib/jobConstants'
 import { STAGE_HISTORY_ACTION } from '@/lib/pipelineConstants'
 import { applyStageMove, recordStageHistory } from '@/lib/pipelineHelpers'
+import { withOptionalMongoTransaction } from '@/lib/mongoTransaction'
 import Application from '@/models/Application'
 import Job from '@/models/Job'
 import JobPipelineStage from '@/models/JobPipelineStage'
@@ -75,42 +76,47 @@ export const POST = withApi(async (req, { params }) => {
     }
   }
 
-  application.selectionStatus = needsApproval ? SELECTION_STATUS.SELECTION_APPROVAL_PENDING : SELECTION_STATUS.SELECTED
-  application.activityLog.push({
-    type: ACTIVITY_ENTRY_TYPE.STATUS_CHANGED,
-    message: `Selected by ${actorName}${needsApproval ? ' - awaiting approval' : ''}`,
-    comment: body.comments,
-    actorName,
-  })
-  await application.save()
+  let decision
+  await withOptionalMongoTransaction(async (dbSession) => {
+      application.selectionStatus = needsApproval ? SELECTION_STATUS.SELECTION_APPROVAL_PENDING : SELECTION_STATUS.SELECTED
+      application.activityLog.push({
+        type: ACTIVITY_ENTRY_TYPE.STATUS_CHANGED,
+        message: `Selected by ${actorName}${needsApproval ? ' - awaiting approval' : ''}`,
+        comment: body.comments,
+        actorName,
+      })
+      await application.save({ session: dbSession })
 
-  if (movedStage) {
-    await recordStageHistory({
-      tenantId,
-      application,
-      fromStageId,
-      toStageId: movedStage._id,
-      fromStageName,
-      toStageName: movedStage.name,
-      action: STAGE_HISTORY_ACTION.MOVED,
-      comment: body.comments || 'Selected from recruitment board',
-      session,
-    })
-  }
+      if (movedStage) {
+        await recordStageHistory({
+          tenantId,
+          application,
+          fromStageId,
+          toStageId: movedStage._id,
+          fromStageName,
+          toStageName: movedStage.name,
+          action: STAGE_HISTORY_ACTION.MOVED,
+          comment: body.comments || 'Selected from recruitment board',
+          session,
+          dbSession,
+        })
+      }
 
-  const decision = await SelectionDecision.create({
-    tenantId,
-    applicationId: application._id, candidateId: application.candidateId, jobId: application.jobId,
-    decision: SELECTION_DECISION_TYPE.SELECT,
-    recommendedDesignationId: body.recommendedDesignationId || null,
-    recommendedDepartmentId: body.recommendedDepartmentId || null,
-    recommendedManagerId: body.recommendedManagerId || null,
-    proposedJoiningDate: new Date(body.proposedJoiningDate),
-    employmentType: body.employmentType || null,
-    comments: body.comments || null,
-    decidedBy: session.userId, decidedByName: actorName, decidedAt: new Date(),
-    approvalStatus: needsApproval ? APPROVAL_STATUS.PENDING : APPROVAL_STATUS.NOT_REQUIRED,
-    approvalLevel: needsApproval ? approvalLevel : null,
+      const [createdDecision] = await SelectionDecision.create([{
+        tenantId,
+        applicationId: application._id, candidateId: application.candidateId, jobId: application.jobId,
+        decision: SELECTION_DECISION_TYPE.SELECT,
+        recommendedDesignationId: body.recommendedDesignationId || null,
+        recommendedDepartmentId: body.recommendedDepartmentId || null,
+        recommendedManagerId: body.recommendedManagerId || null,
+        proposedJoiningDate: new Date(body.proposedJoiningDate),
+        employmentType: body.employmentType || null,
+        comments: body.comments || null,
+        decidedBy: session.userId, decidedByName: actorName, decidedAt: new Date(),
+        approvalStatus: needsApproval ? APPROVAL_STATUS.PENDING : APPROVAL_STATUS.NOT_REQUIRED,
+        approvalLevel: needsApproval ? approvalLevel : null,
+      }], { session: dbSession })
+      decision = createdDecision
   })
 
   await logAction(session, {

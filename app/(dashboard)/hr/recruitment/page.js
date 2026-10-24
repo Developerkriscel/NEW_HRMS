@@ -1,6 +1,6 @@
 'use client'
 
-import { Plus, Briefcase, Users, UploadCloud, FileSpreadsheet, Download, UserPlus, Calendar, FileText, Sparkles, CheckCircle2, ChevronRight, Check, Edit, Trash2, PowerOff, PlayCircle, PauseCircle, X, Eye, Globe, Clock, MapPin, DollarSign, Mail, Send, Phone, AlertCircle, Loader2 } from 'lucide-react'
+import { Plus, Briefcase, Users, UploadCloud, FileSpreadsheet, Download, UserPlus, Calendar, FileText, Sparkles, CheckCircle2, ChevronRight, ChevronDown, Check, Edit, Trash2, PowerOff, PlayCircle, PauseCircle, X, Eye, Globe, Clock, MapPin, DollarSign, Mail, Send, Phone, AlertCircle, Loader2, Undo2 } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import { PositionDetailsModal } from '@/components/pages/recruitment/PositionDetailsModal'
@@ -8,11 +8,14 @@ import { SendOfferModal } from '@/components/pages/recruitment/SendOfferModal'
 import { OpenPositionModal } from '@/components/pages/recruitment/OpenPositionModal'
 import { PublishJobModal } from '@/components/pages/recruitment/PublishJobModal'
 import ManualCandidateModal from '@/components/pages/recruitment/ManualCandidateModal'
+import CandidateSpreadsheetEditor from '@/components/pages/recruitment/CandidateSpreadsheetEditor'
 import { ConfirmDialog } from '@/components/common/ConfirmDialog'
 import { useRecruitmentStore } from '@/store/recruitmentStore'
 import { useAuthStore } from '@/store/authStore'
 import { candidateApi } from '@/services/candidateApi'
 import { jobApi } from '@/services/jobApi'
+import { interviewApi } from '@/services/interviewApi'
+import { employeeApi } from '@/services/employeeApi'
 
 // Utility: parse a CSV string into an array of candidate-shaped objects
 // Supports any common column names (partial match, case-insensitive)
@@ -239,6 +242,7 @@ function analyzeCandidateForPosition(candidate, position) {
 export default function RecruitmentDashboardPage() {
   const { user } = useAuthStore()
   const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'COMPANY_ADMIN'
+  const canManageInterviews = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER'].includes(user?.role)
   const [activeTab, setActiveTab] = useState('positions')
   const [selectedPosition, setSelectedPosition] = useState(null)
   const [showOpenPositionModal, setShowOpenPositionModal] = useState(false)
@@ -246,6 +250,14 @@ export default function RecruitmentDashboardPage() {
   const [positionToDelete, setPositionToDelete] = useState(null)
   const [publishingPosition, setPublishingPosition] = useState(null)
   const [selectedPositionForCandidates, setSelectedPositionForCandidates] = useState(null)
+  const [positionPickerOpen, setPositionPickerOpen] = useState(false)
+  const [showAllCandidatesModal, setShowAllCandidatesModal] = useState(false)
+  const [allCandidatesRows, setAllCandidatesRows] = useState([])
+  const [allCandidatesLoading, setAllCandidatesLoading] = useState(false)
+  const [allCandidatesLoadingMore, setAllCandidatesLoadingMore] = useState(false)
+  const [allCandidatesPage, setAllCandidatesPage] = useState(0)
+  const [allCandidatesHasMore, setAllCandidatesHasMore] = useState(false)
+  const [allCandidatesError, setAllCandidatesError] = useState('')
   
   // Candidate Data State
   const [isDragging, setIsDragging] = useState(false)
@@ -253,9 +265,14 @@ export default function RecruitmentDashboardPage() {
   const fileInputRef = useRef(null)
   const resumeInputRef = useRef(null)
   const candidatesLoadedRef = useRef(false)
+  const candidatesLoadedJobRef = useRef(null)
+  const candidatesLoadingRef = useRef(null)
+  const positionPickerRef = useRef(null)
   
   // Workflow States
   const [candidatePhase, setCandidatePhase] = useState('idle') // idle, upload, processing, uploaded, analyzing, results
+  const [candidateImportMode, setCandidateImportMode] = useState('ai') // ai or directExcel
+  const [directImportSaving, setDirectImportSaving] = useState(false)
   // Local status map for AI Match table after save/skip decisions.
   const [localCandidateStatuses, setLocalCandidateStatuses] = useState({}) // { [email]: 'Pipeline' | 'Rejected' }
   const [candidateActionLoading, setCandidateActionLoading] = useState({})
@@ -265,31 +282,64 @@ export default function RecruitmentDashboardPage() {
   const [uploadFileName, setUploadFileName] = useState(null)
   const [analysisError, setAnalysisError] = useState(null)
   const [showManualCandidateModal, setShowManualCandidateModal] = useState(false)
+  const [showCandidateSpreadsheetEditor, setShowCandidateSpreadsheetEditor] = useState(false)
   const [selectedOfferCandidate, setSelectedOfferCandidate] = useState(null)
+  const [candidateToUndo, setCandidateToUndo] = useState(null)
+  const [undoConfirmError, setUndoConfirmError] = useState(null)
   const [schedulingCandidate, setSchedulingCandidate] = useState(null)
   const [schedulingStep, setSchedulingStep] = useState('details') // details, email, success
   const [schedulingFormData, setSchedulingFormData] = useState(null)
   const [emailDraft, setEmailDraft] = useState('')
   const [scheduleSuccess, setScheduleSuccess] = useState(null)
   const [isSchedulingInvite, setIsSchedulingInvite] = useState(false)
+  const [isResendingInvite, setIsResendingInvite] = useState(false)
   const [schedulingError, setSchedulingError] = useState(null)
+  const [interviewers, setInterviewers] = useState([])
+  const [interviewersLoading, setInterviewersLoading] = useState(false)
+  const [selectedInterviewerIds, setSelectedInterviewerIds] = useState([])
   const [selectedCandidateInfo, setSelectedCandidateInfo] = useState(null)
   const [positionsLoading, setPositionsLoading] = useState(true)
+  const [positionsError, setPositionsError] = useState('')
+  const [positionActionLoading, setPositionActionLoading] = useState(false)
+  const [positionActionError, setPositionActionError] = useState(null)
   
   // Global Store State
-  const { candidates: candidatesData, offers: offersList, rejected: rejectedList, updateCandidateStatus, updateCandidateStage, selectCandidate, scheduleInterview, sendOffer, acceptOffer, rejectOffer, fetchCandidates, loading } = useRecruitmentStore()
+  const { candidates: allCandidatesData, offers: offersList, rejected: rejectedList, error: candidateFetchError, updateCandidateStatus, deleteRejectedCandidate, updateCandidateStage, undoCandidateStage, selectCandidate, scheduleInterview, sendOffer, acceptOffer, rejectOffer, fetchCandidates, loadMoreCandidates, hasMoreCandidates, loading, loadingMore } = useRecruitmentStore()
+  const schedulingCandidateKey = schedulingCandidate?.id || schedulingCandidate?.applicationId || schedulingCandidate?.candidateId || null
+
+  useEffect(() => {
+    if (!schedulingCandidateKey) return undefined
+    let cancelled = false
+    setSelectedInterviewerIds([])
+    setInterviewersLoading(true)
+    employeeApi.getAll({ page: 0, size: 100, status: 'ACTIVE' })
+      .then((response) => {
+        if (cancelled) return
+        const data = response?.data?.data
+        const rows = data?.content || data?.items || data || []
+        setInterviewers(Array.isArray(rows) ? rows : [])
+      })
+      .catch(() => {
+        if (!cancelled) setInterviewers([])
+      })
+      .finally(() => {
+        if (!cancelled) setInterviewersLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [schedulingCandidateKey])
   
-  const fetchPositions = async () => {
+  const fetchPositions = async ({ force = false } = {}) => {
     setPositionsLoading(true)
+    setPositionsError('')
     try {
-      const res = await jobApi.list({ size: 50 }, { devMock: false, skipCache: true })
+      const res = await jobApi.list({ size: 50 }, { devMock: false, ...(force ? { skipCache: true } : {}) })
       const jobs = res.data?.data?.content || res.data?.data || []
       const mappedJobs = jobs.map(job => ({
         id: job._id || job.id,
         title: job.jobTitle || job.title,
         department: job.department?.name || job.department || 'Unknown',
         departmentId: job.department?._id || job.department,
-        status: job.status === 'OPEN' ? 'Open' : job.status === 'DRAFT' ? 'Draft' : job.status === 'ON_HOLD' ? 'On Hold' : job.status === 'CLOSED' ? 'Closed' : job.status === 'CANCELLED' ? 'Cancelled' : job.status,
+        status: job.status === 'OPEN' ? 'Active' : job.status === 'DRAFT' ? 'Draft' : ['ON_HOLD', 'PAUSED'].includes(job.status) ? 'On Hold' : job.status === 'CLOSED' ? 'Closed' : job.status === 'CANCELLED' ? 'Cancelled' : job.status,
         jobType: job.employmentType === 'FULL_TIME' ? 'Full-time' : job.employmentType === 'PART_TIME' ? 'Part-time' : job.employmentType === 'CONTRACT' ? 'Contract' : job.employmentType === 'INTERN' ? 'Intern' : 'Full-time',
         employmentType: 'Permanent',
         workMode: job.workMode === 'ONSITE' ? 'On-site' : job.workMode === 'HYBRID' ? 'Hybrid' : job.workMode === 'REMOTE' ? 'Remote' : 'On-site',
@@ -313,8 +363,10 @@ export default function RecruitmentDashboardPage() {
         expectedJoiningDate: job.expectedJoiningDate ? new Date(job.expectedJoiningDate).toISOString().split('T')[0] : ''
       }))
       setPositionsList(mappedJobs)
+      setPositionActionError(null)
     } catch (e) {
       console.error('Failed to fetch positions', e)
+      setPositionsError(e.response?.data?.message || e.message || 'Failed to load positions. Please retry.')
     } finally {
       setPositionsLoading(false)
     }
@@ -325,10 +377,99 @@ export default function RecruitmentDashboardPage() {
     return job ? { job } : {}
   }
 
+  const loadAllCandidates = async ({ append = false } = {}) => {
+    const page = append ? allCandidatesPage + 1 : 0
+    if (append ? allCandidatesLoadingMore : allCandidatesLoading) return
+    if (append && !allCandidatesHasMore) return
+
+    if (append) setAllCandidatesLoadingMore(true)
+    else {
+      setAllCandidatesLoading(true)
+      setAllCandidatesError('')
+    }
+    try {
+      const response = await candidateApi.list(
+        { openPositionsOnly: 'true', page, size: 50 },
+        { skipCache: true, devMock: false }
+      )
+      const data = response.data?.data || {}
+      const rows = Array.isArray(data.content) ? data.content : []
+      setAllCandidatesRows((previous) => append ? [...previous, ...rows] : rows)
+      setAllCandidatesPage(page)
+      setAllCandidatesHasMore(page < Number(data.totalPages || 1) - 1)
+    } catch (error) {
+      setAllCandidatesError(error.response?.data?.message || error.message || 'Failed to load candidates.')
+    } finally {
+      setAllCandidatesLoading(false)
+      setAllCandidatesLoadingMore(false)
+    }
+  }
+
+  const openAllCandidates = async () => {
+    setShowAllCandidatesModal(true)
+    await loadAllCandidates()
+  }
+
+  const openCandidatePosition = async (candidate) => {
+    const position = positionsList.find((item) => String(item.id) === String(candidate.jobId))
+    if (!position) return
+    setShowAllCandidatesModal(false)
+    await handlePositionSelection(position.id)
+  }
+
   const ensureCandidatesLoaded = async ({ force = false, position = selectedPositionForCandidates } = {}) => {
-    if (candidatesLoadedRef.current && !force) return
-    candidatesLoadedRef.current = true
-    await fetchCandidates({ ...candidateFetchParams(position), force })
+    const jobId = position?.id || position?._id || position?.jobId || null
+    if (!jobId) return
+    if (!force && candidatesLoadedRef.current && candidatesLoadedJobRef.current === String(jobId)) return
+    if (!force && candidatesLoadingRef.current?.jobId === String(jobId)) return candidatesLoadingRef.current.promise
+
+    const promise = fetchCandidates({ ...candidateFetchParams(position), force })
+    const tracked = promise
+      .then(() => {
+        candidatesLoadedRef.current = true
+        candidatesLoadedJobRef.current = String(jobId)
+      })
+      .catch((error) => {
+        candidatesLoadedRef.current = false
+        candidatesLoadedJobRef.current = null
+        throw error
+      })
+      .finally(() => {
+        if (candidatesLoadingRef.current?.promise === tracked) candidatesLoadingRef.current = null
+      })
+    candidatesLoadingRef.current = { jobId: String(jobId), promise: tracked }
+    return tracked
+  }
+
+  const handlePositionSelection = async (positionId) => {
+    if (!positionId) return
+    const position = positionsList.find((item) => String(item.id) === String(positionId))
+    if (!position) return
+
+    setAnalysisError(null)
+    setCandidatePhase('idle')
+    setActiveCandidateKpi('all')
+
+    let nextPosition = position
+    setSelectedPositionForCandidates(nextPosition)
+    setActiveTab('candidates')
+    const detailsPromise = jobApi.get(position.id, { timeout: 30000 })
+      .then((res) => {
+        const fullJob = res.data?.data || res.data
+        nextPosition = { ...position, pipelineStages: fullJob.pipelineStages || [] }
+        setSelectedPositionForCandidates(nextPosition)
+        return nextPosition
+      })
+      .catch((error) => {
+        console.error('Failed to load selected position details:', error)
+        return nextPosition
+      })
+    try {
+      await Promise.all([ensureCandidatesLoaded({ force: true, position }), detailsPromise])
+    } catch (error) {
+      console.warn('Failed to load selected position candidates:', error)
+      setAnalysisError(error.response?.data?.message || error.message || 'Candidate data is taking too long to load. Please retry.')
+    }
   }
 
   const candidateById = (candidateId) => candidatesData.find((candidate) => String(candidate.id) === String(candidateId))
@@ -337,20 +478,134 @@ export default function RecruitmentDashboardPage() {
     return !jobId || String(candidate.jobId || '') === String(jobId)
   }
 
+  const handleCandidateStageChange = async (candidateId, stageName) => {
+    const actionKey = `stage:${candidateId}`
+    if (candidateActionLoading[actionKey]) return
+    setAnalysisError(null)
+    setCandidateActionLoading((prev) => ({ ...prev, [actionKey]: true }))
+    try {
+      await updateCandidateStage(candidateId, stageName)
+      void fetchCandidates({ ...candidateFetchParams(), force: true }).catch((error) => {
+        console.warn('Candidate refresh after stage change failed:', error)
+      })
+    } catch (error) {
+      setAnalysisError(error.response?.data?.message || error.message || 'Failed to move candidate to the selected stage.')
+    } finally {
+      setCandidateActionLoading((prev) => {
+        const next = { ...prev }
+        delete next[actionKey]
+        return next
+      })
+    }
+  }
+
   const handleCandidateDrop = async (candidateId, stage) => {
     const candidate = candidateById(candidateId)
     if (!candidate) return
-    if (stage?.category === 'SELECTED' || /select/i.test(stage?.name || '')) {
-      await handleCandidateStatusChange(candidate, 'Selected')
-      return
+    try {
+      const stageCategory = String(stage?.category || '').toUpperCase()
+      const stageName = String(stage?.name || '')
+      const isDecisionStage = ['SELECTED', 'OFFER', 'HIRED'].includes(stageCategory) || /select|offer|hired/i.test(stageName)
+
+      if (isDecisionStage && !candidate.interviewAt) {
+        setAnalysisError('Schedule and complete an interview before moving this candidate to selection, offer, or hired.')
+        return
+      }
+      if (stageCategory === 'SELECTED' || /select/i.test(stageName)) {
+        await handleCandidateStatusChange(candidate, 'Selected')
+        return
+      }
+      if (stageCategory === 'OFFER' || /offer/i.test(stageName)) {
+        await handleCandidateStatusChange(candidate, 'Selected')
+        setSelectedOfferCandidate({ ...candidate, status: 'Selected' })
+        return
+      }
+      if (stageCategory === 'HIRED' || /hired/i.test(stageName)) return
+      await handleCandidateStageChange(candidate.id, stageName)
+    } catch (error) {
+      setAnalysisError(error.response?.data?.message || error.message || 'Failed to move candidate to the selected stage.')
     }
-    if (stage?.category === 'OFFER' || /offer/i.test(stage?.name || '')) {
-      await handleCandidateStatusChange(candidate, 'Selected')
-      setSelectedOfferCandidate({ ...candidate, status: 'Selected' })
-      return
+  }
+
+  const handleOfferDecision = async (candidate, decision) => {
+    const actionKey = `offer:${candidate.id}`
+    if (candidateActionLoading[actionKey]) return
+    setCandidateActionLoading((prev) => ({ ...prev, [actionKey]: true }))
+    try {
+      if (decision === 'accept') await acceptOffer(candidate)
+      else await rejectOffer(candidate)
+      void fetchCandidates({ ...candidateFetchParams(), force: true }).catch((error) => {
+        console.warn('Candidate refresh after offer action failed:', error)
+      })
+    } catch (error) {
+      setAnalysisError(error.response?.data?.message || error.message || `Failed to ${decision} offer.`)
+    } finally {
+      setCandidateActionLoading((prev) => {
+        const next = { ...prev }
+        delete next[actionKey]
+        return next
+      })
     }
-    if (stage?.category === 'HIRED' || /hired/i.test(stage?.name || '')) return
-    await updateCandidateStage(candidate.id, stage.name)
+  }
+
+  const handleCandidateUndo = async (candidate) => {
+    const actionKey = `undo:${candidate.id}`
+    if (candidateActionLoading[actionKey]) return
+    setCandidateActionLoading((prev) => ({ ...prev, [actionKey]: true }))
+    setAnalysisError(null)
+    setUndoConfirmError(null)
+    try {
+      await undoCandidateStage(candidate)
+      try {
+        await fetchCandidates({ ...candidateFetchParams(), force: true })
+      } catch (refreshError) {
+        // The undo write has already succeeded; a slow read must not make the
+        // user retry the action and create a misleading failure state.
+        console.warn('Candidate undo succeeded but refresh failed:', refreshError)
+      }
+      setCandidateToUndo(null)
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || 'Failed to return candidate to the previous stage.'
+      setAnalysisError(message)
+      setUndoConfirmError(message)
+    } finally {
+      setCandidateActionLoading((prev) => {
+        const next = { ...prev }
+        delete next[actionKey]
+        return next
+      })
+    }
+  }
+
+  const requestCandidateUndo = (candidate) => {
+    if (!candidate || candidateActionLoading[`undo:${candidate.id}`]) return
+    setUndoConfirmError(null)
+    setCandidateToUndo(candidate)
+  }
+
+  const handleRejectedCandidateDelete = async (candidate) => {
+    if (!candidate || (candidate.status !== 'Rejected' && candidate.status !== 'REJECTED')) return
+    if (!window.confirm(`Delete ${candidate.name || 'this rejected application'} from the pipeline? The candidate profile will be kept.`)) return
+    const actionKey = `delete:${candidate.id}`
+    if (candidateActionLoading[actionKey]) return
+    setCandidateActionLoading((prev) => ({ ...prev, [actionKey]: true }))
+    setAnalysisError(null)
+    try {
+      await deleteRejectedCandidate(candidate)
+      try {
+        await fetchCandidates({ ...candidateFetchParams(), force: true })
+      } catch (refreshError) {
+        console.warn('Rejected application deleted but candidate refresh failed:', refreshError)
+      }
+    } catch (error) {
+      setAnalysisError(error.response?.data?.message || error.message || 'Failed to delete rejected application.')
+    } finally {
+      setCandidateActionLoading((prev) => {
+        const next = { ...prev }
+        delete next[actionKey]
+        return next
+      })
+    }
   }
 
   useEffect(() => {
@@ -365,6 +620,13 @@ export default function RecruitmentDashboardPage() {
     const start = cand.interviewTime || date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     const end = cand.interviewEndTime ? ` - ${cand.interviewEndTime}` : ''
     return `${dateText}, ${start}${end}`
+  }
+
+  const getCandidateStageCategory = (candidate) => {
+    const stage = selectedPositionForCandidates?.pipelineStages?.find((item) => String(item.name) === String(candidate?.stage))
+    // The API resolves lifecycle/stage category from the database stage id.
+    // Prefer it over a stale or reused display name such as "Shortlisted".
+    return candidate?.stageCategory || stage?.category || null
   }
 
 
@@ -446,7 +708,7 @@ export default function RecruitmentDashboardPage() {
           <div className="flex justify-between items-center">
             <span className="flex items-center gap-1"><Calendar className="w-3 h-3 text-blue-400"/> Applied:</span>
             <span className="font-medium text-slate-700 dark:text-slate-300">
-              {cand.appliedAt ? new Date(cand.appliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+              {cand.appliedAt ? new Date(cand.appliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '-'}
             </span>
           </div>
           
@@ -457,27 +719,27 @@ export default function RecruitmentDashboardPage() {
               <span className="font-medium text-slate-700 dark:text-slate-300">
                 {cand.shortlistedAt ? new Date(cand.shortlistedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) 
                   : (cand.stage?.toLowerCase().includes('shortlist') && cand.stageEnteredAt) ? new Date(cand.stageEnteredAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) 
-                  : 'Yes'}
+                  : 'Not recorded'}
               </span>
             </div>
           )}
 
           {/* Always show interview date if stage implies they moved past applied */}
-          {(cand.interviewAt || (!['Screening', 'Applied', 'AI Match', 'Shortlisted'].includes(cand.stage) && cand.stage)) && (
+          {(cand.interviewStageAt || cand.interviewAt) && (
             <div className="flex justify-between items-center">
               <span className="flex items-center gap-1"><Calendar className="w-3 h-3 text-indigo-400"/> Select for interview:</span>
               <span className="font-medium text-slate-700 dark:text-slate-300">
-                {cand.interviewAt ? new Date(cand.interviewAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Pending'}
+                {new Date(cand.interviewStageAt || cand.interviewAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
               </span>
             </div>
           )}
 
           {/* Show Selected date if candidate is in Selected, Offered or Hired status */}
-          {(cand.selectedAt || ['Selected', 'Offered', 'HIRED'].includes(cand.status)) && (
+          {cand.selectedAt && (
             <div className="flex justify-between items-center">
               <span className="flex items-center gap-1"><Calendar className="w-3 h-3 text-emerald-400"/> Selected:</span>
               <span className="font-medium text-slate-700 dark:text-slate-300">
-                {cand.selectedAt ? new Date(cand.selectedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Yes'}
+                {new Date(cand.selectedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
               </span>
             </div>
           )}
@@ -491,7 +753,7 @@ export default function RecruitmentDashboardPage() {
                 <div className="flex justify-between items-center border-t border-slate-200 dark:border-slate-700 pt-1.5 mt-1.5">
                   <span className="flex items-center gap-1"><Send className="w-3 h-3 text-amber-500"/> Offer Sent:</span>
                   <span className="font-medium text-amber-600 dark:text-amber-400">
-                    {offer.offerSentAt ? new Date(offer.offerSentAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                    {offer.offerSentAt ? new Date(offer.offerSentAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '-'}
                   </span>
                 </div>
               );
@@ -504,18 +766,26 @@ export default function RecruitmentDashboardPage() {
         <div className="pt-3 mt-3 border-t border-slate-100 dark:border-slate-700 flex flex-col gap-2">
           {(() => {
             const stageLower = String(cand.stage || '').toLowerCase();
+            const stageCategory = getCandidateStageCategory(cand)
             const isRejected = cand.status === 'Rejected' || cand.status === 'REJECTED';
-            const isHiredStage = stageLower.includes('hired') || cand.status === 'HIRED';
-            const isOfferStage = !isHiredStage && (stageLower.includes('offer') || cand.status === 'Offered');
-            const isSelectedStage = !isHiredStage && !isOfferStage && (stageLower.includes('select') || cand.status === 'Selected');
-            const isShortlistStage = !isRejected && !isHiredStage && !isOfferStage && !isSelectedStage && stageLower.includes('shortlist');
-            const isInterviewStage = !isRejected && !isHiredStage && !isOfferStage && !isSelectedStage && !isShortlistStage && (stageLower.includes('interview') || stageLower.includes('round'));
+            // A stale/custom stage label must not turn an Offered card into
+            // onboarding. Lifecycle status wins over the stage label.
+            const isHiredStage = cand.status !== 'Offered' && (cand.status === 'HIRED' || cand.offerStatus === 'Accepted' || stageCategory === 'HIRED' || stageLower.includes('hired'));
+            const isOfferStage = !isHiredStage && (stageCategory === 'OFFER' || stageLower.includes('offer') || cand.status === 'Offered');
+            const isSelectedStage = !isHiredStage && !isOfferStage && (stageCategory === 'SELECTED' || stageLower.includes('select') || cand.status === 'Selected');
+            const isInterviewStage = !isRejected && !isHiredStage && !isOfferStage && !isSelectedStage && (stageCategory === 'INTERVIEW' || !!cand.interviewAt || stageLower.includes('interview') || stageLower.includes('round'));
+            const isShortlistStage = !isRejected && !isHiredStage && !isOfferStage && !isSelectedStage && !isInterviewStage && (stageCategory === 'SCREENING' || stageLower.includes('shortlist') || stageLower.includes('screen'));
 
             if (isRejected) {
               return (
-                <button onClick={() => handleCandidateStatusChange(cand, 'Pipeline')} className="w-full bg-slate-50 hover:bg-slate-100 text-slate-700 py-2 rounded-xl text-xs font-bold transition-colors">
-                  Restore to Pipeline
-                </button>
+                <div className="flex gap-2">
+                  <button onClick={() => handleCandidateStatusChange(cand, 'Pipeline')} disabled={candidateActionLoading[cand.email || cand.id]} className="flex-1 bg-slate-50 hover:bg-slate-100 text-slate-700 py-2 rounded-xl text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-60">
+                    Restore to Pipeline
+                  </button>
+                  <button onClick={() => handleRejectedCandidateDelete(cand)} disabled={candidateActionLoading[`delete:${cand.id}`]} title="Delete rejected application" aria-label={`Delete ${cand.name || 'rejected application'}`} className="inline-flex items-center justify-center rounded-xl bg-red-50 px-3 py-2 text-red-600 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               );
             }
 
@@ -529,11 +799,32 @@ export default function RecruitmentDashboardPage() {
 
             if (isOfferStage || isSelectedStage) {
               const offer = offersList.find(o => o.id === cand.id);
+              const offerAlreadySent = ['Sent', 'Accepted', 'Rejected'].includes(offer?.offerStatus)
+              const selectionApprovalPending = cand.selectionStatus === 'SELECTION_APPROVAL_PENDING'
+              if (!offerAlreadySent && selectionApprovalPending) {
+                return (
+                  <div className="flex flex-col gap-2">
+                    <button onClick={() => requestCandidateUndo(cand)} disabled={candidateActionLoading[`undo:${cand.id}`]} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors disabled:cursor-not-allowed disabled:opacity-60">
+                      <Undo2 className="w-4 h-4"/> {candidateActionLoading[`undo:${cand.id}`] ? 'Returning...' : 'Undo Selection'}
+                    </button>
+                    <div className="w-full bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-700 dark:text-amber-400 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1">
+                      <Clock className="w-3.5 h-3.5" /> Selection approval pending
+                    </div>
+                  </div>
+                );
+              }
               if (!offer || !offer.offerStatus || offer.offerStatus === 'Draft') {
                 return (
-                  <button onClick={() => setSelectedOfferCandidate(cand)} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors shadow-md shadow-emerald-500/20">
-                    <FileText className="w-4 h-4"/> Create Offer Letter
-                  </button>
+                  <div className="flex flex-col gap-2">
+                    {isSelectedStage && (
+                      <button onClick={() => requestCandidateUndo(cand)} disabled={candidateActionLoading[`undo:${cand.id}`]} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors disabled:cursor-not-allowed disabled:opacity-60">
+                        <Undo2 className="w-4 h-4"/> {candidateActionLoading[`undo:${cand.id}`] ? 'Returning...' : 'Undo Selection'}
+                      </button>
+                    )}
+                    <button onClick={() => setSelectedOfferCandidate(cand)} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors shadow-md shadow-emerald-500/20">
+                      <FileText className="w-4 h-4"/> Create Offer Letter
+                    </button>
+                  </div>
                 );
               }
               if (offer.offerStatus === 'Sent') {
@@ -543,9 +834,14 @@ export default function RecruitmentDashboardPage() {
                       <Clock className="w-3.5 h-3.5"/> Offer Sent - Waiting
                     </div>
                     <div className="flex gap-2">
-                      <button onClick={() => rejectOffer(cand)} className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-500/10 dark:hover:bg-red-500/20 dark:text-red-400 py-1.5 rounded-lg text-xs font-bold transition-colors">Declined</button>
-                      <button onClick={() => acceptOffer(cand)} className="flex-[2] bg-emerald-500 hover:bg-emerald-600 text-white py-1.5 rounded-lg text-xs font-bold transition-colors shadow-sm">Accepted</button>
+                      <button onClick={() => handleOfferDecision(cand, 'reject')} disabled={candidateActionLoading[`offer:${cand.id}`]} className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-500/10 dark:hover:bg-red-500/20 dark:text-red-400 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-60">Declined</button>
+                      <button onClick={() => handleOfferDecision(cand, 'accept')} disabled={candidateActionLoading[`offer:${cand.id}`]} className="flex-[2] bg-emerald-500 hover:bg-emerald-600 text-white py-1.5 rounded-lg text-xs font-bold transition-colors shadow-sm disabled:cursor-not-allowed disabled:opacity-60">Accepted</button>
                     </div>
+                    {isOfferStage && (
+                      <button onClick={() => requestCandidateUndo(cand)} disabled={candidateActionLoading[`undo:${cand.id}`]} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:cursor-not-allowed disabled:opacity-60">
+                        <Undo2 className="w-3.5 h-3.5"/> {candidateActionLoading[`undo:${cand.id}`] ? 'Returning...' : 'Undo to Previous Stage'}
+                      </button>
+                    )}
                   </div>
                 );
               }
@@ -568,7 +864,12 @@ export default function RecruitmentDashboardPage() {
             // Early stages: Shortlist, Interview, Applied, Screening
             return (
               <div className="flex flex-col gap-2">
-                {(isShortlistStage || isInterviewStage || cand.interviewAt) && (
+                {(isShortlistStage || isInterviewStage) && (
+                  <button onClick={() => requestCandidateUndo(cand)} disabled={candidateActionLoading[`undo:${cand.id}`]} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 disabled:cursor-not-allowed disabled:opacity-60">
+                    <Undo2 className="w-4 h-4"/> {candidateActionLoading[`undo:${cand.id}`] ? 'Returning...' : 'Undo to Previous Stage'}
+                  </button>
+                )}
+                {canManageInterviews && (isInterviewStage || cand.interviewAt) && (
                   <button onClick={() => setSchedulingCandidate(cand)} className={`w-full ${cand.interviewAt ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-600' : 'bg-blue-50 hover:bg-blue-100 text-blue-600'} py-2 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5`}>
                     <Calendar className="w-3.5 h-3.5"/> {cand.interviewAt ? 'Reschedule Interview' : 'Schedule Interview'}
                   </button>
@@ -577,14 +878,14 @@ export default function RecruitmentDashboardPage() {
                   <button onClick={() => handleCandidateStatusChange(cand, 'Rejected')} className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 py-2 rounded-xl text-xs font-bold transition-colors">Reject</button>
                   {isShortlistStage ? (
                     <button 
-                      onClick={() => updateCandidateStage(cand.id, nextStage || 'Interview')} 
+                      onClick={() => handleCandidateStageChange(cand.id, nextStage || 'Interview')}
                       className="flex-[2] bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-xl text-xs font-bold transition-colors truncate px-2"
                     >
                       Move to {nextStage || 'Interview'}
                     </button>
                   ) : nextStage ? (
                     <button 
-                      onClick={() => updateCandidateStage(cand.id, nextStage)} 
+                      onClick={() => handleCandidateStageChange(cand.id, nextStage)}
                       disabled={nextStage.toLowerCase().includes('select') && !cand.interviewAt}
                       title={nextStage.toLowerCase().includes('select') && !cand.interviewAt ? "Schedule an interview first" : undefined}
                       className={`flex-[2] ${nextStage.toLowerCase().includes('select') && !cand.interviewAt ? 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 text-white'} py-2 rounded-xl text-xs font-bold transition-colors truncate px-2`}
@@ -598,7 +899,7 @@ export default function RecruitmentDashboardPage() {
                       title={!cand.interviewAt ? "Schedule an interview first" : undefined}
                       className={`flex-[2] ${!cand.interviewAt ? 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white'} py-2 rounded-xl text-xs font-bold transition-colors truncate px-2`}
                     >
-                      Select & Offer
+                      Select Candidate
                     </button>
                   )}
                 </div>
@@ -621,6 +922,91 @@ export default function RecruitmentDashboardPage() {
   const getFileExt = (file) => (file.name?.split('.').pop() || '').toLowerCase()
   const isResumeFile = (file) => ['pdf', 'docx', 'doc'].includes(getFileExt(file))
   const isSpreadsheetFile = (file) => SPREADSHEET_EXTENSIONS.includes(getFileExt(file))
+
+  const downloadCandidateTemplate = () => {
+    const headers = [
+      'First Name *', 'Last Name', 'Email *', 'Phone', 'Current Role',
+      'Current Company', 'Experience (Years)', 'Current CTC', 'Expected CTC',
+      'Notice Period (Days)', 'Skills (comma-separated)', 'Education', 'Location',
+      'LinkedIn URL', 'Portfolio URL', 'Resume URL', 'Resume Summary', 'Past Experience',
+    ]
+    const worksheet = XLSX.utils.aoa_to_sheet([headers])
+    worksheet['!cols'] = headers.map((header) => ({ wch: Math.max(16, Math.min(30, header.length + 4)) }))
+    worksheet['!freeze'] = { xSplit: 0, ySplit: 1 }
+
+    const instructions = XLSX.utils.aoa_to_sheet([
+      ['NexaHR AI Candidate Analysis Template'],
+      ['Use the Candidate Data sheet to add one candidate per row for the selected open position.'],
+      [],
+      ['Required fields', 'First Name and Email'],
+      ['AI matching fields', 'Current Role, Experience (Years), Skills, Education, Location, Past Experience, Resume Summary'],
+      ['Skills format', 'Separate multiple skills with commas, semicolons, pipes, or slashes.'],
+      ['Experience format', 'Use a number such as 2 or 4.5.'],
+      ['CTC format', 'Use a number or a value such as INR 1200000.'],
+      ['Notice period', 'Use the number of days, such as 30 or 60.'],
+      ['URLs', 'Use complete URLs beginning with https:// when available.'],
+      ['How it works', 'Upload this workbook from the selected position, run AI analysis, review the match score, then save approved candidates to Applied.'],
+      [],
+      ['Example values are included on the Example sheet only. Do not upload the Example sheet as candidate data.'],
+    ])
+    instructions['!cols'] = [{ wch: 24 }, { wch: 110 }]
+
+    const example = XLSX.utils.aoa_to_sheet([
+      headers,
+      ['Aarav', 'Sharma', 'aarav.sharma@example.com', '+91 9876543210', 'Frontend Developer', 'Example Technologies', 2, 600000, 800000, 30, 'React, JavaScript, Next.js', 'B.Tech Computer Science', 'Bengaluru', 'https://linkedin.com/in/example', 'https://example.com', '', 'Frontend developer with 2 years building responsive web applications.', 'Built React dashboards, reusable components, and REST API integrations.'],
+    ])
+    example['!cols'] = headers.map((header) => ({ wch: Math.max(16, Math.min(30, header.length + 4)) }))
+    example['!freeze'] = { xSplit: 0, ySplit: 1 }
+
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Candidate Data')
+    XLSX.utils.book_append_sheet(workbook, instructions, 'Instructions')
+    XLSX.utils.book_append_sheet(workbook, example, 'Example')
+    XLSX.writeFile(workbook, 'nexahr-candidate-import-template.xlsx')
+  }
+
+  const handleDirectExcelImport = async (inputRows = parsedCandidates) => {
+    setAnalysisError(null)
+    const rows = inputRows.filter((candidate) => candidate.name?.trim() && candidate.email?.trim())
+    if (!rows.length || rows.length !== inputRows.length) {
+      setAnalysisError('Every Excel row must contain a candidate name and email before saving.')
+      return
+    }
+    if (!selectedPositionForCandidates?.id) {
+      setAnalysisError('Open a position before saving candidates to Applied.')
+      return
+    }
+
+    setDirectImportSaving(true)
+    setCandidatePhase('processing')
+    try {
+      await candidateApi.bulkApply({
+        candidates: rows.map(({ id, score, matchScore, matchLabel, matchedSkills, missingSkills, strengths, concerns, analysisSummary, ...candidate }) => ({
+          ...candidate,
+          source: 'EXCEL',
+        })),
+        jobId: selectedPositionForCandidates.id,
+        jobTitle: selectedPositionForCandidates.title,
+      })
+      // The write is already committed. A slow/temporarily unavailable read
+      // must not make the user think the import failed or duplicate the rows.
+      try {
+        await ensureCandidatesLoaded({ force: true, position: selectedPositionForCandidates })
+      } catch (refreshError) {
+        console.warn('Candidate import succeeded but refresh failed:', refreshError)
+      }
+      setParsedCandidates([])
+      setUploadFileName(null)
+      setCandidateImportMode('ai')
+      setCandidatePhase('idle')
+    } catch (error) {
+      setAnalysisError(error.response?.data?.message || error.message || 'Failed to save candidates to Applied.')
+      setCandidatePhase('uploaded')
+      throw error
+    } finally {
+      setDirectImportSaving(false)
+    }
+  }
 
   const handleFilesUpload = async (fileList) => {
     const files = Array.from(fileList || []).filter(Boolean)
@@ -661,7 +1047,17 @@ export default function RecruitmentDashboardPage() {
         setAnalysisError(`${data.failures.length} resume${data.failures.length !== 1 ? 's' : ''} could not be parsed and were skipped.`)
       }
     } catch (err) {
-      setUploadError(err.response?.data?.message || err.message || 'Failed to upload bulk resumes. Please try again.')
+      const failures = err.response?.data?.data?.failures || []
+      const failureSummary = failures
+        .slice(0, 3)
+        .map((failure) => `${failure.fileName || 'Resume'}: ${failure.message || 'Could not parse'}`)
+        .join(' | ')
+      const remaining = failures.length > 3 ? ` (+${failures.length - 3} more)` : ''
+      setUploadError(
+        failureSummary
+          ? `${failureSummary}${remaining}`
+          : (err.response?.data?.message || err.message || 'Failed to upload bulk resumes. Please try again.')
+      )
       setCandidatePhase('upload')
     }
   }
@@ -701,7 +1097,11 @@ export default function RecruitmentDashboardPage() {
         }
         const arrayBuffer = await file.arrayBuffer()
         const workbook = XLSX.read(arrayBuffer, { type: 'array' })
-        const sheetData = workbook.SheetNames
+        const candidateSheetName = workbook.SheetNames.find((sheetName) => sheetName.toLowerCase() === 'candidate data')
+        const sheetNamesToRead = candidateSheetName
+          ? [candidateSheetName]
+          : workbook.SheetNames.filter((sheetName) => !['instructions', 'example', 'read me', 'readme'].includes(sheetName.toLowerCase()))
+        const sheetData = sheetNamesToRead
           .map((sheetName) => {
             const sheet = workbook.Sheets[sheetName]
             const rows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false })
@@ -723,17 +1123,37 @@ export default function RecruitmentDashboardPage() {
           return key ? String(obj[key] || '').trim() : ''
         }
         const candidates = jsonRows.map((row, i) => {
-          const name = flexFind(row, ['name', 'candidate', 'full']) ||
-            [flexFind(row, ['first']), flexFind(row, ['last', 'surname'])].filter(Boolean).join(' ')
+          const fullName = flexFind(row, ['full name', 'fullname', 'candidate name', 'candidate'])
+          const firstName = flexFind(row, ['first name', 'first'])
+          const lastName = flexFind(row, ['last name', 'surname', 'last'])
+          const name = fullName || [firstName, lastName].filter(Boolean).join(' ')
+          const experience = flexFind(row, ['past experience', 'experience summary', 'work history'])
+          const resumeSummary = flexFind(row, ['resume summary', 'profile summary', 'summary', 'objective'])
+          const education = flexFind(row, ['education', 'degree', 'qualification'])
           return {
             id: `xlsx-${i}`,
             name: name,
+            firstName,
+            lastName,
             email: flexFind(row, ['email', 'mail']),
             phone: flexFind(row, ['phone', 'mobile', 'contact', 'cell']),
-            exp: flexFind(row, ['exp', 'experience', 'years', 'yrs']) || null,
+            exp: flexFind(row, ['experience (years)', 'total experience', 'years of experience', 'experience', 'years', 'yrs']) || null,
+            totalExperience: flexFind(row, ['experience (years)', 'total experience', 'years of experience']) || null,
             role: flexFind(row, ['role', 'title', 'position', 'designation', 'job']),
+            currentCompany: flexFind(row, ['current company', 'company', 'employer']),
+            currentDesignation: flexFind(row, ['current designation', 'designation', 'job title']),
+            currentCtc: flexFind(row, ['current ctc', 'current salary', 'current compensation']),
+            expectedCtcText: flexFind(row, ['expected ctc', 'expected salary', 'expected compensation']),
+            noticePeriod: flexFind(row, ['notice period', 'notice']),
             skills: splitList(flexFind(row, ['skill', 'technology', 'tech stack'])),
+            education,
+            educationText: education,
             location: flexFind(row, ['location', 'city']),
+            linkedinUrl: flexFind(row, ['linkedin']),
+            portfolioUrl: flexFind(row, ['portfolio', 'personal website']),
+            resumeUrl: flexFind(row, ['resume url', 'cv url', 'resume link']),
+            resumeSummary,
+            experience,
             score: null,
             source: 'EXCEL',
           }
@@ -901,6 +1321,7 @@ export default function RecruitmentDashboardPage() {
   const handleCandidateStatusChange = async (cand, newStatus) => {
     setAnalysisError(null)
     const actionKey = cand.email || cand.id
+    if (candidateActionLoading[actionKey]) return
     
     if (newStatus === 'Rejected') {
       if (!String(cand.id || '').match(/^[0-9a-fA-F]{24}$/)) {
@@ -911,6 +1332,9 @@ export default function RecruitmentDashboardPage() {
         setCandidateActionLoading(prev => ({ ...prev, [actionKey]: true }))
         await updateCandidateStatus(cand, 'Rejected')
         setLocalCandidateStatuses(prev => ({ ...prev, [actionKey]: newStatus }))
+        void fetchCandidates({ ...candidateFetchParams(), force: true }).catch((error) => {
+          console.warn('Candidate refresh after rejection failed:', error)
+        })
       } catch (err) {
         setAnalysisError(err.response?.data?.message || err.message || 'Reject failed.')
       } finally {
@@ -922,31 +1346,87 @@ export default function RecruitmentDashboardPage() {
         await selectCandidate(cand)
         setLocalCandidateStatuses(prev => ({ ...prev, [actionKey]: newStatus }))
         setSelectedOfferCandidate({ ...cand, status: 'Selected' })
+        void fetchCandidates({ ...candidateFetchParams(), force: true }).catch((error) => {
+          console.warn('Candidate refresh after selection failed:', error)
+        })
       } catch (err) {
         setAnalysisError(err.response?.data?.message || err.message || 'Selection failed.')
       } finally {
         setCandidateActionLoading(prev => ({ ...prev, [actionKey]: false }))
       }
     } else if (newStatus === 'Pipeline') {
-      if (!cand.email) {
-        setUploadError('Candidate email is required before adding to pipeline.')
-        return
-      }
       try {
         setCandidateActionLoading(prev => ({ ...prev, [actionKey]: true }))
-        const jobId = selectedPositionForCandidates?.id || null;
-        await candidateApi.bulkApply({ candidates: [cand], jobId, jobTitle: selectedPositionForCandidates?.title });
+
+        // Candidates returned by the AI upload flow do not have an application
+        // yet. Create the candidate/application and attach it to the selected
+        // job before refreshing the pipeline. Existing board rows already have
+        // an application id and should use the normal restore transition.
+        const hasExistingApplication = candidatesData.some((item) => (
+          String(item.id || '') === String(cand.id || '')
+          || String(item.applicationId || '') === String(cand.applicationId || '')
+        ))
+        if (!hasExistingApplication) {
+          const jobId = selectedPositionForCandidates?.id || selectedPositionForCandidates?._id
+          if (!jobId) throw new Error('Select an open position before adding candidates to the pipeline.')
+          await candidateApi.bulkApply({
+            candidates: [cand],
+            jobId,
+            jobTitle: selectedPositionForCandidates?.title,
+          })
+        } else {
+          if (!String(cand.id || '').match(/^[0-9a-fA-F]{24}$/)) {
+            throw new Error('This candidate is missing a valid application ID. Refresh the recruitment page and try again.')
+          }
+          await updateCandidateStatus(cand, 'Pipeline')
+        }
         setLocalCandidateStatuses(prev => ({ ...prev, [actionKey]: newStatus }))
-        await ensureCandidatesLoaded({ force: true })
+        await ensureCandidatesLoaded({ force: true, position: selectedPositionForCandidates })
       } catch (err) {
-        setAnalysisError(err.response?.data?.message || err.message || 'Failed to add candidate to pipeline.')
+        setAnalysisError(err.response?.data?.message || err.message || 'Failed to restore candidate to pipeline.')
       } finally {
         setCandidateActionLoading(prev => ({ ...prev, [actionKey]: false }))
       }
     }
   }
 
-  const handleSavePosition = async (form) => {
+  const hydratePosition = async (position) => {
+    const response = await jobApi.get(position.id, { timeout: 15000 })
+    const fullJob = response.data?.data || response.data
+    return {
+      ...position,
+      description: fullJob.jobSummary || '',
+      responsibilities: fullJob.responsibilities || '',
+      requiredSkills: fullJob.requiredQualifications || '',
+      preferredSkills: fullJob.preferredQualifications || '',
+      experience: fullJob.minExperience ? `${fullJob.minExperience}+ Years` : '',
+      education: fullJob.minEducation || fullJob.preferredEducation || fullJob.education || '',
+      pipelineStages: fullJob.pipelineStages || [],
+    }
+  }
+
+  const handlePositionDetailsOpen = async (position) => {
+    setSelectedPosition(position)
+    try {
+      const hydratedPosition = await hydratePosition(position)
+      setSelectedPosition((current) => current?.id === position.id ? hydratedPosition : current)
+    } catch (error) {
+      setPositionActionError(error.response?.data?.message || error.message || 'Unable to load position details.')
+    }
+  }
+
+  const handlePositionEditOpen = async (position) => {
+    setEditingPositionForModal(position)
+    setShowOpenPositionModal(true)
+    try {
+      const hydratedPosition = await hydratePosition(position)
+      setEditingPositionForModal((current) => current?.id === position.id ? hydratedPosition : current)
+    } catch (error) {
+      setPositionActionError(error.response?.data?.message || error.message || 'Unable to load position details for editing.')
+    }
+  }
+
+  const handleSavePosition = async (form, { close = true } = {}) => {
     try {
       const payload = {
         jobTitle: form.title,
@@ -960,6 +1440,8 @@ export default function RecruitmentDashboardPage() {
         requiredQualifications: form.requiredSkills,
         preferredQualifications: form.preferredSkills,
         minExperience: form.experience ? parseInt(form.experience) || undefined : undefined,
+        minEducation: form.education || undefined,
+        benefits: form.benefits || undefined,
         internalMinCtc: form.salaryMin ? parseInt(form.salaryMin) : undefined,
         internalMaxCtc: form.salaryMax ? parseInt(form.salaryMax) : undefined,
         currency: form.currency || 'INR',
@@ -968,7 +1450,7 @@ export default function RecruitmentDashboardPage() {
         openingDate: form.openingDate || undefined,
         targetClosingDate: form.targetClosingDate || undefined,
         expectedJoiningDate: form.expectedJoiningDate || undefined,
-        status: form.status === 'Open' ? 'OPEN' : form.status === 'Draft' ? 'DRAFT' : form.status === 'On Hold' ? 'ON_HOLD' : form.status === 'Closed' ? 'CLOSED' : form.status === 'Cancelled' ? 'CANCELLED' : 'DRAFT'
+        status: form.status === 'Open' ? 'OPEN' : form.status === 'Draft' ? 'DRAFT' : form.status === 'On Hold' ? 'PAUSED' : form.status === 'Closed' ? 'CLOSED' : form.status === 'Cancelled' ? 'CANCELLED' : 'DRAFT'
       }
 
       if (editingPositionForModal) {
@@ -976,41 +1458,149 @@ export default function RecruitmentDashboardPage() {
       } else {
         await jobApi.create(payload)
       }
-      setShowOpenPositionModal(false)
-      setEditingPositionForModal(null)
-      fetchPositions()
+      if (close) {
+        setShowOpenPositionModal(false)
+        setEditingPositionForModal(null)
+      }
+      await fetchPositions({ force: true })
     } catch (e) {
       console.error('Failed to save position:', e)
+      setPositionActionError(e.response?.data?.message || e.message || 'Failed to save position.')
     }
   }
 
   const handleDeletePosition = (id) => {
     const pos = positionsList.find(p => p.id === id)
+    if (!pos || ['Closed', 'Cancelled'].includes(pos.status)) {
+      setPositionActionError('Closed or cancelled positions cannot be cancelled again.')
+      return
+    }
+    setPositionActionError(null)
     setPositionToDelete(pos)
   }
 
-  const handleStatusChange = (id, newStatus) => {
-    setPositionsList(positionsList.map(p => p.id === id ? { ...p, status: newStatus } : p))
+  const handleStatusChange = async (id, newStatus) => {
+    const position = positionsList.find((item) => item.id === id)
+    if (!position) return
+    setPositionActionError(null)
+    setPositionActionLoading(true)
+    try {
+      if (newStatus === 'Active') {
+        if (position.status === 'Draft') await jobApi.open(id)
+        else await jobApi.reopen(id)
+      } else if (newStatus === 'On Hold') {
+        await jobApi.pause(id, 'Paused from recruitment positions list')
+      } else if (newStatus === 'Closed') {
+        await jobApi.close(id, 'Closed from recruitment positions list', false)
+      }
+      await fetchPositions({ force: true })
+      setPositionActionError(null)
+    } catch (error) {
+      console.error('Failed to change position status:', error)
+      const validationErrors = error.response?.data?.data?.errors || error.response?.data?.errors
+      const details = validationErrors && typeof validationErrors === 'object'
+        ? Object.values(validationErrors).filter(Boolean).join(' ')
+        : ''
+      setPositionActionError(details || error.response?.data?.message || error.message || 'Failed to update position status.')
+    } finally {
+      setPositionActionLoading(false)
+    }
   }
 
   // KPI State
   const [activeKpi, setActiveKpi] = useState('positions')
   const [activeCandidateKpi, setActiveCandidateKpi] = useState('all')
+  const [candidateDateFilter, setCandidateDateFilter] = useState('all')
 
   // Dynamic Candidate Stats
-  const positionCandidates = candidatesData.filter(c => 
-    belongsToSelectedPosition(c)
+  const isCandidateWithinDateFilter = (candidate) => {
+    if (candidateDateFilter === 'all') return true
+    const activityDates = [
+      candidate.appliedAt,
+      candidate.stageEnteredAt,
+      candidate.shortlistedAt,
+      candidate.interviewAt,
+      candidate.latestInterview?.date,
+      candidate.selectedAt,
+      candidate.offerSentAt,
+    ]
+      .map((value) => new Date(value || 0))
+      .filter((value) => !Number.isNaN(value.getTime()) && value.getTime() > 0)
+    const date = activityDates.length ? new Date(Math.max(...activityDates.map((value) => value.getTime()))) : null
+    if (!date || Number.isNaN(date.getTime())) return false
+
+    const now = new Date()
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const startOfYesterday = new Date(startOfToday)
+    startOfYesterday.setDate(startOfYesterday.getDate() - 1)
+    if (candidateDateFilter === 'today') return date >= startOfToday
+    if (candidateDateFilter === 'yesterday') return date >= startOfYesterday && date < startOfToday
+    if (candidateDateFilter === 'week') {
+      const startOfWeek = new Date(startOfToday)
+      const day = startOfWeek.getDay()
+      startOfWeek.setDate(startOfWeek.getDate() - (day === 0 ? 6 : day - 1))
+      return date >= startOfWeek
+    }
+    if (candidateDateFilter === 'month') return date >= new Date(now.getFullYear(), now.getMonth(), 1)
+    if (candidateDateFilter === 'sixMonths') {
+      const sixMonthsAgo = new Date(startOfToday)
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
+      return date >= sixMonthsAgo
+    }
+    return true
+  }
+
+  const boardCandidates = Array.from(
+    new Map(
+      allCandidatesData
+        .filter((candidate) => belongsToSelectedPosition(candidate) && isCandidateWithinDateFilter(candidate))
+        .map((candidate) => [String(candidate.id), candidate])
+    ).values()
   )
+  // Keep all board/KPI render paths on the same filtered source so counts and cards stay consistent.
+  const candidatesData = boardCandidates
+  const positionCandidates = candidatesData
+  const pipelineVisibleStatuses = ['ACTIVE', 'ON_HOLD', 'Pipeline', 'Referral', 'Selected', 'Offered', 'HIRED']
+  const candidateBelongsToPipelineStage = (candidate, stage) => {
+    if (!pipelineVisibleStatuses.includes(candidate.status)) return false
+    const stageName = String(stage?.name || '')
+    const stageLower = stageName.toLowerCase()
+    const stageCategory = String(stage?.category || '').toUpperCase()
+    const candidateCategory = String(getCandidateStageCategory(candidate) || '').toUpperCase()
+    const isHiredStage = stageCategory === 'HIRED' || /hired|joined/.test(stageLower)
+    const isOfferStage = stageCategory === 'OFFER' || /offer/.test(stageLower)
+    const isSelectedStage = stageCategory === 'SELECTED' || /select/.test(stageLower)
+    const isInterviewStage = stageCategory === 'INTERVIEW' || /interview|technical|round/.test(stageLower)
+
+    // Terminal lifecycle state is authoritative. A candidate can retain the
+    // old stage id after an offer is accepted, but must render in exactly one
+    // lane and never show onboarding actions in Offered and Hired together.
+    if (candidate.status === 'HIRED' || /hired|joined/.test(String(candidate.stage || '').toLowerCase())) {
+      return isHiredStage
+    }
+    if (candidate.status === 'Offered') return isOfferStage
+    if (candidate.status === 'Selected') return isSelectedStage
+    // Stage identity is the fallback for active candidates. Names are
+    // editable and may repeat in custom pipelines.
+    if (candidate.stageId && stage?._id) return String(candidate.stageId) === String(stage._id)
+    if (isHiredStage || isOfferStage || isSelectedStage) return false
+    if (isInterviewStage && candidateCategory === 'INTERVIEW') return true
+    return candidate.stage === stageName
+  }
   const isInterviewCandidate = (candidate) => {
     const activeStatuses = ['ACTIVE', 'ON_HOLD', 'Pipeline', 'Referral']
-    return activeStatuses.includes(candidate.status)
-      && !['Screening', 'Applied', 'AI Match'].includes(candidate.stage)
-      && !!candidate.stage
+    const category = String(getCandidateStageCategory(candidate) || '').toUpperCase()
+    return activeStatuses.includes(candidate.status) && (
+      category === 'INTERVIEW'
+      || /interview|technical|round/i.test(String(candidate.stage || ''))
+    )
   }
   const isAppliedCandidate = (candidate) => {
     const activeStatuses = ['ACTIVE', 'ON_HOLD', 'Pipeline', 'Referral']
+    const category = String(getCandidateStageCategory(candidate) || '').toUpperCase()
     return activeStatuses.includes(candidate.status)
-      && (candidate.stage === 'Screening' || candidate.stage === 'Applied' || candidate.stage === 'AI Match' || !candidate.stage)
+      && !isInterviewCandidate(candidate)
+      && (category === 'APPLIED' || category === 'SCREENING' || candidate.stage === 'Screening' || candidate.stage === 'Applied' || candidate.stage === 'AI Match' || !candidate.stage)
   }
   const candidateStats = {
     total: positionCandidates.length,
@@ -1038,20 +1628,26 @@ export default function RecruitmentDashboardPage() {
   }
   const renderCandidateTableActions = (candidate) => {
     const stageLower = String(candidate.stage || '').toLowerCase()
+    const stageCategory = getCandidateStageCategory(candidate)
     const isRejected = candidate.status === 'Rejected' || candidate.status === 'REJECTED'
-    const isHiredStage = stageLower.includes('hired') || candidate.status === 'HIRED'
-    const isOfferStage = !isHiredStage && (stageLower.includes('offer') || candidate.status === 'Offered')
-    const isSelectedStage = !isHiredStage && !isOfferStage && (stageLower.includes('select') || candidate.status === 'Selected')
-    const isShortlistStage = !isRejected && !isHiredStage && !isOfferStage && !isSelectedStage && stageLower.includes('shortlist')
-    const isInterviewStage = !isRejected && !isHiredStage && !isOfferStage && !isSelectedStage && !isShortlistStage && (stageLower.includes('interview') || stageLower.includes('round'))
+    const isHiredStage = candidate.status !== 'Offered' && (candidate.status === 'HIRED' || candidate.offerStatus === 'Accepted' || stageCategory === 'HIRED' || stageLower.includes('hired'))
+    const isOfferStage = !isHiredStage && (stageCategory === 'OFFER' || stageLower.includes('offer') || candidate.status === 'Offered')
+    const isSelectedStage = !isHiredStage && !isOfferStage && (stageCategory === 'SELECTED' || stageLower.includes('select') || candidate.status === 'Selected')
+    const isInterviewStage = !isRejected && !isHiredStage && !isOfferStage && !isSelectedStage && (stageCategory === 'INTERVIEW' || !!candidate.interviewAt || stageLower.includes('interview') || stageLower.includes('round'))
+    const isShortlistStage = !isRejected && !isHiredStage && !isOfferStage && !isSelectedStage && !isInterviewStage && (stageCategory === 'SCREENING' || stageLower.includes('shortlist') || stageLower.includes('screen'))
     const isAppliedStage = !isRejected && !isHiredStage && !isOfferStage && !isSelectedStage && !isShortlistStage && !isInterviewStage
     const offer = getCandidateOffer(candidate)
 
     if (isRejected) {
       return (
-        <button onClick={() => handleCandidateStatusChange(candidate, 'Pipeline')} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
-          Restore
-        </button>
+        <div className="flex flex-wrap justify-end gap-2">
+          <button onClick={() => handleCandidateStatusChange(candidate, 'Pipeline')} disabled={candidateActionLoading[candidate.email || candidate.id]} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
+            Restore
+          </button>
+          <button onClick={() => handleRejectedCandidateDelete(candidate)} disabled={candidateActionLoading[`delete:${candidate.id}`]} title="Delete rejected application" aria-label={`Delete ${candidate.name || 'rejected application'}`} className="inline-flex items-center justify-center rounded-xl bg-red-50 px-3 py-2 text-red-600 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
       )
     }
 
@@ -1060,21 +1656,43 @@ export default function RecruitmentDashboardPage() {
     }
 
     if (isOfferStage || isSelectedStage) {
+      const offerAlreadySent = ['Sent', 'Accepted', 'Rejected'].includes(offer?.offerStatus)
+      const selectionApprovalPending = candidate.selectionStatus === 'SELECTION_APPROVAL_PENDING'
+      if (!offerAlreadySent && selectionApprovalPending) {
+        return (
+          <div className="flex flex-wrap justify-end gap-2">
+            <button onClick={() => requestCandidateUndo(candidate)} disabled={candidateActionLoading[`undo:${candidate.id}`]} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60">
+              {candidateActionLoading[`undo:${candidate.id}`] ? 'Returning...' : 'Undo Selection'}
+            </button>
+            <span className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">Selection approval pending</span>
+          </div>
+        )
+      }
       if (!offer || !offer.offerStatus || offer.offerStatus === 'Draft') {
         return (
-          <button onClick={() => setSelectedOfferCandidate(candidate)} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm shadow-emerald-500/20 transition-colors hover:bg-emerald-700">
-            Create Offer
-          </button>
+          <div className="flex flex-wrap justify-end gap-2">
+            {isSelectedStage && (
+              <button onClick={() => requestCandidateUndo(candidate)} disabled={candidateActionLoading[`undo:${candidate.id}`]} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60">
+                {candidateActionLoading[`undo:${candidate.id}`] ? 'Returning...' : 'Undo Selection'}
+              </button>
+            )}
+            <button onClick={() => setSelectedOfferCandidate(candidate)} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm shadow-emerald-500/20 transition-colors hover:bg-emerald-700">
+              Create Offer
+            </button>
+          </div>
         )
       }
       if (offer.offerStatus === 'Sent') {
         return (
           <div className="flex flex-wrap justify-end gap-2">
-            <button onClick={() => rejectOffer(candidate)} className="rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-600 transition-colors hover:bg-red-100">
+            <button onClick={() => handleOfferDecision(candidate, 'reject')} disabled={candidateActionLoading[`offer:${candidate.id}`]} className="rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-600 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60">
               Declined
             </button>
-            <button onClick={() => acceptOffer(candidate)} className="rounded-xl bg-emerald-500 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-emerald-600">
+            <button onClick={() => handleOfferDecision(candidate, 'accept')} disabled={candidateActionLoading[`offer:${candidate.id}`]} className="rounded-xl bg-emerald-500 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
               Accepted
+            </button>
+            <button onClick={() => requestCandidateUndo(candidate)} disabled={candidateActionLoading[`undo:${candidate.id}`]} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60">
+              {candidateActionLoading[`undo:${candidate.id}`] ? 'Returning...' : 'Undo'}
             </button>
           </div>
         )
@@ -1088,10 +1706,13 @@ export default function RecruitmentDashboardPage() {
     if (isShortlistStage) {
       return (
         <div className="flex flex-wrap justify-end gap-2">
-          <button onClick={() => setSchedulingCandidate(candidate)} className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-bold text-blue-600 transition-colors hover:bg-blue-100">
-            Schedule Interview
+          <button onClick={() => requestCandidateUndo(candidate)} disabled={candidateActionLoading[`undo:${candidate.id}`]} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60">
+            {candidateActionLoading[`undo:${candidate.id}`] ? 'Returning...' : 'Undo'}
           </button>
-          <button onClick={() => updateCandidateStage(candidate.id, 'Interview')} className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-indigo-700">
+          {canManageInterviews && <button onClick={() => setSchedulingCandidate(candidate)} className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-bold text-blue-600 transition-colors hover:bg-blue-100">
+            Schedule Interview
+          </button>}
+          <button onClick={() => handleCandidateStageChange(candidate.id, 'Interview')} className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-indigo-700">
             Move to Interview
           </button>
           <button onClick={() => handleCandidateStatusChange(candidate, 'Rejected')} className="rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-600 transition-colors hover:bg-red-100">
@@ -1104,14 +1725,17 @@ export default function RecruitmentDashboardPage() {
     if (isInterviewStage) {
       return (
         <div className="flex flex-wrap justify-end gap-2">
-          <button onClick={() => setSchedulingCandidate(candidate)} className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-bold text-blue-600 transition-colors hover:bg-blue-100">
-            {candidate.interviewAt ? 'Reschedule' : 'Schedule'}
+          <button onClick={() => requestCandidateUndo(candidate)} disabled={candidateActionLoading[`undo:${candidate.id}`]} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60">
+            {candidateActionLoading[`undo:${candidate.id}`] ? 'Returning...' : 'Undo'}
           </button>
+          {canManageInterviews && <button onClick={() => setSchedulingCandidate(candidate)} className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-bold text-blue-600 transition-colors hover:bg-blue-100">
+            {candidate.interviewAt ? 'Reschedule' : 'Schedule'}
+          </button>}
           <button onClick={() => handleCandidateStatusChange(candidate, 'Rejected')} className="rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-600 transition-colors hover:bg-red-100">
             Reject
           </button>
           <button onClick={() => handleCandidateStatusChange(candidate, 'Selected')} className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-indigo-700">
-            Select & Offer
+            Select Candidate
           </button>
         </div>
       )
@@ -1123,10 +1747,10 @@ export default function RecruitmentDashboardPage() {
           <button onClick={() => handleCandidateStatusChange(candidate, 'Rejected')} className="rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-600 transition-colors hover:bg-red-100">
             Reject
           </button>
-          <button onClick={() => setSchedulingCandidate(candidate)} className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-bold text-blue-600 transition-colors hover:bg-blue-100">
+          {canManageInterviews && <button onClick={() => setSchedulingCandidate(candidate)} className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-bold text-blue-600 transition-colors hover:bg-blue-100">
             Schedule
-          </button>
-          <button onClick={() => updateCandidateStage(candidate.id, 'Shortlisted')} className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-indigo-700">
+          </button>}
+          <button onClick={() => handleCandidateStageChange(candidate.id, 'Shortlisted')} className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-indigo-700">
             Shortlist
           </button>
         </div>
@@ -1148,16 +1772,74 @@ export default function RecruitmentDashboardPage() {
     ? 'flex overflow-x-auto gap-6 pb-4 snap-x hide-scrollbar'
     : 'grid grid-cols-1 gap-6'
 
+  useEffect(() => {
+    if (!positionPickerOpen) return undefined
+    const handleOutsideClick = (event) => {
+      if (!positionPickerRef.current?.contains(event.target)) setPositionPickerOpen(false)
+    }
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => document.removeEventListener('mousedown', handleOutsideClick)
+  }, [positionPickerOpen])
+
   return (
     <div className="animate-fade-in space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <Briefcase className="w-6 h-6 text-indigo-500" /> Recruitment
           </h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Manage job openings and candidate pipeline</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 self-stretch sm:self-auto">
+          {activeTab === 'candidates' && selectedPositionForCandidates && (
+            <div ref={positionPickerRef} className="relative min-w-0 flex-1 sm:min-w-[280px] sm:flex-none">
+              <button
+                type="button"
+                onClick={() => setPositionPickerOpen((open) => !open)}
+                aria-haspopup="listbox"
+                aria-expanded={positionPickerOpen}
+                className={`group flex w-full items-center gap-3 rounded-2xl border bg-white px-3 py-2.5 text-left shadow-sm transition-all dark:bg-slate-900 ${positionPickerOpen ? 'border-indigo-500 ring-4 ring-indigo-100 dark:border-indigo-400 dark:ring-indigo-500/20' : 'border-indigo-200 hover:border-indigo-400 hover:shadow-md dark:border-indigo-500/30'}`}
+              >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300">
+                <Briefcase className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">Open position</span>
+                <span className="mt-0.5 block truncate text-sm font-bold text-slate-800 dark:text-white">{selectedPositionForCandidates.title}</span>
+              </span>
+              <ChevronDown className={`h-4 w-4 shrink-0 text-indigo-500 transition-transform ${positionPickerOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+              </button>
+              {positionPickerOpen && (
+                <div role="listbox" aria-label="Open positions" className="absolute right-0 z-50 mt-2 max-h-72 w-full min-w-[280px] overflow-y-auto rounded-2xl border border-indigo-100 bg-white p-1.5 shadow-xl shadow-indigo-900/10 dark:border-slate-700 dark:bg-slate-900">
+                  {positionsList.filter((position) => !['Closed', 'Cancelled'].includes(position.status)).map((position) => {
+                    const isSelected = String(position.id) === String(selectedPositionForCandidates.id)
+                    return (
+                      <button
+                        key={position.id}
+                        type="button"
+                        role="option"
+                        aria-selected={isSelected}
+                        onClick={() => {
+                          setPositionPickerOpen(false)
+                          handlePositionSelection(position.id)
+                        }}
+                        className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${isSelected ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300' : 'text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800'}`}
+                      >
+                        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}>
+                          <Briefcase className="h-4 w-4" aria-hidden="true" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-bold">{position.title}</span>
+                          <span className="block truncate text-[11px] font-medium text-slate-400">{position.department || 'Department not set'}{position.location ? ` - ${position.location}` : ''}</span>
+                        </span>
+                        {isSelected && <Check className="h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-300" aria-hidden="true" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
           {isAdmin && activeTab === 'positions' && (
             <button 
               onClick={() => {
@@ -1189,11 +1871,16 @@ export default function RecruitmentDashboardPage() {
 
       {activeTab === 'positions' ? (
         <div className="space-y-6">
+          {positionActionError && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
+              {positionActionError}
+            </div>
+          )}
           {/* KPI Boxes */}
           <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
             {[
-              { id: 'positions', label: 'Open Positions', value: positionsList.filter(p => p.status !== 'Closed').length.toString(), icon: Briefcase, colorClass: 'bg-gradient-to-br from-blue-500 to-blue-600 shadow-blue-500/30' },
-              { id: 'closed', label: 'Closed Positions', value: positionsList.filter(p => p.status === 'Closed').length.toString(), icon: Briefcase, colorClass: 'bg-gradient-to-br from-indigo-500 to-indigo-600 shadow-indigo-500/30' },
+              { id: 'positions', label: 'Open Positions', value: positionsLoading ? '...' : positionsList.filter(p => !['Closed', 'Cancelled'].includes(p.status)).length.toString(), icon: Briefcase, colorClass: 'bg-gradient-to-br from-blue-500 to-blue-600 shadow-blue-500/30' },
+              { id: 'closed', label: 'Closed Positions', value: positionsLoading ? '...' : positionsList.filter(p => p.status === 'Closed').length.toString(), icon: Briefcase, colorClass: 'bg-gradient-to-br from-indigo-500 to-indigo-600 shadow-indigo-500/30' },
             ].map(kpi => {
               const Icon = kpi.icon
               const isActive = activeKpi === kpi.id
@@ -1228,6 +1915,13 @@ export default function RecruitmentDashboardPage() {
                 {activeKpi === 'positions' ? 'Open Positions List' : 'Closed Positions List'}
               </h2>
             </div>
+
+            {positionsError && (
+              <div className="m-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
+                <span>{positionsError}</span>
+                <button type="button" onClick={() => fetchPositions({ force: true })} className="rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700">Retry</button>
+              </div>
+            )}
             
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm whitespace-nowrap">
@@ -1251,26 +1945,12 @@ export default function RecruitmentDashboardPage() {
                         <td className="px-6 py-5 text-right"><div className="ml-auto h-8 w-28 rounded bg-slate-200 dark:bg-slate-700" /></td>
                       </tr>
                     ))
-                  ) : positionsList.filter(p => activeKpi === 'positions' ? p.status !== 'Closed' : p.status === 'Closed').map(pos => (
+                  ) : positionsList.filter(p => activeKpi === 'positions' ? !['Closed', 'Cancelled'].includes(p.status) : p.status === 'Closed').map(pos => (
                     <tr 
                       key={pos.id} 
                       onClick={async (e) => {
                         if (e.target.closest('button')) return;
-                        let nextPosition = pos
-                        try {
-                          const res = await jobApi.get(pos.id);
-                          const fullJob = res.data?.data || res.data;
-                          nextPosition = {
-                            ...pos,
-                            pipelineStages: fullJob.pipelineStages
-                          }
-                          setSelectedPositionForCandidates(nextPosition);
-                        } catch (err) {
-                          console.error('Failed to fetch job details', err);
-                          setSelectedPositionForCandidates(pos);
-                        }
-                        setActiveTab('candidates');
-                        await ensureCandidatesLoaded({ force: true, position: nextPosition });
+                        await handlePositionSelection(pos.id)
                       }}
                       className="hover:bg-indigo-50/30 dark:hover:bg-indigo-500/5 transition-colors group cursor-pointer"
                     >
@@ -1330,21 +2010,23 @@ export default function RecruitmentDashboardPage() {
                           {isAdmin && (
                             <>
                               {pos.status !== 'Active' && (
-                                <button onClick={() => handleStatusChange(pos.id, 'Active')} className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors" title="Mark as Active"><PlayCircle className="w-4 h-4" /></button>
+                                <button disabled={positionActionLoading} onClick={() => handleStatusChange(pos.id, 'Active')} className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50" title="Mark as Active"><PlayCircle className="w-4 h-4" /></button>
                               )}
-                              {pos.status !== 'On Hold' && pos.status !== 'Closed' && (
-                                <button onClick={() => handleStatusChange(pos.id, 'On Hold')} className="p-2 text-slate-400 hover:text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-500/10 rounded-lg transition-colors" title="Put On Hold"><PauseCircle className="w-4 h-4" /></button>
+                              {pos.status === 'Active' && (
+                                <button disabled={positionActionLoading} onClick={() => handleStatusChange(pos.id, 'On Hold')} className="p-2 text-slate-400 hover:text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-500/10 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50" title="Put On Hold"><PauseCircle className="w-4 h-4" /></button>
                               )}
-                              {pos.status !== 'Closed' && (
-                                <button onClick={() => handleStatusChange(pos.id, 'Closed')} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-500/10 rounded-lg transition-colors" title="Close Position"><PowerOff className="w-4 h-4" /></button>
+                              {['Active', 'On Hold'].includes(pos.status) && (
+                                <button disabled={positionActionLoading} onClick={() => handleStatusChange(pos.id, 'Closed')} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-500/10 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50" title="Close Position"><PowerOff className="w-4 h-4" /></button>
                               )}
                               <button onClick={() => setPublishingPosition(pos)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors" title="Publish Job"><Globe className="w-4 h-4" /></button>
-                              <button onClick={() => { setEditingPositionForModal(pos); setShowOpenPositionModal(true); }} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-lg transition-colors" title="Edit Position"><Edit className="w-4 h-4" /></button>
-                              <button onClick={() => handleDeletePosition(pos.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors" title="Delete Position"><Trash2 className="w-4 h-4" /></button>
+                              <button onClick={() => handlePositionEditOpen(pos)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-lg transition-colors" title="Edit Position"><Edit className="w-4 h-4" /></button>
+                              {!['Closed', 'Cancelled'].includes(pos.status) && (
+                                <button disabled={positionActionLoading} onClick={() => handleDeletePosition(pos.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50" title="Cancel Position"><Trash2 className="w-4 h-4" /></button>
+                              )}
                             </>
                           )}
                           <button 
-                            onClick={() => setSelectedPosition(pos)} 
+                            onClick={() => handlePositionDetailsOpen(pos)}
                             className="bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors ml-2"
                           >
                             <Eye className="w-4 h-4" /> View
@@ -1353,7 +2035,7 @@ export default function RecruitmentDashboardPage() {
                       </td>
                     </tr>
                   ))}
-                  {!positionsLoading && positionsList.filter(p => activeKpi === 'positions' ? p.status !== 'Closed' : p.status === 'Closed').length === 0 && (
+                  {!positionsLoading && positionsList.filter(p => activeKpi === 'positions' ? !['Closed', 'Cancelled'].includes(p.status) : p.status === 'Closed').length === 0 && (
                     <tr>
                       <td colSpan="5" className="px-6 py-12 text-center text-slate-500">
                         No positions found in this category.
@@ -1378,11 +2060,26 @@ export default function RecruitmentDashboardPage() {
                   Candidates for: {selectedPositionForCandidates.title}
                 </h2>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 {candidatePhase !== 'upload' && (
                   <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={openAllCandidates}
+                      disabled={allCandidatesLoading}
+                      className="bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all disabled:cursor-not-allowed disabled:opacity-60"
+                      title="Show candidates across all open positions"
+                    >
+                      <Users className="w-4 h-4" /> Show All Candidates
+                    </button>
+                    <button
+                      onClick={() => setShowCandidateSpreadsheetEditor(true)}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-md shadow-emerald-500/20"
+                    >
+                      <FileSpreadsheet className="w-4 h-4" /> Import Excel
+                    </button>
                     <button 
-                      onClick={() => setCandidatePhase('upload')}
+                      onClick={() => { setCandidateImportMode('ai'); setCandidatePhase('upload') }}
                       className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-md shadow-indigo-500/20"
                     >
                       <UploadCloud className="w-4 h-4" /> Upload Candidate Data
@@ -1416,10 +2113,7 @@ export default function RecruitmentDashboardPage() {
                   if (selectedPositionForCandidates && selectedPositionForCandidates.pipelineStages && selectedPositionForCandidates.pipelineStages.length > 0) {
                     const activeStages = selectedPositionForCandidates.pipelineStages.filter(s => s.isActive !== false).sort((a, b) => a.order - b.order)
                     kpiList = activeStages.map(stage => {
-                      const count = candidatesData.filter(c => {
-                        if (!belongsToSelectedPosition(c)) return false
-                        return (c.status === 'ACTIVE' || c.status === 'ON_HOLD' || c.status === 'Pipeline' || c.status === 'Referral') && c.stage === stage.name
-                      }).length
+                      const count = candidatesData.filter((candidate) => candidateBelongsToPipelineStage(candidate, stage)).length
                       
                       let Icon = Users
                       let colorClass = 'bg-gradient-to-br from-blue-500 to-blue-600 shadow-blue-500/30'
@@ -1470,7 +2164,7 @@ export default function RecruitmentDashboardPage() {
 
               {/* Kanban Pipeline Board */}
               <div className="bg-transparent animate-in fade-in slide-in-from-bottom-4 duration-300 delay-75">
-                <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center justify-between mb-6 gap-4">
                   <h2 className="text-xl font-bold text-slate-900 dark:text-white">
                     {activeCandidateKpi === 'all' && 'Candidate Pipeline Board'}
                     {activeCandidateKpi === 'applied' && 'Applied Candidates'}
@@ -1479,15 +2173,34 @@ export default function RecruitmentDashboardPage() {
                     {activeCandidateKpi === 'rejected' && 'Rejected Candidates Pipeline'}
                     {activeCandidateKpi === 'referral' && 'Referrals Pipeline'}
                   </h2>
-                  {activeCandidateKpi !== 'all' && (
-                    <button
-                      type="button"
-                      onClick={() => setActiveCandidateKpi('all')}
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-                    >
-                      Show All Sections
-                    </button>
-                  )}
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                      <span className="sr-only">Filter candidates by date</span>
+                      <span className="text-slate-400" aria-hidden="true"><Calendar className="h-4 w-4" /></span>
+                      <select
+                        value={candidateDateFilter}
+                        onChange={(event) => setCandidateDateFilter(event.target.value)}
+                        className="bg-transparent text-sm font-semibold text-slate-700 outline-none dark:text-slate-200"
+                        aria-label="Filter candidates by date"
+                      >
+                        <option value="today">Today</option>
+                        <option value="yesterday">Yesterday</option>
+                        <option value="week">This Week</option>
+                        <option value="month">This Month</option>
+                        <option value="sixMonths">Last 6 Months</option>
+                        <option value="all">All Time</option>
+                      </select>
+                    </label>
+                    {activeCandidateKpi !== 'all' && (
+                      <button
+                        type="button"
+                        onClick={() => setActiveCandidateKpi('all')}
+                        className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                      >
+                        Show All Sections
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {loading ? (
@@ -1586,10 +2299,7 @@ export default function RecruitmentDashboardPage() {
                       const columns = activeStages.map((stage, i) => {
                         if (!shouldShowCandidateSection(stage.name)) return null;
                         
-                        const stageCandidates = candidatesData.filter(c => {
-                          if (!belongsToSelectedPosition(c)) return false;
-                          return (['ACTIVE', 'ON_HOLD', 'Pipeline', 'Referral', 'Selected', 'Offered', 'HIRED'].includes(c.status)) && c.stage === stage.name;
-                        })
+                        const stageCandidates = candidatesData.filter((candidate) => candidateBelongsToPipelineStage(candidate, stage))
                         
                         let dotColor = 'bg-blue-400'
                         let bgClass = 'bg-slate-50 dark:bg-slate-900/50'
@@ -1728,7 +2438,7 @@ export default function RecruitmentDashboardPage() {
                             onDrop={(e) => {
                               const candidateId = e.dataTransfer.getData('candidateId');
                               if (candidateId) {
-                                updateCandidateStage(candidateId, 'Technical Round');
+                                handleCandidateStageChange(candidateId, 'Technical Round');
                               }
                             }}
                           >
@@ -1885,6 +2595,42 @@ export default function RecruitmentDashboardPage() {
                   })()}
                 </div>
                 )}
+                {!loading && hasMoreCandidates && (
+                  <div className="mt-5 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={loadMoreCandidates}
+                      disabled={loadingMore}
+                      className="rounded-xl border border-indigo-200 bg-white px-5 py-2.5 text-sm font-bold text-indigo-600 shadow-sm transition-colors hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-indigo-900/50 dark:bg-slate-900 dark:text-indigo-300 dark:hover:bg-indigo-950/30"
+                    >
+                      {loadingMore ? 'Loading more candidates...' : 'Load more candidates'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {analysisError && candidatePhase === 'idle' && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
+              {analysisError}
+            </div>
+          )}
+
+          {candidateFetchError && candidatePhase === 'idle' && !analysisError && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span>Candidate data could not be loaded: {candidateFetchError}</span>
+                {selectedPositionForCandidates && (
+                  <button
+                    type="button"
+                    onClick={() => ensureCandidatesLoaded({ force: true })}
+                    disabled={loading}
+                    className="rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-500/40 dark:bg-slate-900 dark:text-red-300"
+                  >
+                    Retry
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -1899,9 +2645,13 @@ export default function RecruitmentDashboardPage() {
                 <X className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
               </button>
               <div className="mb-6">
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">Import Candidate Data</h2>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                  {candidateImportMode === 'directExcel' ? 'Import Candidates to Applied' : 'Import Candidate Data'}
+                </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-normal">
-                  Upload candidate spreadsheets (.csv, .tsv, .xls, .xlsx, .xlsm, .xlsb, .ods) or multiple resumes (.pdf, .docx) for automated parsing and candidate matching.
+                  {candidateImportMode === 'directExcel'
+                    ? 'Upload your completed Excel sheet, review the rows, and save them directly into Applied for this position.'
+                    : 'Upload candidate spreadsheets (.csv, .tsv, .xls, .xlsx, .xlsm, .xlsb, .ods) or multiple resumes (.pdf, .docx) for automated parsing and candidate matching.'}
                 </p>
               </div>
 
@@ -1939,17 +2689,24 @@ export default function RecruitmentDashboardPage() {
                     
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Drag and drop your files here</h3>
                     <p className="text-sm text-slate-500 dark:text-slate-400 text-center max-w-md mb-8 font-normal">
-                      Upload candidate spreadsheets (.csv, .tsv, .xls, .xlsx, .xlsm, .xlsb, .ods) or multiple resumes (.pdf, .docx, .doc) to run automated parsing and AI shortlisting.
+                      {candidateImportMode === 'directExcel'
+                        ? 'Use the template, enter candidate details manually, save the file, then upload it here.'
+                        : 'Upload candidate spreadsheets (.csv, .tsv, .xls, .xlsx, .xlsm, .xlsb, .ods) or multiple resumes (.pdf, .docx, .doc) to run automated parsing and AI shortlisting.'}
                     </p>
                     
                     <div className="flex flex-col sm:flex-row flex-wrap justify-center gap-4 mt-6">
+                      <button onClick={downloadCandidateTemplate} className="bg-white hover:bg-slate-50 text-indigo-700 border border-indigo-200 px-6 py-3 rounded-xl font-semibold text-xs shadow-sm transition-all flex items-center justify-center gap-2">
+                        <Download className="w-4 h-4" /> Download AI Analysis Template
+                      </button>
                       <button onClick={() => fileInputRef.current?.click()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-semibold text-xs shadow-md shadow-indigo-500/20 transition-all flex items-center justify-center gap-2">
-                        <UploadCloud className="w-4 h-4" /> Upload Candidate Spreadsheet
+                        <UploadCloud className="w-4 h-4" /> {candidateImportMode === 'directExcel' ? 'Upload Completed Excel' : 'Upload Candidate Spreadsheet'}
                       </button>
 
-                      <button onClick={() => resumeInputRef.current?.click()} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-semibold text-xs shadow-md shadow-emerald-500/20 transition-all flex items-center justify-center gap-2">
-                        <FileText className="w-4 h-4" /> Upload Bulk Resumes (.pdf / .docx)
-                      </button>
+                      {candidateImportMode !== 'directExcel' && (
+                        <button onClick={() => resumeInputRef.current?.click()} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-semibold text-xs shadow-md shadow-emerald-500/20 transition-all flex items-center justify-center gap-2">
+                          <FileText className="w-4 h-4" /> Upload Bulk Resumes (.pdf / .docx)
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -1991,7 +2748,9 @@ export default function RecruitmentDashboardPage() {
                     <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600 shadow-sm dark:bg-slate-950 dark:text-emerald-300">
                       <CheckCircle2 className="h-3.5 w-3.5" /> File Uploaded
                     </div>
-                    <h2 className="text-xl font-black text-slate-950 dark:text-white">Candidate data is ready to analyze</h2>
+                    <h2 className="text-xl font-black text-slate-950 dark:text-white">
+                      {candidateImportMode === 'directExcel' ? 'Candidate data is ready to save' : 'Candidate data is ready to analyze'}
+                    </h2>
                     <p className="mt-1 text-sm font-medium text-slate-500">
                       {parsedCandidates.length} candidate{parsedCandidates.length !== 1 ? 's' : ''} loaded from {uploadFileName || 'uploaded file'}.
                     </p>
@@ -2000,9 +2759,15 @@ export default function RecruitmentDashboardPage() {
                     <button onClick={() => setCandidatePhase('upload')} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
                       Upload Another
                     </button>
-                    <button onClick={handleAnalyzeUploadedCandidates} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-700">
-                      <Sparkles className="h-4 w-4" /> Analyze Candidates
-                    </button>
+                    {candidateImportMode === 'directExcel' ? (
+                      <button onClick={handleDirectExcelImport} disabled={directImportSaving} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60">
+                        <Check className="h-4 w-4" /> {directImportSaving ? 'Saving to Applied...' : 'Save to Applied'}
+                      </button>
+                    ) : (
+                      <button onClick={handleAnalyzeUploadedCandidates} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-700">
+                        <Sparkles className="h-4 w-4" /> Analyze Candidates
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -2022,7 +2787,9 @@ export default function RecruitmentDashboardPage() {
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/40">
                   <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Next Step</p>
                   <p className="mt-1 text-sm font-bold text-slate-700 dark:text-slate-200">
-                    Analyze first, then add best candidates to Applied pipeline.
+                    {candidateImportMode === 'directExcel'
+                      ? 'Save the reviewed rows to create candidates directly in Applied.'
+                      : 'Analyze first, then add best candidates to Applied pipeline.'}
                   </p>
                 </div>
               </div>
@@ -2182,9 +2949,11 @@ export default function RecruitmentDashboardPage() {
                             <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-black ${
                               cand.analysisSource === 'AI'
                                 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
-                                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                                : cand.analysisSource === 'LOGICAL'
+                                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300'
+                                  : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
                             }`}>
-                              {cand.analysisSource === 'AI' ? 'AI analyzed' : 'Fallback score'}
+                              {cand.analysisSource === 'AI' ? 'AI analyzed' : cand.analysisSource === 'LOGICAL' ? 'Skills analyzed' : 'Fallback score'}
                             </span>
                             {cand.analysisSummary && (!cand.strengths || cand.strengths.length === 0) && (!cand.concerns || cand.concerns.length === 0) ? (
                               <div className="text-[11px] text-slate-500 italic">
@@ -2250,6 +3019,97 @@ export default function RecruitmentDashboardPage() {
         </div>
       ) : null}
 
+      {showAllCandidatesModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
+          <div className="flex max-h-[90vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5 dark:border-slate-800">
+              <div>
+                <h2 className="flex items-center gap-2 text-xl font-bold text-slate-900 dark:text-white">
+                  <Users className="h-5 w-5 text-indigo-500" /> All Candidates
+                </h2>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Candidates grouped by every currently open position.</p>
+              </div>
+              <button type="button" onClick={() => setShowAllCandidatesModal(false)} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200" title="Close all candidates">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {allCandidatesError && (
+              <div className="mx-6 mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
+                {allCandidatesError}
+              </div>
+            )}
+
+            <div className="min-h-0 flex-1 overflow-auto">
+              <table className="min-w-[1050px] w-full text-left text-sm">
+                <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300">
+                  <tr>
+                    <th className="px-6 py-4">Candidate</th>
+                    <th className="px-6 py-4">Open Position</th>
+                    <th className="px-6 py-4">Contact</th>
+                    <th className="px-6 py-4">Experience / CTC</th>
+                    <th className="px-6 py-4">Current Stage</th>
+                    <th className="px-6 py-4">Applied On</th>
+                    <th className="px-6 py-4">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {allCandidatesLoading ? (
+                    Array.from({ length: 6 }).map((_, index) => (
+                      <tr key={`all-candidate-loading-${index}`} className="animate-pulse">
+                        {Array.from({ length: 7 }).map((__, cell) => <td key={cell} className="px-6 py-5"><div className="h-4 w-28 rounded bg-slate-200 dark:bg-slate-700" /></td>)}
+                      </tr>
+                    ))
+                  ) : allCandidatesRows.length === 0 ? (
+                    <tr><td colSpan="7" className="px-6 py-16 text-center text-slate-500">No candidates found for open positions.</td></tr>
+                  ) : allCandidatesRows.map((candidate) => {
+                    const stageCategory = String(candidate.stageCategory || '').toUpperCase()
+                    const lifecycleStatus = candidate.status === 'HIRED' || stageCategory === 'HIRED'
+                      ? 'Hired'
+                      : stageCategory === 'OFFER' || candidate.offerStatus === 'SENT' || candidate.offerStatus === 'VIEWED'
+                        ? 'Offered'
+                        : stageCategory === 'SELECTED' || candidate.selectionStatus?.startsWith('SELECTION_')
+                          ? 'Selected'
+                          : candidate.status === 'REJECTED' || candidate.status === 'Rejected'
+                            ? 'Rejected'
+                            : candidate.stage || 'Applied'
+                    const department = typeof candidate.jobDepartment === 'object' ? candidate.jobDepartment?.name : candidate.jobDepartment
+                    return (
+                      <tr key={candidate.applicationId} className="text-slate-700 transition hover:bg-indigo-50/40 dark:text-slate-300 dark:hover:bg-indigo-500/5">
+                        <td className="px-6 py-4">
+                          <div className="font-bold text-slate-900 dark:text-white">{candidate.candidateName || 'Unnamed candidate'}</div>
+                          <div className="mt-1 text-xs text-slate-500">{candidate.candidateCode || candidate.applicationCode || 'Application'}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="font-semibold text-slate-900 dark:text-white">{candidate.jobTitle || 'Position unavailable'}</div>
+                          <div className="mt-1 text-xs text-slate-500">{[candidate.jobCode, department, candidate.jobLocation].filter(Boolean).join(' · ') || 'Position details unavailable'}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div>{candidate.email || 'No email'}</div>
+                          <div className="mt-1 text-xs text-slate-500">{candidate.phone || 'No phone'}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div>{candidate.experience != null ? `${candidate.experience} years` : 'Not specified'}</div>
+                          <div className="mt-1 text-xs text-slate-500">CTC: {candidate.expectedCtc || 'Not specified'}</div>
+                        </td>
+                        <td className="px-6 py-4"><span className="rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300">{lifecycleStatus}</span></td>
+                        <td className="px-6 py-4 text-xs">{formatCandidateDate(candidate.appliedAt, 'Not available')}</td>
+                        <td className="px-6 py-4"><button type="button" onClick={() => openCandidatePosition(candidate)} className="rounded-lg bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-300">Open Pipeline</button></td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4 dark:border-slate-800">
+              <p className="text-xs font-medium text-slate-500">Showing {allCandidatesRows.length} candidate applications from open positions.</p>
+              {allCandidatesHasMore && <button type="button" onClick={() => loadAllCandidates({ append: true })} disabled={allCandidatesLoadingMore} className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60">{allCandidatesLoadingMore ? 'Loading...' : 'Load More'}</button>}
+            </div>
+          </div>
+        </div>
+      )}
+
       <PositionDetailsModal 
         position={selectedPosition} 
         onClose={() => setSelectedPosition(null)} 
@@ -2268,6 +3128,9 @@ export default function RecruitmentDashboardPage() {
             }
           }
           await sendOffer(candidate)
+          void fetchCandidates({ ...candidateFetchParams(), force: true }).catch((error) => {
+            console.warn('Candidate refresh after offer send failed:', error)
+          })
           setSelectedOfferCandidate(null)
         }}
       />
@@ -2295,35 +3158,76 @@ export default function RecruitmentDashboardPage() {
         />
       )}
 
+      {showCandidateSpreadsheetEditor && (
+        <CandidateSpreadsheetEditor
+          position={selectedPositionForCandidates}
+          onClose={() => setShowCandidateSpreadsheetEditor(false)}
+          onSave={async (rows) => {
+            await handleDirectExcelImport(rows)
+            setShowCandidateSpreadsheetEditor(false)
+          }}
+        />
+      )}
+
       {showOpenPositionModal && (
         <OpenPositionModal 
           initialData={editingPositionForModal}
           onSave={handleSavePosition}
+          onAutoSave={editingPositionForModal ? (form) => handleSavePosition(form, { close: false }) : undefined}
           onClose={() => {
             setShowOpenPositionModal(false)
             setEditingPositionForModal(null)
           }} 
         />
       )}
+
+      <ConfirmDialog
+        open={!!candidateToUndo}
+        title="Undo candidate stage?"
+        description={`Are you sure you want to return ${candidateToUndo?.name || 'this candidate'} to the previous pipeline stage? Any pending selection or active offer will be withdrawn.`}
+        requireReason={false}
+        confirmLabel="Undo Stage"
+        variant="primary"
+        loading={!!candidateToUndo && !!candidateActionLoading[`undo:${candidateToUndo.id}`]}
+        error={undoConfirmError || ''}
+        onClose={() => {
+          if (!candidateToUndo || !candidateActionLoading[`undo:${candidateToUndo.id}`]) {
+            setCandidateToUndo(null)
+            setUndoConfirmError(null)
+          }
+        }}
+        onConfirm={() => candidateToUndo && handleCandidateUndo(candidateToUndo)}
+      />
       
       <ConfirmDialog
         open={!!positionToDelete}
-        title="Delete Position"
-        description={`Are you sure you want to cancel the position "${positionToDelete?.title}"? This will cancel the job posting.`}
+        title="Cancel Position"
+        description={`Are you sure you want to cancel the position "${positionToDelete?.title}"? This is a permanent workflow state and will remove the position from active hiring.`}
         requireReason={false}
         confirmLabel="Cancel Position"
         variant="danger"
-        onClose={() => setPositionToDelete(null)}
-        onConfirm={async () => {
+        loading={positionActionLoading}
+        error={positionActionError || ''}
+        onClose={() => {
+          setPositionToDelete(null)
+          setPositionActionError(null)
+        }}
+        onConfirm={async (reason) => {
           if (positionToDelete) {
+            setPositionActionError(null)
+            setPositionActionLoading(true)
             try {
-              await jobApi.cancel(positionToDelete.id, 'Cancelled from UI', true)
-              fetchPositions()
+              await jobApi.cancel(positionToDelete.id, reason || 'Cancelled from recruitment positions list', true)
+              await fetchPositions({ force: true })
+              setPositionActionError(null)
+              setPositionToDelete(null)
             } catch (err) {
               console.error('Failed to cancel position', err)
+              setPositionActionError(err.response?.data?.message || err.message || 'Failed to cancel position.')
+            } finally {
+              setPositionActionLoading(false)
             }
           }
-          setPositionToDelete(null)
         }}
       />
 
@@ -2370,6 +3274,32 @@ export default function RecruitmentDashboardPage() {
                   </div>
                 </div>
 
+                {scheduleSuccess.emailWarning && scheduleSuccess.interviewId && (
+                  <button
+                    type="button"
+                    disabled={isResendingInvite}
+                    onClick={async () => {
+                      setIsResendingInvite(true)
+                      setSchedulingError(null)
+                      try {
+                        await interviewApi.resendInvite(scheduleSuccess.interviewId, {
+                          candidateEmail: schedulingCandidate?.email,
+                          candidateEmailSubject: `Interview Invite: ${scheduleSuccess.type} at NexaHR`,
+                          candidateEmailBody: emailDraft,
+                        })
+                        setScheduleSuccess((previous) => ({ ...previous, emailWarning: null, body: emailDraft }))
+                      } catch (error) {
+                        setSchedulingError(error.response?.data?.message || error.message || 'Interview invite could not be sent.')
+                      } finally {
+                        setIsResendingInvite(false)
+                      }
+                    }}
+                    className="mb-3 w-full rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-bold text-indigo-700 transition-colors hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300"
+                  >
+                    {isResendingInvite ? 'Sending invite...' : 'Retry Email Invite'}
+                  </button>
+                )}
+
                 <button 
                   onClick={() => {
                     setScheduleSuccess(null)
@@ -2377,6 +3307,7 @@ export default function RecruitmentDashboardPage() {
                     setSchedulingStep('details')
                     setSchedulingError(null)
                     setIsSchedulingInvite(false)
+                    setIsResendingInvite(false)
                   }}
                   className="w-full bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 dark:text-slate-900 text-white px-4 py-3 rounded-xl font-bold transition-colors"
                 >
@@ -2486,10 +3417,15 @@ export default function RecruitmentDashboardPage() {
                           candidateInstructions: emailDraft,
                           candidateEmailSubject: `Interview Invite: ${schedulingFormData.type} at NexaHR`,
                           candidateEmail: schedulingCandidate.email.trim(),
+                          interviewers: selectedInterviewerIds.map((employeeId, index) => ({ employeeId, role: index === 0 ? 'PRIMARY' : 'PANELIST' })),
+                        })
+                        void fetchCandidates({ ...candidateFetchParams(), force: true }).catch((error) => {
+                          console.warn('Candidate refresh after interview scheduling failed:', error)
                         })
                         setScheduleSuccess({
                           name: schedulingCandidate.name,
-                          email: schedulingCandidate.email || `${schedulingCandidate.name.toLowerCase().replace(' ', '.')}@example.com`,
+                          interviewId: scheduleResult?.interview?._id || scheduleResult?.interview?.id || null,
+                          email: schedulingCandidate.email || null,
                           date: schedulingFormData.date,
                           time: schedulingFormData.time,
                           type: schedulingFormData.type,
@@ -2545,6 +3481,13 @@ export default function RecruitmentDashboardPage() {
                   You are scheduling an interview for <strong className="text-slate-900 dark:text-white">{schedulingCandidate.name}</strong> for the role of <strong className="text-slate-900 dark:text-white">{schedulingCandidate.role}</strong>. An invite will be sent to their email.
                 </p>
 
+                {schedulingError && (
+                  <div className="mb-4 p-3.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-start gap-2 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300 animate-in fade-in">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-500" />
+                    <div className="flex-1 font-medium">{schedulingError}</div>
+                  </div>
+                )}
+
                 <form className="space-y-4" onSubmit={(e) => {
                   e.preventDefault();
                   const formData = new FormData(e.currentTarget);
@@ -2552,6 +3495,21 @@ export default function RecruitmentDashboardPage() {
                   const timeVal = formData.get('time');
                   const type = formData.get('type');
                   const link = formData.get('link');
+
+                  if (!dateVal || !timeVal || !type) {
+                    setSchedulingError('Select an interview type, date, and time before continuing.');
+                    return;
+                  }
+                  if (!selectedInterviewerIds.length) {
+                    setSchedulingError('Select at least one interviewer before continuing.');
+                    return;
+                  }
+
+                  const selectedDateTime = new Date(`${dateVal}T${timeVal}:00`);
+                  if (Number.isNaN(selectedDateTime.getTime()) || selectedDateTime <= new Date()) {
+                    setSchedulingError('Choose a future interview date and time.');
+                    return;
+                  }
                   
                   const [year, month, day] = dateVal.split('-');
                   const d = new Date(year, month - 1, day);
@@ -2617,6 +3575,37 @@ NexaHR Talent Acquisition Team`;
                   <div>
                     <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Meeting Link</label>
                     <input type="url" name="link" placeholder="https://meet.google.com/..." className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-800 dark:border-slate-700 dark:text-white" />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">Interviewers</label>
+                      <span className="text-xs text-slate-500">{selectedInterviewerIds.length} selected</span>
+                    </div>
+                    <div className="max-h-36 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-2 dark:border-slate-700 dark:bg-slate-800">
+                      {interviewersLoading ? (
+                        <div className="flex items-center gap-2 px-2 py-3 text-xs text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading active interviewers...</div>
+                      ) : interviewers.length === 0 ? (
+                        <p className="px-2 py-3 text-xs text-rose-600">No active employees are available for interviewing.</p>
+                      ) : (
+                        interviewers.map((employee) => {
+                          const id = String(employee._id || employee.id)
+                          const name = `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || employee.email || 'Employee'
+                          return (
+                            <label key={id} className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-white dark:hover:bg-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={selectedInterviewerIds.includes(id)}
+                                onChange={() => setSelectedInterviewerIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id])}
+                                className="h-4 w-4 accent-indigo-600"
+                              />
+                              <span className="min-w-0 text-sm text-slate-700 dark:text-slate-200"><span className="block font-semibold">{name}</span><span className="block truncate text-xs text-slate-500">{employee.role || employee.email || 'Active employee'}</span></span>
+                            </label>
+                          )
+                        })
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">Each selected interviewer will receive an approval notification.</p>
                   </div>
 
                   <div className="pt-4 flex gap-3">

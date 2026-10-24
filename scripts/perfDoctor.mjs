@@ -9,7 +9,13 @@ dotenv.config()
 
 const cwd = process.cwd()
 const expectedFastRoot = 'C:\\Projects\\NexaHR'
-const mongoUri = process.env.MONGODB_DIRECT_URI || process.env.MONGODB_URI
+function isValidMongoUri(value) {
+  if (typeof value !== 'string') return false
+  return /^mongodb(?:\+srv)?:\/\/[^\s]+$/i.test(value.trim())
+}
+
+const configuredMongoUris = [process.env.MONGODB_DIRECT_URI, process.env.MONGODB_URI].filter(Boolean)
+const mongoUris = [...new Set(configuredMongoUris.filter(isValidMongoUri))]
 
 function status(ok, message, details = '') {
   const label = ok ? 'OK' : 'WARN'
@@ -56,36 +62,42 @@ function checkNodeProcesses() {
 }
 
 async function checkMongo() {
-  if (!mongoUri) {
-    status(false, 'MongoDB URI configured', 'missing MONGODB_DIRECT_URI/MONGODB_URI')
+  if (!mongoUris.length) {
+    status(false, 'MongoDB URI configured', configuredMongoUris.length ? 'configured URI is malformed' : 'missing MONGODB_DIRECT_URI/MONGODB_URI')
     return
   }
 
   const start = Date.now()
-  try {
-    await mongoose.connect(mongoUri, {
-      serverSelectionTimeoutMS: Number(process.env.MONGODB_CONNECT_TIMEOUT_MS || 4000),
-      connectTimeoutMS: Number(process.env.MONGODB_CONNECT_TIMEOUT_MS || 4000),
-      socketTimeoutMS: Number(process.env.MONGODB_SOCKET_TIMEOUT_MS || 15000),
-    })
-    const elapsed = Date.now() - start
-    status(elapsed < 2000, 'MongoDB connection latency', `${elapsed}ms`)
+  let lastError = null
+  for (const mongoUri of mongoUris) {
+    try {
+      await mongoose.connect(mongoUri, {
+        serverSelectionTimeoutMS: Number(process.env.MONGODB_CONNECT_TIMEOUT_MS || 4000),
+        connectTimeoutMS: Number(process.env.MONGODB_CONNECT_TIMEOUT_MS || 4000),
+        socketTimeoutMS: Number(process.env.MONGODB_SOCKET_TIMEOUT_MS || 15000),
+      })
+      const elapsed = Date.now() - start
+      status(elapsed < 2000, 'MongoDB connection latency', `${elapsed}ms`)
 
-    const db = mongoose.connection.db
-    const [tenants, operators, plans, modules] = await Promise.all([
-      db.collection('tenants').countDocuments({}),
-      db.collection('superadminusers').countDocuments({}),
-      db.collection('plans').countDocuments({}),
-      db.collection('modules').countDocuments({}),
-    ])
-    status(operators > 0, 'Platform operator seeded', `${operators}`)
-    status(plans >= 4, 'Plans seeded', `${plans}`)
-    status(modules >= 8, 'Platform modules seeded', `${modules}`)
-    status(tenants > 0, 'Tenant databases available for HR/company/employee testing', `${tenants}`)
-    await mongoose.disconnect()
-  } catch (err) {
-    status(false, 'MongoDB reachable', err.message.split('\n')[0])
+      const db = mongoose.connection.db
+      const [tenants, operators, plans, modules] = await Promise.all([
+        db.collection('tenants').countDocuments({}),
+        db.collection('superadminusers').countDocuments({}),
+        db.collection('plans').countDocuments({}),
+        db.collection('modules').countDocuments({}),
+      ])
+      status(operators > 0, 'Platform operator seeded', `${operators}`)
+      status(plans >= 4, 'Plans seeded', `${plans}`)
+      status(modules >= 8, 'Platform modules seeded', `${modules}`)
+      status(tenants > 0, 'Tenant databases available for HR/company/employee testing', `${tenants}`)
+      await mongoose.disconnect()
+      return
+    } catch (err) {
+      lastError = err
+      if (mongoose.connection.readyState !== 0) await mongoose.disconnect().catch(() => {})
+    }
   }
+  status(false, 'MongoDB reachable', lastError?.message?.split('\n')[0] || 'connection failed')
 }
 
 console.log('NexaHR performance doctor')

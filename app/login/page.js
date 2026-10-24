@@ -30,6 +30,9 @@ function loginErrorMessage(err, fallback) {
   if (err.errorCode === 'DATABASE_UNAVAILABLE') {
     return 'MongoDB is unreachable. Add your current IP in MongoDB Atlas Network Access, or use Dev Mode for local testing.'
   }
+  if (err.message === 'Failed to fetch' || err.message === 'NetworkError') {
+    return 'NexaHR server is unreachable. Start the application server and try again.'
+  }
   if (err.message) return err.message
   if (!err.response) return 'Could not reach the server — check your connection and try again'
   return fallback

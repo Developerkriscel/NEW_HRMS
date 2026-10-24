@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Bell, Moon, Sun, Menu, Search, LogOut, Settings, User, ChevronDown, HelpCircle, CheckCheck, ExternalLink } from 'lucide-react'
+import { Bell, Moon, Sun, Menu, Search, LogOut, Settings, User, ChevronDown, ChevronRight, HelpCircle, CheckCheck, ExternalLink, Building2, Shield, CalendarDays, Briefcase, LayoutGrid } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
 import { Avatar } from '@/components/common/Avatar'
 import { ROLE_PANEL_LABELS } from '@/lib/roleDashboards'
 import { MODULE_ACCESS, filterByModuleAccess } from '@/lib/moduleAccess'
 import { notificationApi } from '@/services/notificationApi'
+import { interviewApi } from '@/services/interviewApi'
 
 const PROFILE_PATH_BY_ROLE = {
   SUPER_ADMIN: '/super-admin/settings',
@@ -121,6 +122,7 @@ export function Navbar({ onMobileMenuToggle }) {
   const [searchLoading, setSearchLoading] = useState(false)
   const [panelNotifications, setPanelNotifications] = useState([])
   const [notificationsLoading, setNotificationsLoading] = useState(false)
+  const [notificationActionLoading, setNotificationActionLoading] = useState(null)
   const searchRef = useRef(null)
   const searchBoxRef = useRef(null)
   const notificationsBoxRef = useRef(null)
@@ -186,6 +188,22 @@ export function Navbar({ onMobileMenuToggle }) {
       await notificationApi.markAllRead(syntheticIds)
     } catch {
       // non-fatal
+    }
+  }
+
+  const handleInterviewAssignmentResponse = async (notification, decision, event) => {
+    event?.stopPropagation()
+    const metadata = notification?.metadata
+    if (!metadata?.interviewId || notificationActionLoading) return
+    setNotificationActionLoading(`${notification.id}:${decision}`)
+    try {
+      await interviewApi.respondToAssignment(metadata.interviewId, { decision, notificationId: notification.id })
+      setPanelNotifications((previous) => previous.map((item) => item.id === notification.id ? { ...item, read: true, metadata: { ...item.metadata, decision } } : item))
+      await fetchNotifications()
+    } catch (error) {
+      console.error('Failed to respond to interview assignment:', error)
+    } finally {
+      setNotificationActionLoading(null)
     }
   }
   const profilePath = PROFILE_PATH_BY_ROLE[user?.role] || (user ? `/${user.role?.toLowerCase().replace('_', '-')}/dashboard` : '/login')
@@ -280,20 +298,37 @@ export function Navbar({ onMobileMenuToggle }) {
 
   return (
     <header className="sticky top-0 z-50 px-4 pt-3 pb-1 lg:px-6 bg-slate-50/90 dark:bg-slate-950/90 backdrop-blur-md pointer-events-none">
-      {/* Fixed Desktop Logo Removed to prevent overlap with greeting */}
 
       <div className="w-full pointer-events-auto">
         {/* Transparent toolbar with mobile brand/menu on the left and actions on the right. */}
-        <div className="flex min-h-10 items-center justify-between gap-3">
+        <div className="relative flex min-h-12 items-center justify-between gap-3">
 
-          {/* Left: Greeting (Desktop) & Mobile Brand */}
-          <div className="flex items-center gap-2">
+          {/* Left: mobile menu plus the current company brand. */}
+          <div className="flex items-center gap-2 lg:absolute lg:left-0 lg:top-1/2 lg:-translate-y-1/2">
             <button
               onClick={onMobileMenuToggle}
               className="lg:hidden p-2 rounded-xl bg-white/80 hover:bg-white dark:bg-slate-900/80 dark:hover:bg-slate-900 border border-slate-200/70 dark:border-slate-800 shadow-sm transition-colors"
             >
               <Menu className="w-5 h-5 text-slate-600 dark:text-slate-400" />
             </button>
+            {user && (
+              <button
+                type="button"
+                onClick={() => router.push(user.role === 'COMPANY_ADMIN' ? '/company/settings' : profilePath)}
+                className="flex max-w-[240px] items-center gap-2.5 rounded-xl border border-slate-200/80 bg-white/95 px-2.5 py-1.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900/95 dark:hover:border-emerald-700"
+                aria-label={`Open ${user.companyName || 'company profile'}`}
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-emerald-100 bg-white dark:border-emerald-900/40 dark:bg-slate-800">
+                  {user.companyLogoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={user.companyLogoUrl} alt="" className="h-full w-full object-contain p-1" />
+                  ) : (
+                    <Building2 className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
+                  )}
+                </span>
+                <span className="truncate text-xs font-black uppercase tracking-[0.12em] text-slate-700 dark:text-slate-200">{user.companyName || 'KRISCEL TECH'}</span>
+              </button>
+            )}
           </div>
 
           {/* Right: Search + Actions */}
@@ -427,6 +462,12 @@ export function Navbar({ onMobileMenuToggle }) {
                                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">
                                   {n.message}
                                 </p>
+                                {n.metadata?.kind === 'INTERVIEW_ASSIGNMENT' && n.metadata?.decision === 'PENDING' && (
+                                  <div className="mt-2 flex gap-2" onClick={(event) => event.stopPropagation()}>
+                                    <button type="button" disabled={!!notificationActionLoading} onClick={(event) => handleInterviewAssignmentResponse(n, 'ACCEPTED', event)} className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white disabled:opacity-50">{notificationActionLoading === `${n.id}:ACCEPTED` ? 'Approving...' : 'Approve'}</button>
+                                    <button type="button" disabled={!!notificationActionLoading} onClick={(event) => handleInterviewAssignmentResponse(n, 'REJECTED', event)} className="rounded-lg bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700 disabled:opacity-50 dark:bg-rose-950/40 dark:text-rose-300">{notificationActionLoading === `${n.id}:REJECTED` ? 'Rejecting...' : 'Reject'}</button>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -457,35 +498,73 @@ export function Navbar({ onMobileMenuToggle }) {
                 className="flex items-center ml-2 transition-all hover:-translate-y-0.5"
               >
                 <div className="relative shadow-md rounded-full">
-                  <Avatar name={user?.name || 'U'} size="sm" />
+                  <Avatar name={user?.name || 'U'} src={user?.profilePhotoUrl} size="sm" />
                 </div>
               </button>
 
               {showProfile && (
-                <div className="absolute right-0 mt-3 w-56 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 overflow-hidden z-50 animate-fade-in">
-                  <div className="p-3 border-b border-slate-100 dark:border-slate-800">
-                    <p className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{user?.name}</p>
-                    <p className="text-xs text-slate-400 truncate">{user?.email}</p>
+                <div className="absolute right-0 mt-3 w-[290px] overflow-hidden rounded-[22px] border border-slate-200/80 bg-white/95 p-3 shadow-2xl shadow-slate-900/10 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/95 z-50 animate-fade-in">
+                  <div className="rounded-2xl border border-slate-200/70 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/70">
+                    <div className="flex items-center gap-3">
+                      <Avatar name={user?.name || 'U'} src={user?.profilePhotoUrl} size="sm" />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-extrabold text-slate-800 dark:text-slate-100">{user?.name}</p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">{user?.role?.replaceAll('_', ' ')}</span>
+                          {user?.employeeCode && <span className="text-[10px] font-semibold text-slate-400">{user.employeeCode}</span>}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="p-1.5">
+                  <div className="flex items-center justify-between px-1.5 pb-1 pt-4">
+                    <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">Settings Menu</span>
+                    <button
+                      type="button"
+                      onClick={() => { setShowProfile(false); router.push(profilePath) }}
+                      className="inline-flex items-center gap-1 rounded-full border border-indigo-200 px-2 py-1 text-[10px] font-bold text-indigo-600 transition-colors hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
+                    >
+                      <LayoutGrid className="h-3 w-3" />
+                      View All
+                    </button>
+                  </div>
+                  <div className="space-y-1 px-1.5 pb-2">
                     <button
                       onClick={() => { setShowProfile(false); router.push(profilePath) }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                      className="group flex w-full items-center gap-3 rounded-2xl border border-indigo-200 bg-indigo-50/70 px-3 py-2.5 text-left transition-colors hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/30 dark:hover:bg-indigo-950/60"
                     >
-                      <User className="w-4 h-4" />
-                      My Profile
+                      <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm"><User className="h-4 w-4" /></span>
+                      <span className="min-w-0 flex-1"><span className="block text-xs font-bold text-slate-800 dark:text-slate-100">Profile Settings</span><span className="block truncate text-[10px] text-slate-500 dark:text-slate-400">Personal info, photo & contact</span></span>
+                      <ChevronRight className="h-4 w-4 text-indigo-500" />
                     </button>
                     <button
                       onClick={() => { setShowProfile(false); router.push(profilePath) }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                      className="group flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800"
                     >
-                      <Settings className="w-4 h-4" />
-                      Settings
+                      <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-300"><Shield className="h-4 w-4" /></span>
+                      <span className="min-w-0 flex-1"><span className="block text-xs font-bold text-slate-800 dark:text-slate-100">Security</span><span className="block truncate text-[10px] text-slate-500 dark:text-slate-400">Password & account protection</span></span>
+                      <ChevronRight className="h-4 w-4 text-slate-300" />
                     </button>
-                    <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+                    <button
+                      onClick={() => { setShowProfile(false); router.push(user?.role === 'COMPANY_ADMIN' ? '/company/settings' : profilePath) }}
+                      className="group flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800"
+                    >
+                      <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300"><Briefcase className="h-4 w-4" /></span>
+                      <span className="min-w-0 flex-1"><span className="block text-xs font-bold text-slate-800 dark:text-slate-100">Project Settings</span><span className="block truncate text-[10px] text-slate-500 dark:text-slate-400">Workspace preferences</span></span>
+                      <ChevronRight className="h-4 w-4 text-slate-300" />
+                    </button>
+                    <button
+                      onClick={() => { setShowProfile(false); router.push(user?.role === 'COMPANY_ADMIN' ? '/company/settings' : profilePath) }}
+                      className="group flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800"
+                    >
+                      <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300"><CalendarDays className="h-4 w-4" /></span>
+                      <span className="min-w-0 flex-1"><span className="block text-xs font-bold text-slate-800 dark:text-slate-100">Holiday Settings</span><span className="block truncate text-[10px] text-slate-500 dark:text-slate-400">Company holidays & calendar</span></span>
+                      <ChevronRight className="h-4 w-4 text-slate-300" />
+                    </button>
+                  </div>
+                  <div className="border-t border-slate-200/70 px-1.5 pt-2 dark:border-slate-700">
                     <button
                       onClick={() => logout()}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50/40 px-3 py-2.5 text-xs font-bold text-rose-600 transition-colors hover:bg-rose-50 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-300 dark:hover:bg-rose-950/40"
                     >
                       <LogOut className="w-4 h-4" />
                       Sign Out

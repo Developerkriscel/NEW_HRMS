@@ -63,7 +63,9 @@ function buildLoginUserInfo(authUser, found) {
     role: authUser.role,
     tenantId: String(authUser.tenantId),
     companyName: authUser.companyName || null,
+    companyLogoUrl: authUser.companyLogoUrl || '',
     companySlug: authUser.companySlug || null,
+    profilePhotoUrl: authUser.profilePhotoUrl || '',
     permissions: (authUser.permissions || []).map((p) => (typeof p === 'string' ? p : p.name)),
     moduleAccess: authUser.moduleAccess || [],
   }

@@ -12,6 +12,7 @@ import { getActorName } from '@/lib/candidateHelpers'
 import { PIPELINE_STAGE_CATEGORY } from '@/lib/jobConstants'
 import { STAGE_HISTORY_ACTION } from '@/lib/pipelineConstants'
 import { applyStageMove, recordStageHistory } from '@/lib/pipelineHelpers'
+import { withOptionalMongoTransaction } from '@/lib/mongoTransaction'
 import { saveOfferAttachment, validateOfferAttachment } from '@/lib/offerStorage'
 import { ensureOfferPdf, sendOfferEmail } from '@/lib/offerEmailDelivery'
 import { assertTenantMailReady } from '@/lib/tenantMail'
@@ -70,13 +71,21 @@ export const POST = withApi(async (req, { params }) => {
   const candidate = application.candidateId
   const job = application.jobId
   if (!candidate?.email && !body.candidateEmail) return fail('Candidate email is missing. Add candidate email before sending an offer.', 400, 'VALIDATION_ERROR')
-  await assertTenantMailReady(tenantId)
+  if (!['SELECTED', 'SELECTION_APPROVED'].includes(application.selectionStatus)) {
+    return fail('Selection approval is required before sending an offer.', 400, 'SELECTION_APPROVAL_REQUIRED')
+  }
+  try {
+    await assertTenantMailReady(tenantId)
+  } catch (error) {
+    throw new ApiError(503, `Offer email is not configured: ${error.message}`, 'MAIL_NOT_CONFIGURED')
+  }
   const joiningDate = body.joiningDate ? new Date(body.joiningDate) : addDays(30)
   const offerValidUntil = body.offerValidUntil ? new Date(body.offerValidUntil) : addDays(7)
   const ctc = Number(body.ctc || candidate?.expectedCtc || candidate?.currentCtc || job?.publicMinCtc || job?.internalMinCtc || 1)
   const actorName = await getActorName(session)
 
   let offer = await Offer.findOne({ tenantId, applicationId: application._id, deleted: false })
+  const createdOffer = !offer
   if (!offer) {
     offer = await Offer.create({
       tenantId,
@@ -129,7 +138,14 @@ export const POST = withApi(async (req, { params }) => {
   await revokeOfferTokens(tenantId, offer._id)
   const token = await issueOfferToken(tenantId, offer._id, offerValidUntil)
   const portalUrl = `/candidate/offer/${token}`
-  await ensureOfferPdf({ tenantId, offer, version })
+  try {
+    await ensureOfferPdf({ tenantId, offer, version })
+  } catch (error) {
+    await revokeOfferTokens(tenantId, offer._id).catch(() => {})
+    await OfferVersion.updateOne({ _id: version._id, tenantId }, { $set: { deleted: true } }).catch(() => {})
+    if (createdOffer) await Offer.updateOne({ _id: offer._id, tenantId }, { $set: { deleted: true } }).catch(() => {})
+    throw new ApiError(500, `Offer document could not be prepared: ${error.message || 'PDF generation failed'}`, 'OFFER_DOCUMENT_FAILED')
+  }
 
   try {
     await sendOfferEmail({
@@ -145,44 +161,60 @@ export const POST = withApi(async (req, { params }) => {
     })
   } catch (err) {
     await revokeOfferTokens(tenantId, offer._id)
-    throw err
+    await OfferVersion.updateOne({ _id: version._id, tenantId }, { $set: { deleted: true } }).catch(() => {})
+    if (createdOffer) {
+      await Offer.updateOne({ _id: offer._id, tenantId }, { $set: { deleted: true } }).catch(() => {})
+    }
+    throw new ApiError(503, `Offer email could not be sent: ${err.message || 'mail service failed'}`, 'MAIL_DELIVERY_FAILED')
   }
-
-  offer.currentVersionId = version._id
-  offer.status = OFFER_STATUS.SENT
-  offer.sentAt = new Date()
-  offer.expiresAt = offerValidUntil
-  offer.activityLog.push({ type: ACTIVITY_ENTRY_TYPE.STATUS_CHANGED, message: `Quick offer sent by ${actorName}`, actorName })
-  await offer.save()
 
   const stages = await JobPipelineStage.find({ tenantId, jobId: job._id, isActive: true }).sort({ order: 1 })
   const offerStage = pickOfferStage(stages)
   let movedStage = null
   let fromStageId = null
   let fromStageName = null
-  if (offerStage && String(application.currentStage) !== String(offerStage._id)) {
-    const move = applyStageMove(application, offerStage, { comment: 'Offer sent from recruitment board', actorName })
-    fromStageId = move.fromStageId
-    fromStageName = move.fromStageName
-    movedStage = offerStage
-  }
+  try {
+    await withOptionalMongoTransaction(async (dbSession) => {
+      offer.currentVersionId = version._id
+      offer.status = OFFER_STATUS.SENT
+      offer.sentAt = new Date()
+      offer.expiresAt = offerValidUntil
+      offer.activityLog.push({ type: ACTIVITY_ENTRY_TYPE.STATUS_CHANGED, message: `Quick offer sent by ${actorName}`, actorName })
+      await offer.save({ session: dbSession })
 
-  application.readyForOffer = true
-  application.activityLog.push({ type: ACTIVITY_ENTRY_TYPE.STATUS_CHANGED, message: `Offer sent by ${actorName}`, actorName })
-  await application.save()
+      if (offerStage && String(application.currentStage) !== String(offerStage._id)) {
+        const move = applyStageMove(application, offerStage, { comment: 'Offer sent from recruitment board', actorName })
+        fromStageId = move.fromStageId
+        fromStageName = move.fromStageName
+        movedStage = offerStage
+      }
 
-  if (movedStage) {
-    await recordStageHistory({
-      tenantId,
-      application,
-      fromStageId,
-      toStageId: movedStage._id,
-      fromStageName,
-      toStageName: movedStage.name,
-      action: STAGE_HISTORY_ACTION.MOVED,
-      comment: 'Offer sent from recruitment board',
-      session,
+      application.readyForOffer = true
+      application.activityLog.push({ type: ACTIVITY_ENTRY_TYPE.STATUS_CHANGED, message: `Offer sent by ${actorName}`, actorName })
+      await application.save({ session: dbSession })
+
+      if (movedStage) {
+        await recordStageHistory({
+          tenantId,
+          application,
+          fromStageId,
+          toStageId: movedStage._id,
+          fromStageName,
+          toStageName: movedStage.name,
+          action: STAGE_HISTORY_ACTION.MOVED,
+          comment: 'Offer sent from recruitment board',
+          session,
+          dbSession,
+        })
+      }
     })
+  } catch (error) {
+    await revokeOfferTokens(tenantId, offer._id).catch(() => {})
+    await OfferVersion.updateOne({ _id: version._id, tenantId }, { $set: { deleted: true } }).catch(() => {})
+    if (createdOffer) {
+      await Offer.updateOne({ _id: offer._id, tenantId }, { $set: { deleted: true } }).catch(() => {})
+    }
+    throw error
   }
 
   await logAction(session, {

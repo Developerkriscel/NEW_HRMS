@@ -13,10 +13,12 @@ import Application from '@/models/Application'
 import ApplicationStageHistory from '@/models/ApplicationStageHistory'
 import CandidateJobMatch from '@/models/CandidateJobMatch'
 import CandidateTagAssignment from '@/models/CandidateTagAssignment'
+import JobPipelineStage from '@/models/JobPipelineStage'
 import Offer from '@/models/Offer'
+import SelectionDecision from '@/models/SelectionDecision'
 import Interview from '@/models/Interview'
 import '@/models/CandidateTag'
-import '@/models/Job'
+import Job from '@/models/Job'
 
 // Application-centric on purpose — the HR Candidates table is really "one
 // row per application" (a candidate with two applications shows up twice,
@@ -29,8 +31,8 @@ export const GET = withApi(async (req) => {
   const tenantId = requireTenantId(session)
 
   const { searchParams } = new URL(req.url)
-  const page = Number(searchParams.get('page') || 0)
-  const size = Number(searchParams.get('size') || 20)
+  const page = Math.max(0, Number(searchParams.get('page') || 0))
+  const size = Math.min(100, Math.max(1, Number(searchParams.get('size') || 20)))
   const job = searchParams.get('job')
   const source = searchParams.get('source')
   const status = searchParams.get('status')
@@ -42,9 +44,22 @@ export const GET = withApi(async (req) => {
   const expectedCtcMax = searchParams.get('expectedCtcMax')
   const aiMatchMin = searchParams.get('aiMatchMin')
   const tag = searchParams.get('tag')
+  const openPositionsOnly = searchParams.get('openPositionsOnly') === 'true'
 
   const query = { tenantId, deleted: false }
   if (job) query.jobId = job
+  if (openPositionsOnly) {
+    // The HR positions page treats draft, paused, and legacy ON_HOLD jobs as
+    // visible open-position records until they are explicitly closed or
+    // cancelled. Keep this filter consistent with that page so candidates do
+    // not disappear from the all-candidates table.
+    const openJobs = await Job.find({
+      tenantId,
+      deleted: false,
+      status: { $in: ['DRAFT', 'OPEN', 'ACTIVE', 'PAUSED', 'ON_HOLD'] },
+    }).select('_id').lean()
+    query.jobId = { $in: openJobs.map((item) => item._id) }
+  }
   if (source) query.source = source
   if (status) query.status = status
   if (stage) query.currentStageName = stage
@@ -76,55 +91,84 @@ export const GET = withApi(async (req) => {
     query.candidateId = { $in: intersected }
   }
 
-  const usesInMemoryFilters = !!(experienceMin || expectedCtcMax || noticePeriodMax || aiMatchMin)
-  let totalElements = 0
-  let pageApplications = []
-  let matchByApplication = new Map()
+  // Push candidate and match filters into MongoDB before pagination. The old
+  // implementation loaded every application, populated every candidate, and
+  // only then filtered in JavaScript, which made large tenants progressively
+  // slower and made pagination ineffective.
+  const candidateFilter = { tenantId, deleted: false, $and: [] }
+  if (experienceMin && Number.isFinite(Number(experienceMin))) {
+    candidateFilter.$and.push({ totalExperience: { $gte: Number(experienceMin) } })
+  }
+  if (expectedCtcMax && Number.isFinite(Number(expectedCtcMax))) {
+    candidateFilter.$and.push({
+      $or: [
+        { expectedCtc: { $lte: Number(expectedCtcMax) } },
+        { expectedCtc: null },
+        { expectedCtc: { $exists: false } },
+      ],
+    })
+  }
+  if (noticePeriodMax && Number.isFinite(Number(noticePeriodMax))) {
+    const maxNotice = Number(noticePeriodMax)
+    const noticeDays = { $convert: { input: '$noticePeriod', to: 'double', onError: null, onNull: null } }
+    candidateFilter.$and.push({
+      $expr: {
+        $or: [
+          { $eq: [noticeDays, null] },
+          { $lte: [noticeDays, maxNotice] },
+        ],
+      },
+    })
+  }
+  if (!candidateFilter.$and.length) delete candidateFilter.$and
 
-  if (usesInMemoryFilters) {
-    let applications = await Application.find(query)
-      .select('applicationCode candidateId jobId source appliedAt stageEnteredAt currentStageName status selectionStatus readyForOffer assignedRecruiterId')
-      .populate('candidateId', 'candidateCode firstName lastName email phone totalExperience expectedCtc noticePeriod')
-      .populate('jobId', 'jobCode jobTitle publicTitle department')
-      .sort({ appliedAt: -1 })
-      .lean()
-
-    applications = applications.filter((a) => a.candidateId && a.jobId)
-    if (experienceMin) applications = applications.filter((a) => (a.candidateId.totalExperience ?? -1) >= Number(experienceMin))
-    if (expectedCtcMax) applications = applications.filter((a) => (a.candidateId.expectedCtc ?? Infinity) <= Number(expectedCtcMax))
-    if (noticePeriodMax) {
-      applications = applications.filter((a) => {
-        const days = parseInt(a.candidateId.noticePeriod, 10)
-        return !Number.isFinite(days) || days <= Number(noticePeriodMax)
-      })
+  if (candidateFilter.$and) {
+    const filteredCandidateIds = await Candidate.find(candidateFilter).select('_id').lean()
+    const filteredIds = filteredCandidateIds.map((candidate) => String(candidate._id))
+    const existingIds = query.candidateId?.$in?.map((candidateId) => String(candidateId))
+    query.candidateId = {
+      $in: existingIds
+        ? existingIds.filter((candidateId) => filteredIds.includes(candidateId))
+        : filteredCandidateIds.map((candidate) => candidate._id),
     }
-
-    const matches = await CandidateJobMatch.find({ tenantId, applicationId: { $in: applications.map((a) => a._id) } }).lean()
-    matchByApplication = new Map(matches.map((m) => [String(m.applicationId), m]))
-    if (aiMatchMin) applications = applications.filter((a) => (matchByApplication.get(String(a._id))?.overallScore ?? -1) >= Number(aiMatchMin))
-
-    totalElements = applications.length
-    pageApplications = applications.slice(page * size, page * size + size)
-  } else {
-    const [count, applications] = await Promise.all([
-      Application.countDocuments(query),
-      Application.find(query)
-        .select('applicationCode candidateId jobId source appliedAt stageEnteredAt currentStageName status selectionStatus readyForOffer assignedRecruiterId')
-        .populate('candidateId', 'candidateCode firstName lastName email phone totalExperience expectedCtc noticePeriod')
-        .populate('jobId', 'jobCode jobTitle publicTitle department')
-        .sort({ appliedAt: -1 })
-        .skip(page * size)
-        .limit(size)
-        .lean(),
-    ])
-    totalElements = count
-    pageApplications = applications.filter((a) => a.candidateId && a.jobId)
-    const matches = await CandidateJobMatch.find({ tenantId, applicationId: { $in: pageApplications.map((a) => a._id) } }).lean()
-    matchByApplication = new Map(matches.map((m) => [String(m.applicationId), m]))
+  }
+  if (aiMatchMin && Number.isFinite(Number(aiMatchMin))) {
+    const matchingApplicationIds = await CandidateJobMatch.find({
+      tenantId,
+      $or: [
+        { overallScore: { $gte: Number(aiMatchMin) } },
+        { aiMatchScore: { $gte: Number(aiMatchMin) } },
+      ],
+    }).distinct('applicationId')
+    query._id = { $in: matchingApplicationIds }
   }
 
+  const [totalElements, applications] = await Promise.all([
+    Application.countDocuments(query),
+    Application.find(query)
+      .select('applicationCode candidateId jobId source appliedAt stageEnteredAt currentStage currentStageName status selectionStatus readyForOffer assignedRecruiterId')
+      .populate('candidateId', 'candidateCode firstName lastName email phone totalExperience expectedCtc noticePeriod')
+      .populate('jobId', 'jobCode jobTitle publicTitle department location workMode')
+      .sort({ appliedAt: -1, _id: -1 })
+      .skip(page * size)
+      .limit(size)
+      .lean(),
+  ])
+  const pageApplications = applications.filter((a) => a.candidateId && a.jobId)
+  // Avoid five extra collection reads when a position has no applications.
+  // This is the common first-load path for a new opening.
+  if (!pageApplications.length) return ok(paged([], page, size, totalElements))
+
+  const matches = await CandidateJobMatch.find({ tenantId, applicationId: { $in: pageApplications.map((a) => a._id) } })
+    .select('applicationId overallScore aiMatchScore aiMatchReasoning summary matchLabel')
+    .lean()
+  const matchByApplication = new Map(matches.map((m) => [String(m.applicationId), m]))
+  const stageIds = pageApplications.map((application) => application.currentStage).filter(Boolean)
+  const stages = await JobPipelineStage.find({ tenantId, _id: { $in: stageIds } }).select('_id category').lean()
+  const stageCategoryById = new Map(stages.map((stage) => [String(stage._id), stage.category]))
+
   const pageApplicationIds = pageApplications.map((a) => a._id)
-  const [offers, interviews, shortlistHistory] = await Promise.all([
+  const [offers, interviews, stageHistory, selectionDecisions] = await Promise.all([
     Offer.find({
       tenantId,
       applicationId: { $in: pageApplicationIds },
@@ -142,8 +186,12 @@ export const GET = withApi(async (req) => {
     ApplicationStageHistory.find({
       tenantId,
       applicationId: { $in: pageApplicationIds },
-      action: STAGE_HISTORY_ACTION.SHORTLISTED,
-    }).sort({ createdAt: 1 }).select('applicationId createdAt').lean(),
+    }).sort({ createdAt: 1 }).select('applicationId action toStageName createdAt').lean(),
+    SelectionDecision.find({
+      tenantId,
+      applicationId: { $in: pageApplicationIds },
+      decision: 'SELECT',
+    }).sort({ decidedAt: 1 }).select('applicationId decidedAt approvalStatus').lean(),
   ])
   const offerByApplication = new Map(offers.map((offer) => [String(offer.applicationId), offer]))
   const latestInterviewByApplication = new Map()
@@ -152,9 +200,25 @@ export const GET = withApi(async (req) => {
     if (!latestInterviewByApplication.has(key)) latestInterviewByApplication.set(key, interview)
   }
   const shortlistedAtByApplication = new Map()
-  for (const history of shortlistHistory) {
+  const interviewStageAtByApplication = new Map()
+  for (const history of stageHistory) {
     const key = String(history.applicationId)
-    if (!shortlistedAtByApplication.has(key)) shortlistedAtByApplication.set(key, history.createdAt)
+    const stageName = String(history.toStageName || '').toLowerCase()
+    if (!shortlistedAtByApplication.has(key) && (
+      history.action === STAGE_HISTORY_ACTION.SHORTLISTED || /shortlist/i.test(stageName)
+    )) {
+      shortlistedAtByApplication.set(key, history.createdAt)
+    }
+    if (!interviewStageAtByApplication.has(key) && /interview|round/i.test(stageName)) {
+      interviewStageAtByApplication.set(key, history.createdAt)
+    }
+  }
+  const selectedAtByApplication = new Map()
+  for (const decision of selectionDecisions) {
+    const key = String(decision.applicationId)
+    if (!selectedAtByApplication.has(key) && ['SELECTED', 'APPROVED', 'NOT_REQUIRED'].includes(decision.approvalStatus || 'NOT_REQUIRED')) {
+      selectedAtByApplication.set(key, decision.decidedAt)
+    }
   }
 
   const rows = pageApplications
@@ -163,6 +227,17 @@ export const GET = withApi(async (req) => {
       const offer = offerByApplication.get(String(a._id))
       const interview = latestInterviewByApplication.get(String(a._id))
       const shortlistedAt = shortlistedAtByApplication.get(String(a._id))
+      const storedStageCategory = stageCategoryById.get(String(a.currentStage)) || null
+      const lifecycleStageCategory = offer?.status === 'ACCEPTED' || a.status === 'HIRED'
+        ? 'HIRED'
+        : ['SENT', 'VIEWED'].includes(offer?.status)
+          ? 'OFFER'
+          : storedStageCategory
+      const lifecycleStageName = lifecycleStageCategory === 'HIRED'
+        ? 'Hired'
+        : lifecycleStageCategory === 'OFFER'
+          ? 'Offered'
+          : a.currentStageName
       return {
         applicationId: a._id,
         applicationCode: a.applicationCode,
@@ -172,15 +247,22 @@ export const GET = withApi(async (req) => {
         email: a.candidateId.email,
         phone: a.candidateId.phone,
         jobId: a.jobId._id,
+        jobCode: a.jobId.jobCode,
         jobTitle: a.jobId.publicTitle || a.jobId.jobTitle,
+        jobDepartment: a.jobId.department,
+        jobLocation: a.jobId.location,
+        jobWorkMode: a.jobId.workMode,
         experience: a.candidateId.totalExperience,
         expectedCtc: a.candidateId.expectedCtc,
         noticePeriod: a.candidateId.noticePeriod,
         source: a.source,
         appliedAt: a.appliedAt,
         stageEnteredAt: a.stageEnteredAt,
-        shortlistedAt: shortlistedAt || null,
-        stage: a.currentStageName,
+        shortlistedAt: shortlistedAt || (String(a.currentStageName || '').toLowerCase().includes('shortlist') ? a.stageEnteredAt : null),
+        interviewStageAt: interviewStageAtByApplication.get(String(a._id)) || null,
+        stage: lifecycleStageName,
+        stageId: a.currentStage || null,
+        stageCategory: lifecycleStageCategory,
         status: a.status,
         selectionStatus: a.selectionStatus,
         readyForOffer: a.readyForOffer,
@@ -190,6 +272,9 @@ export const GET = withApi(async (req) => {
         offerAcceptedAt: offer?.acceptedAt || null,
         offerDeclinedAt: offer?.declinedAt || null,
         offerExpiresAt: offer?.expiresAt || null,
+        selectedAt: ['SELECTED', 'SELECTION_APPROVED'].includes(a.selectionStatus)
+          ? selectedAtByApplication.get(String(a._id)) || a.stageEnteredAt || null
+          : null,
         latestInterview: interview ? {
           interviewId: interview._id,
           roundName: interview.roundName,

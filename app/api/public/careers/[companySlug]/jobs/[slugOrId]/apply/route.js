@@ -103,8 +103,11 @@ export const POST = withApi(async (req, { params }) => {
     const { searchParams } = new URL(req.url)
     const source = normalizeSource(searchParams.get('source'))
     let referrerEmployeeId = null
-    if (source === APPLICATION_SOURCE.REFERRAL && searchParams.get('ref')) {
-      const referrer = await Employee.findOne({ tenantId: tenant._id, employeeCode: searchParams.get('ref'), deleted: false }).select('_id')
+    if (source === APPLICATION_SOURCE.REFERRAL) {
+      const refCode = String(searchParams.get('ref') || '').trim()
+      if (!refCode) return fail('Referral link is missing an employee reference code', 400, 'INVALID_REFERRAL')
+      const referrer = await Employee.findOne({ tenantId: tenant._id, employeeCode: refCode, deleted: false }).select('_id')
+      if (!referrer) return fail('Referral link is invalid or no longer active', 400, 'INVALID_REFERRAL')
       referrerEmployeeId = referrer?._id || null
     }
 

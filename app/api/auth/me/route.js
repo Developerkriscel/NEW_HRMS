@@ -50,7 +50,9 @@ export async function GET() {
         role: devSession.role,
         tenantId: devSession.tenantId || null,
         companyName: devSession.companyName || null,
+        companyLogoUrl: devSession.companyLogoUrl || '',
         companySlug: devSession.companySlug || null,
+        profilePhotoUrl: devSession.profilePhotoUrl || '',
         permissions: devSession.permissions || [],
         moduleAccess: devSession.moduleAccess || [],
         platformPermissions: devSession.platformPermissions || [],
@@ -67,6 +69,20 @@ export async function GET() {
     if (!session) return fail('Authentication required', 401, 'UNAUTHENTICATED')
 
     if (session.name) {
+      let companyLogoUrl = session.companyLogoUrl || ''
+      let profilePhotoUrl = session.profilePhotoUrl || ''
+      if ((!companyLogoUrl || !profilePhotoUrl) && !session.devLogin) {
+        try {
+          const found = await findUserByEmail(session.sub, { tenantId: session.tenantId })
+          if (found) {
+            const userInfo = await buildUserInfo(found)
+            companyLogoUrl = userInfo.companyLogoUrl || companyLogoUrl
+            profilePhotoUrl = userInfo.profilePhotoUrl || profilePhotoUrl
+          }
+        } catch {
+          // non-fatal fallback to session claims
+        }
+      }
       return ok({
         id: session.userId,
         name: session.name,
@@ -74,7 +90,9 @@ export async function GET() {
         role: session.role,
         tenantId: session.tenantId || null,
         companyName: session.companyName || null,
+        companyLogoUrl,
         companySlug: session.companySlug || null,
+        profilePhotoUrl,
         permissions: session.permissions || [],
         moduleAccess: session.moduleAccess || [],
         platformPermissions: session.platformPermissions || [],

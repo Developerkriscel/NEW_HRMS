@@ -1,3 +1,4 @@
+import crypto from 'node:crypto'
 import mongoose from 'mongoose'
 import PlatformOperator from '@/models/PlatformOperator'
 export const dynamic = 'force-dynamic'
@@ -15,7 +16,7 @@ const runningProvisioningJobs = global._nexahrRunningProvisioningJobs || new Set
 global._nexahrRunningProvisioningJobs = runningProvisioningJobs
 
 function generateTempPassword() {
-  return `Nexahr@${1000 + Math.floor(Math.random() * 9000)}`
+  return `NexaHR!${crypto.randomBytes(12).toString('base64url')}`
 }
 
 function serializeJob(job) {
@@ -54,12 +55,9 @@ export const POST = withApi(async (req) => {
   requirePlatformPermission(session, 'tenant.create')
 
   const body = await req.json()
-  const { idempotencyKey, payload, adminPassword } = body
+  const { idempotencyKey, payload } = body
   if (!idempotencyKey) return fail('idempotencyKey is required', 400)
   if (!payload) return fail('payload is required', 400)
-  if (adminPassword && !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(adminPassword)) {
-    return fail('Admin password must be at least 8 characters and include uppercase, lowercase and a number', 400, 'VALIDATION_ERROR')
-  }
 
   const missing = REQUIRED_FIELDS.filter((field) => !payload[field])
   if (missing.length) return fail(`Missing required fields: ${missing.join(', ')}`, 400, 'VALIDATION_ERROR')
@@ -75,7 +73,7 @@ export const POST = withApi(async (req) => {
   const job = await findOrCreateProvisioningJob({ idempotencyKey, payload, requestedBy: operatorId })
 
   if (!job.adminTempPassword && !job.tenant) {
-    job.adminTempPassword = adminPassword || generateTempPassword()
+    job.adminTempPassword = generateTempPassword()
     await job.save()
   }
 

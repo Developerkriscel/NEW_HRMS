@@ -13,7 +13,6 @@ import { recordStageHistory } from '@/lib/pipelineHelpers'
 import Application from '@/models/Application'
 import Candidate from '@/models/Candidate'
 import SelectionDecision from '@/models/SelectionDecision'
-import Interview from '@/models/Interview'
 
 // POST { reason, comment?, addToTalentPool? } — reject is available from
 // almost any stage (item 9). Rejection reason is mandatory; "Other"
@@ -35,20 +34,6 @@ export const POST = withApi(async (req, { params }) => {
   if ([APPLICATION_STATUS.REJECTED, APPLICATION_STATUS.WITHDRAWN, APPLICATION_STATUS.HIRED].includes(application.status)) {
     return fail(`Application is already ${application.status.toLowerCase()}`, 400, 'INVALID_STATE')
   }
-  const isInterviewStage = /interview|technical|round/i.test(String(application.currentStageName || ''))
-  if (isInterviewStage) {
-    const scheduledInterview = await Interview.findOne({
-      tenantId,
-      applicationId: application._id,
-      deleted: false,
-      status: { $nin: ['CANCELLED', 'NO_SHOW'] },
-      date: { $ne: null },
-    }).select('_id').lean()
-    if (!scheduledInterview) {
-      return fail('Schedule an interview before rejecting from the interview stage.', 400, 'INTERVIEW_REQUIRED')
-    }
-  }
-
   const actorName = await getActorName(session)
   application.status = APPLICATION_STATUS.REJECTED
   application.rejectionReason = body.reason

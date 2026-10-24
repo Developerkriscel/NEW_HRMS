@@ -22,6 +22,7 @@ const EMPTY_DASHBOARD_STATE = {
   recentRequests: [],
   announcements: [],
   latestPayslip: null,
+  company: { name: '', logoUrl: '' },
 }
 
 function AttendanceHero({
@@ -146,7 +147,7 @@ function AttendanceHero({
 }
 
 export function EmployeeDashboardWorkspace({ headerAction }) {
-  const { user } = useAuthStore()
+  const { user, setUser } = useAuthStore()
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
   
@@ -192,13 +193,22 @@ export function EmployeeDashboardWorkspace({ headerAction }) {
       setRecentRequests(data.recentRequests || [])
       setAnnouncements(data.announcements || [])
       setLatestPayslip(data.latestPayslip || null)
+      const resolvedCompanyName = data.company?.name || user?.companyName || ''
+      const resolvedCompanyLogo = data.company?.logoUrl || user?.companyLogoUrl || ''
+      const resolvedUserName = data.userProfile?.name || user?.name || ''
+      const resolvedPhotoUrl = data.userProfile?.photoUrl || user?.profilePhotoUrl || ''
+      // Keep the global Navbar/profile menu in sync when the current session
+      // was created before profile-photo claims were added to auth tokens.
+      if (user && (user.companyLogoUrl !== resolvedCompanyLogo || user.profilePhotoUrl !== resolvedPhotoUrl)) {
+        setUser({ ...user, companyLogoUrl: resolvedCompanyLogo, profilePhotoUrl: resolvedPhotoUrl })
+      }
 
     } catch (err) {
       console.error('Failed to load dashboard data:', err)
     } finally {
       if (!silent) setLoading(false)
     }
-  }, [user])
+  }, [setUser, user])
 
   useEffect(() => {
     loadData()
@@ -305,7 +315,8 @@ export function EmployeeDashboardWorkspace({ headerAction }) {
         </div>
         
         {/* Right Header Actions */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mt-3 sm:mt-0 w-full sm:w-auto">
+        <div className="flex flex-col items-stretch sm:items-end gap-3 mt-3 sm:mt-0 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
           {/* Global Dashboard Filter */}
           <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 shadow-sm w-full sm:w-auto">
             <Filter className="w-4 h-4 text-slate-400" />
@@ -323,6 +334,7 @@ export function EmployeeDashboardWorkspace({ headerAction }) {
             </select>
           </div>
           {headerAction && <div className="w-full sm:w-auto flex overflow-x-auto pb-1 sm:pb-0 hide-scrollbar">{headerAction}</div>}
+          </div>
         </div>
       </div>
 

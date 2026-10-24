@@ -186,7 +186,9 @@ export const POST = withApi(async (req) => {
           firstName, 
           lastName,
           email, 
-          phone: cand.phone?.trim() || '000-000-0000', // Mock data lacks phone sometimes
+          // Keep missing phone values unique. A shared placeholder would make
+          // duplicate detection merge unrelated spreadsheet candidates.
+          phone: cand.phone?.trim() || `UNSPECIFIED-${candidateCode}`,
           currentLocation: cand.currentLocation || cand.location || null,
           currentCompany: cand.currentCompany || null,
           currentDesignation: cand.currentDesignation || cand.role || null,
@@ -194,6 +196,9 @@ export const POST = withApi(async (req) => {
           totalExperience,
           expectedCtc,
           skills: importSkills,
+          customFields: cand.customFields && typeof cand.customFields === 'object' && !Array.isArray(cand.customFields)
+            ? cand.customFields
+            : {},
           source,
           tenantId,
           createdBy: session.sub,
@@ -216,6 +221,17 @@ export const POST = withApi(async (req) => {
         fillIfEmpty('educationSummary', cand.educationText || splitImportList(cand.education).join(', '))
         fillIfEmpty('totalExperience', totalExperience)
         fillIfEmpty('expectedCtc', expectedCtc)
+        if (cand.customFields && typeof cand.customFields === 'object' && !Array.isArray(cand.customFields)) {
+          const customEntries = Object.entries(cand.customFields)
+            .filter(([key, value]) => String(key).trim() && String(value ?? '').trim())
+          if (customEntries.length) {
+            candidateDoc.customFields = {
+              ...(candidateDoc.customFields || {}),
+              ...Object.fromEntries(customEntries),
+            }
+            shouldSaveCandidate = true
+          }
+        }
         if (shouldSaveCandidate) await candidateDoc.save()
       }
 
@@ -224,7 +240,29 @@ export const POST = withApi(async (req) => {
       // Check if an application already exists for this candidate and job
       let applicationDoc = await Application.findOne({ candidateId: candidateDoc._id, jobId: activeJobId, tenantId })
 
-      if (!applicationDoc) {
+      if (applicationDoc?.deleted) {
+        // A deleted rejected application is intentionally reusable. Keep its
+        // history, but reopen it as a fresh active application for re-apply.
+        applicationDoc.deleted = false
+        applicationDoc.status = APPLICATION_STATUS.ACTIVE
+        applicationDoc.currentStage = appliedStage?._id || null
+        applicationDoc.currentStageName = appliedStage?.name || 'Applied'
+        applicationDoc.stageEnteredAt = new Date()
+        applicationDoc.rejectionReason = null
+        applicationDoc.rejectionComment = null
+        applicationDoc.selectionStatus = null
+        applicationDoc.readyForOffer = false
+        applicationDoc.activityLog.push({ type: 'APPLIED', message: 'Application reopened after being deleted from rejected applications', actorName: session.sub })
+        applicationDoc.updatedBy = session.sub
+        await applicationDoc.save()
+        await logAction(session, {
+          action: 'APPLICATION_REOPENED',
+          entityType: 'Application',
+          entityId: applicationDoc._id,
+          description: `Application ${applicationDoc.applicationCode} reopened via bulk import`,
+          req,
+        })
+      } else if (!applicationDoc) {
         const applicationCode = await generateApplicationCode(Application, tenantId)
         applicationDoc = await Application.create({
           applicationCode,
@@ -253,8 +291,8 @@ export const POST = withApi(async (req) => {
 
       const analyzedScore = Number(cand.score ?? cand.matchScore)
       if (Number.isFinite(analyzedScore) && analyzedScore > 0) {
-        const previewRequiredMatches = cand.analysisSource === 'FALLBACK' ? cand.matchedSkills || [] : []
-        const previewRequiredMissing = cand.analysisSource === 'FALLBACK' ? cand.missingSkills || [] : []
+        const previewRequiredMatches = cand.matchedSkills || []
+        const previewRequiredMissing = cand.missingSkills || []
         await CandidateJobMatch.findOneAndUpdate(
           { tenantId, applicationId: applicationDoc._id },
           {
@@ -263,9 +301,9 @@ export const POST = withApi(async (req) => {
               applicationId: applicationDoc._id,
               jobId: activeJobId,
               overallScore: Math.round(Math.max(0, Math.min(100, analyzedScore))),
-              skillsScore: Math.round(Math.max(0, Math.min(100, analyzedScore))),
-              experienceScore: Math.round(Math.max(0, Math.min(100, analyzedScore))),
-              educationScore: 50,
+              skillsScore: Number.isFinite(cand.skillsScore) ? cand.skillsScore : Math.round(Math.max(0, Math.min(100, analyzedScore))),
+              experienceScore: Number.isFinite(cand.experienceScore) ? cand.experienceScore : Math.round(Math.max(0, Math.min(100, analyzedScore))),
+              educationScore: Number.isFinite(cand.educationScore) ? cand.educationScore : 75,
               locationScore: cand.location ? 70 : 50,
               ctcScore: 50,
               noticeScore: 50,
@@ -274,10 +312,10 @@ export const POST = withApi(async (req) => {
               matchedSkills: { required: previewRequiredMatches, preferred: [] },
               missingSkills: { required: previewRequiredMissing, preferred: [] },
               strengths: cand.strengths || [],
-              concerns: (cand.concerns || []).map((text) => ({ severity: 'MODERATE', text })),
+              concerns: (cand.concerns || []).map((item) => typeof item === 'string' ? { severity: 'MODERATE', text: item } : item),
               summary: cand.analysisSummary || `Imported candidate analyzed at ${Math.round(analyzedScore)}% match.`,
-              aiMatchScore: cand.analysisSource === 'AI' ? Math.round(Math.max(0, Math.min(100, analyzedScore))) : null,
-              aiMatchReasoning: cand.analysisSource === 'AI' ? cand.analysisSummary || null : null,
+              aiMatchScore: Math.round(Math.max(0, Math.min(100, analyzedScore))),
+              aiMatchReasoning: cand.analysisSummary || null,
               modelVersion: MATCHING_MODEL_VERSION,
               rulesVersion: MATCHING_RULES_VERSION,
               generatedAt: new Date(),

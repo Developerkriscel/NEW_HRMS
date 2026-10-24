@@ -10,8 +10,6 @@ import {
   CheckCircle2,
   Copy,
   CreditCard,
-  Eye,
-  EyeOff,
   ImagePlus,
   KeyRound,
   Loader2,
@@ -85,9 +83,6 @@ function defaultForm(settings = fallbackPlatformSettings) {
     adminProfilePhotoUrl: '',
     adminProfilePreview: '',
     sendLoginInvitation: true,
-    passwordMode: 'GENERATE',
-    adminPassword: '',
-    confirmAdminPassword: '',
     planId: '',
   }
 }
@@ -147,10 +142,6 @@ function isPan(value) {
 
 function isIndianPin(country, value) {
   return country !== 'India' || /^[1-9][0-9]{5}$/.test(String(value || '').trim())
-}
-
-function isStrongPassword(value) {
-  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(String(value || ''))
 }
 
 function formatCurrency(value, currency = 'INR') {
@@ -304,6 +295,7 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
   const scrollRef = useRef(null)
   const [platformSettings, setPlatformSettings] = useState(fallbackPlatformSettings)
   const [form, setForm] = useState(() => defaultForm(fallbackPlatformSettings))
+  const [tenantCodeEdited, setTenantCodeEdited] = useState(false)
   const [step, setStep] = useState(0)
 
   useEffect(() => {
@@ -348,6 +340,7 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
         setPlatformSettings(nextSettings)
         setForm((current) => {
           const pristine = !current.companyName && !current.email && !current.adminEmail
+          if (pristine) setTenantCodeEdited(false)
           return pristine ? defaultForm(nextSettings) : current
         })
       })
@@ -370,10 +363,10 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
   useEffect(() => {
     if (!idempotencyKey || success) return
     const timer = setTimeout(() => {
-      window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ form, step, reviewing, idempotencyKey, savedAt: Date.now() }))
+      window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ form, step, reviewing, tenantCodeEdited, idempotencyKey, savedAt: Date.now() }))
     }, 300)
     return () => clearTimeout(timer)
-  }, [form, step, reviewing, idempotencyKey, success])
+  }, [form, step, reviewing, tenantCodeEdited, idempotencyKey, success])
 
   useEffect(() => {
     if (!form.tenantCode) {
@@ -410,9 +403,10 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
 
   function update(field, value) {
     setDirty(true)
+    if (field === 'tenantCode') setTenantCodeEdited(true)
     setForm((current) => {
       const next = { ...current, [field]: value }
-      if (field === 'companyName' && !current.tenantCode) next.tenantCode = applyTenantCodePrefix(suggestCode(value), platformSettings)
+      if (field === 'companyName' && !tenantCodeEdited) next.tenantCode = applyTenantCodePrefix(suggestCode(value), platformSettings)
       return next
     })
     setErrors((current) => ({ ...current, [field]: '' }))
@@ -422,6 +416,7 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
     const draft = readDraft()
     if (draft?.form) {
       setForm({ ...defaultForm(platformSettings), ...draft.form })
+      setTenantCodeEdited(draft.tenantCodeEdited === true)
       setStep(draft.step || 0)
       setReviewing(!!draft.reviewing)
       setDirty(true)
@@ -432,6 +427,7 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
   function discardDraft() {
     window.localStorage.removeItem(DRAFT_KEY)
     setForm(defaultForm(platformSettings))
+    setTenantCodeEdited(false)
     setStep(0)
     setReviewing(false)
     setIdempotencyKey(newIdempotencyKey())
@@ -512,10 +508,6 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
       if (!isEmail(form.adminEmail)) nextErrors.adminEmail = 'Enter a valid work email'
       if (emailCheck?.available === false) nextErrors.adminEmail = emailCheck.reason
       if (!isPhone(form.adminPhone)) nextErrors.adminPhone = 'Enter phone with country code'
-      if (form.passwordMode === 'CUSTOM') {
-        if (!isStrongPassword(form.adminPassword)) nextErrors.adminPassword = 'Use at least 8 characters with uppercase, lowercase and a number'
-        if (form.adminPassword !== form.confirmAdminPassword) nextErrors.confirmAdminPassword = 'Passwords do not match'
-      }
     }
     if (targetStep === 2 && !form.planId) nextErrors.planId = 'Select an active subscription plan'
     setErrors(nextErrors)
@@ -602,8 +594,7 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
     setSubmitting(true)
     setSubmitError('')
     try {
-      const initialPassword = form.passwordMode === 'CUSTOM' ? form.adminPassword : undefined
-      const { data } = await platformApi.provisionTenant(idempotencyKey, buildPayload(), initialPassword)
+      const { data } = await platformApi.provisionTenant(idempotencyKey, buildPayload())
       const job = data.data?.job
       const tenant = job?.tenant
       window.localStorage.removeItem(DRAFT_KEY)
@@ -619,7 +610,6 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
         price: selectedPlan.price,
         billingCycle: selectedPlan.billingCycle,
         invitation: form.sendLoginInvitation ? 'Prepared for administrator' : 'Invitation disabled',
-        passwordMode: form.passwordMode,
         tempPassword: data.data?.tempPassword,
       })
       setDirty(false)
@@ -673,6 +663,15 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
     setCopiedPassword(true)
     setTimeout(() => setCopiedPassword(false), 2000)
   }
+
+  function closeSuccess(refresh = false) {
+    setSuccess(null)
+    setCopiedPassword(false)
+    setDirty(false)
+    onClose(refresh)
+  }
+
+  if (!isOpen) return null
 
   if (success) {
     const provisioningDone = success.status === 'COMPLETED'
@@ -744,12 +743,12 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
           </div>
           <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
             <button type="button" className="btn-primary justify-center disabled:cursor-not-allowed disabled:opacity-50" disabled={!success.tenantId} onClick={() => {
-              onClose(true);
+              closeSuccess(true)
               router.push(`/super-admin/tenants/${success.tenantId}`);
             }}>
               View Organization
             </button>
-            <button type="button" className="btn-secondary justify-center" onClick={() => onClose(true)}>
+            <button type="button" className="btn-secondary justify-center" onClick={() => closeSuccess(true)}>
               Close
             </button>
           </div>
@@ -759,8 +758,6 @@ export function CreateOrganizationModal({ isOpen, onClose }) {
       </Portal>
     )
   }
-
-  if (!isOpen) return null;
 
   return (
     <Portal>
@@ -896,7 +893,7 @@ function CompanyStep({ form, errors, codeCheck, logoUploading, update, handleIma
           <Field label="Organization Name" required error={errors.companyName}>
             <input className="input-field" value={form.companyName} onChange={(e) => update('companyName', e.target.value)} placeholder="Enter organization name" />
           </Field>
-          <Field label="Organization Code" required error={errors.tenantCode || (codeCheck?.available === true ? '' : '')} hint={codeCheck?.available ? 'Code is available' : 'Used for tenant database and employee IDs'}>
+          <Field label="Organization Code" required error={errors.tenantCode || (codeCheck?.available === true ? '' : '')} hint={codeCheck?.available ? 'Code is available' : 'Auto-generated from the name. You can edit it.'}>
             <input className="input-field uppercase font-bold" value={form.tenantCode} onChange={(e) => update('tenantCode', normalizeCode(e.target.value))} placeholder="ORGCODE" />
           </Field>
           <Field label="Legal Business Name">
@@ -1000,8 +997,6 @@ function CompanyStep({ form, errors, codeCheck, logoUploading, update, handleIma
 }
 
 function AdminStep({ form, errors, emailCheck, profileUploading, update, handleImage }) {
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   return (
     <div className="space-y-5">
@@ -1050,55 +1045,10 @@ function AdminStep({ form, errors, emailCheck, profileUploading, update, handleI
             <p className="mt-1 break-all text-sm font-semibold text-slate-900 dark:text-white">{form.adminEmail || 'Enter admin work email above'}</p>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <button
-              type="button"
-              className={cn(
-                'rounded-2xl border p-4 text-left transition-all',
-                form.passwordMode === 'GENERATE'
-                  ? 'border-blue-500 bg-blue-50 ring-4 ring-blue-100 dark:bg-blue-950/30 dark:ring-blue-950/50'
-                  : 'border-slate-100 bg-white hover:border-blue-200 dark:border-slate-800 dark:bg-slate-900'
-              )}
-              onClick={() => update('passwordMode', 'GENERATE')}
-            >
-              <p className="text-sm font-bold text-slate-900 dark:text-white">Generate one-time password</p>
-              <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">Recommended. The password is shown once after organization creation.</p>
-            </button>
-            <button
-              type="button"
-              className={cn(
-                'rounded-2xl border p-4 text-left transition-all',
-                form.passwordMode === 'CUSTOM'
-                  ? 'border-blue-500 bg-blue-50 ring-4 ring-blue-100 dark:bg-blue-950/30 dark:ring-blue-950/50'
-                  : 'border-slate-100 bg-white hover:border-blue-200 dark:border-slate-800 dark:bg-slate-900'
-              )}
-              onClick={() => update('passwordMode', 'CUSTOM')}
-            >
-              <p className="text-sm font-bold text-slate-900 dark:text-white">Set custom one-time password</p>
-              <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">Use when you need to share a known initial password manually.</p>
-            </button>
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/60 dark:bg-blue-950/30">
+            <p className="text-sm font-bold text-blue-900 dark:text-blue-100">One-time password will be generated automatically</p>
+            <p className="mt-1 text-xs font-medium text-blue-700 dark:text-blue-200">It will be shown once after provisioning. The administrator should change it after first login.</p>
           </div>
-
-          {form.passwordMode === 'CUSTOM' ? (
-            <div className="grid gap-5 md:grid-cols-2">
-              <Field label="Initial Password" required error={errors.adminPassword} hint="Minimum 8 characters with uppercase, lowercase and a number">
-                <div className="relative">
-                  <input type={showPassword ? 'text' : 'password'} className="input-field pr-10" value={form.adminPassword} onChange={(e) => update('adminPassword', e.target.value)} placeholder="Set initial password" autoComplete="new-password" />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </Field>
-              <Field label="Confirm Password" required error={errors.confirmAdminPassword}>
-                <div className="relative">
-                  <input type={showConfirmPassword ? 'text' : 'password'} className="input-field pr-10" value={form.confirmAdminPassword} onChange={(e) => update('confirmAdminPassword', e.target.value)} placeholder="Confirm initial password" autoComplete="new-password" />
-                  <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
-                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </Field>
-            </div>
-          ) : null}
         </div>
       </Section>
 
@@ -1233,7 +1183,7 @@ function ReviewStep({ form, plan, submitError, submitting, onEdit, onCancel, onB
           <SummaryRow label="Mobile" value={form.adminPhone} />
           <SummaryRow label="Role" value="Company Admin" />
           <SummaryRow label="Login Email" value={form.adminEmail} />
-          <SummaryRow label="Initial Password" value={form.passwordMode === 'CUSTOM' ? 'Custom one-time password' : 'Auto-generated one-time password'} />
+          <SummaryRow label="Initial Password" value="Secure one-time password generated after creation" />
           <SummaryRow label="Invitation" value={form.sendLoginInvitation ? 'Enabled' : 'Disabled'} />
         </ReviewCard>
         <ReviewCard title="Subscription" action="Change Plan" onAction={() => onEdit(2)}>

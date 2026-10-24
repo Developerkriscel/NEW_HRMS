@@ -52,6 +52,7 @@ export function AddEmployeePage({ basePath, onClose, initialData }) {
       if (payload.ctc) payload.ctc = Number(payload.ctc)
       if (payload.salaryTakeHome) payload.salaryTakeHome = Number(payload.salaryTakeHome)
       if (!payload.reportingManager) delete payload.reportingManager
+      if (!['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY'].includes(payload.gender)) delete payload.gender
       
       if (initialData?._id) {
         await employeeApi.update(initialData._id, payload)
@@ -183,19 +184,26 @@ export function AddEmployeePage({ basePath, onClose, initialData }) {
             />
             <p className="text-xs text-slate-400 mt-2">Leave blank to auto-generate a password after creation.</p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Authority / Role</span>
-              <select className="input-field" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value, moduleAccess: [] })}>
-                {['EMPLOYEE', 'MANAGER', 'HR_MANAGER', 'FINANCE', 'IT_ADMIN', 'SUPPORT_AGENT', 'COMPANY_ADMIN'].map((r) => <option key={r} value={r}>{r.replace('_', ' ')}</option>)}
-              </select>
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Employment Type</span>
-              <select className="input-field" value={form.employmentType} onChange={(e) => setForm({ ...form, employmentType: e.target.value })}>
-                {['Full-time', 'Part-time', 'Contract', 'Intern'].map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </label>
+          <div className="rounded-xl border border-indigo-100 bg-gradient-to-br from-indigo-50/70 to-white p-4 dark:border-indigo-900/50 dark:from-indigo-950/30 dark:to-slate-900">
+            <div className="mb-3">
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Job &amp; Access</p>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Set the employee&apos;s job title and system permission level.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Designation</span>
+                <select className="input-field" value={form.designationId} onChange={(e) => setForm({ ...form, designationId: e.target.value })}>
+                  <option value="">Select Designation</option>
+                  {designations.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Authority / Role</span>
+                <select className="input-field" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value, moduleAccess: [] })}>
+                  {['EMPLOYEE', 'MANAGER', 'HR_MANAGER', 'SUPPORT_AGENT', 'COMPANY_ADMIN'].map((r) => <option key={r} value={r}>{r.replace('_', ' ')}</option>)}
+                </select>
+              </label>
+            </div>
           </div>
           <div className="rounded-xl border border-blue-100 bg-blue-50/40 dark:border-blue-900/50 dark:bg-blue-900/10 p-4 space-y-3">
             <div className="flex items-start justify-between gap-3">
@@ -234,19 +242,12 @@ export function AddEmployeePage({ basePath, onClose, initialData }) {
               </div>
             )}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <label className="block">
               <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Department</span>
               <select className="input-field" value={form.departmentId} onChange={(e) => setForm({ ...form, departmentId: e.target.value })}>
                 <option value="">Select Department</option>
                 {departments.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
-              </select>
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Designation</span>
-              <select className="input-field" value={form.designationId} onChange={(e) => setForm({ ...form, designationId: e.target.value })}>
-                <option value="">Select Designation</option>
-                {designations.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
               </select>
             </label>
             <label className="block">
@@ -328,6 +329,7 @@ export function AddEmployeePage({ basePath, onClose, initialData }) {
                 <option value="MALE">Male</option>
                 <option value="FEMALE">Female</option>
                 <option value="OTHER">Other</option>
+                <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
               </select>
             </label>
             <label className="block">

@@ -6,6 +6,7 @@ dotenv.config({ path: '.env.local' })
 dotenv.config()
 
 const MONGODB_URI = process.env.MONGODB_DIRECT_URI || process.env.MONGODB_URI
+const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME || 'krisceltech_platform_admin'
 if (!MONGODB_URI) {
   console.error('MONGODB_URI is not set in .env.local')
   process.exit(1)
@@ -14,7 +15,7 @@ if (!MONGODB_URI) {
 const PASSWORD = 'Password@123'
 
 async function main() {
-  await mongoose.connect(MONGODB_URI)
+  await mongoose.connect(MONGODB_URI, { dbName: MONGODB_DB_NAME })
   console.log('Connected to MongoDB')
 
   const hashedPassword = await bcrypt.hash(PASSWORD, 12)

@@ -8,6 +8,13 @@ import { syncReadinessStatus } from '@/lib/candidateEmployeeConversionService'
 import { recomputePreboardingStatus } from '@/lib/preboardingHelpers'
 import Preboarding from '@/models/Preboarding'
 import OfferVersion from '@/models/OfferVersion'
+import Designation from '@/models/Designation'
+
+const BUILT_IN_DESIGNATIONS = {
+  HR_MANAGER: 'HR Manager',
+  MANAGER: 'Manager',
+  EMPLOYEE: 'Employee',
+}
 
 function isObjectId(value) {
   return typeof value === 'string' && /^[a-f\d]{24}$/i.test(value)
@@ -41,7 +48,19 @@ export const PUT = withApi(async (req, { params }) => {
 
   const patch = {}
   if (isObjectId(body.department)) patch.departmentId = body.department
-  if (isObjectId(body.designation)) patch.designationId = body.designation
+  if (isObjectId(body.designation)) {
+    patch.designationId = body.designation
+    patch.designationName = null
+  } else if (typeof body.designation === 'string' && body.designation.trim()) {
+    const designationName = BUILT_IN_DESIGNATIONS[body.designation] || body.designation.trim()
+    const designation = await Designation.findOneAndUpdate(
+      { tenantId, name: designationName, deleted: false },
+      { $setOnInsert: { tenantId, name: designationName, active: true, createdBy: session.sub } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    )
+    patch.designationId = designation._id
+    patch.designationName = designationName
+  }
   if (isObjectId(body.branch)) patch.locationId = body.branch
   if (isObjectId(body.shift)) patch.shiftId = body.shift
   if (isObjectId(body.reportingManager)) patch.managerId = body.reportingManager

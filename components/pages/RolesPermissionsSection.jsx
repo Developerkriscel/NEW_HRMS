@@ -3,7 +3,7 @@ import { useRouter } from 'next/navigation'
 import { employeeApi, permissionApi } from '@/services/employeeApi'
 import { useAuthStore } from '@/store/authStore'
 
-const ROLES = ['COMPANY_ADMIN', 'HR_MANAGER', 'MANAGER', 'EMPLOYEE', 'FINANCE', 'IT_ADMIN', 'SUPPORT_AGENT']
+const ROLES = ['COMPANY_ADMIN', 'HR_MANAGER', 'MANAGER', 'EMPLOYEE', 'SUPPORT_AGENT']
 
 export function RolesPermissionsSection() {
   const router = useRouter()
@@ -53,7 +53,7 @@ export function RolesPermissionsSection() {
       {error && <div className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 rounded-lg p-3">{error}</div>}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        {ROLES.filter(r => !['FINANCE', 'IT_ADMIN', 'SUPPORT_AGENT'].includes(r)).map((role) => {
+        {ROLES.filter(r => r !== 'SUPPORT_AGENT').map((role) => {
           let bg = 'bg-slate-50 dark:bg-slate-500/10'
           let color = 'text-slate-600 dark:text-slate-400'
           if (role === 'COMPANY_ADMIN') { bg = 'bg-indigo-50 dark:bg-indigo-500/10'; color = 'text-indigo-600 dark:text-indigo-400' }

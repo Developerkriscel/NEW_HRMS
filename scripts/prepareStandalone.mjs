@@ -42,6 +42,12 @@ await copyIfExists(path.join(root, '.next', 'static'), path.join(standaloneDir, 
 await copyIfExists(path.join(root, 'public'), path.join(standaloneDir, 'public'))
 await copyIfExists(path.join(root, 'node_modules', 'sharp'), path.join(standaloneDir, 'node_modules', 'sharp'))
 await copyIfExists(path.join(root, 'node_modules', '@img'), path.join(standaloneDir, 'node_modules', '@img'))
+// pdf-parse dynamically imports its PDF.js worker, which Next's file tracer
+// misses. Include the package assets so production resume extraction works.
+await copyIfExists(path.join(root, 'node_modules', 'pdf-parse'), path.join(standaloneDir, 'node_modules', 'pdf-parse'))
+// Next loads pdf-parse through its ESM export. That export uses pdfjs-dist's
+// own worker (unlike the CJS export's bundled worker), plus font/CMap assets.
+await copyIfExists(path.join(root, 'node_modules', 'pdfjs-dist'), path.join(standaloneDir, 'node_modules', 'pdfjs-dist'))
 await copyServerChunksForStandalone()
 
 const envFiles = ['.env.production.local', '.env.local', '.env.production', '.env']

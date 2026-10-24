@@ -56,6 +56,10 @@ export const POST = withApi(async (req, { params }) => {
     if (err.errorCode === 'NOT_READY') {
       return fail(err.message, 400, err.errorCode, { missingRequired: err.details })
     }
+    if (err.name === 'ValidationError') {
+      const fields = Object.fromEntries(Object.entries(err.errors || {}).map(([key, value]) => [key, value.message]))
+      return fail('Employee data validation failed', 400, 'EMPLOYEE_VALIDATION_ERROR', { fields })
+    }
     throw err
   }
 })

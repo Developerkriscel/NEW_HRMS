@@ -54,20 +54,39 @@ export const GET = withApi(async (req) => {
   }
 
   const countBaseQuery = { tenantId, deleted: false }
+  const listStartedAt = Date.now()
+  const contentQuery = Job.find(query)
+    // The positions page only needs summary fields. Full requirements and
+    // pipeline data are loaded by GET /jobs/:id when a position is opened.
+    .select('jobCode jobTitle publicTitle status employmentType workMode totalOpenings filledOpenings department location internalMinCtc internalMaxCtc currency openingDate targetClosingDate expectedJoiningDate minExperience')
+    .populate('department', 'name')
+    .populate('location', 'name')
+    .sort({ createdAt: -1 })
+    .skip(page * size)
+    .limit(size)
+    .lean()
+
   const [totalElements, statusCounts, content] = await Promise.all([
     Job.countDocuments(query),
     Job.aggregate([
       { $match: countBaseQuery },
       { $group: { _id: '$status', count: { $sum: 1 } } },
     ]),
-    populateJob(
-      Job.find(query)
-        .sort({ createdAt: -1 })
-        .skip(page * size)
-        .limit(size)
-        .lean()
-    ),
+    contentQuery,
   ])
+  const listElapsedMs = Date.now() - listStartedAt
+  if (listElapsedMs >= Number(process.env.API_SLOW_LOG_MS || 1000)) {
+    console.warn(`[api:slow-query] GET /api/recruitment/jobs ${listElapsedMs}ms page=${page} size=${size}`)
+  }
+  if (process.env.MONGODB_EXPLAIN_QUERIES === 'true') {
+    const explain = await contentQuery.clone().explain('executionStats')
+    console.info('[api:explain] recruitment jobs', JSON.stringify({
+      nReturned: explain.executionStats?.nReturned,
+      docsExamined: explain.executionStats?.totalDocsExamined,
+      keysExamined: explain.executionStats?.totalKeysExamined,
+      executionTimeMs: explain.executionStats?.executionTimeMillis,
+    }))
+  }
   const withRemaining = content.map((j) => {
     const obj = j.toObject ? j.toObject() : j
     obj.remainingOpenings = computeRemainingOpenings(obj)

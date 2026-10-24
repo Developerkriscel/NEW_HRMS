@@ -92,17 +92,19 @@ export function adaptPreboardingRecord(source) {
   const shift = preboarding.shift || offer.shift || null
   const joiningDate = preboarding.confirmedJoiningDate || preboarding.proposedJoiningDate || preboarding.joiningDate || offer.joiningDate || ''
   const candidateName = fullName(candidate)
+  const pendingBeforeConversion = milestoneState.pending.filter((milestone) => milestone.id !== 'employee-created')
 
   return {
     raw: preboarding,
     rawStatus: preboarding.status,
     conversionStatus: preboarding.conversionStatus,
     convertedEmployeeId: preboarding.convertedEmployeeId,
+    loginEmail: preboarding.employeeLoginEmail || '',
     canConvert: !converted && (
       preboarding.conversionStatus === 'READY' ||
       preboarding.status === 'READY_TO_JOIN' ||
       preboarding.status === 'JOINED' ||
-      (hasFullMilestoneContext && milestoneState.pending.length === 0)
+      (hasFullMilestoneContext && pendingBeforeConversion.length === 0)
     ),
     id: String(preboarding._id || preboarding.preboardingId || preboarding.id),
     candidate: {

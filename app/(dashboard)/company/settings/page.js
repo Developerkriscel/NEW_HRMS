@@ -17,16 +17,28 @@ import { Building, Clock, Layers, MapPin, Clock3, CalendarDays, Settings, Lock, 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 const MENU = [
-  { id: 'profile', label: 'Company Profile', icon: Building },
-  { id: 'subscription', label: 'Subscription & Plans', icon: CreditCard },
-  { id: 'departments', label: 'Departments', icon: Layers },
-  { id: 'branches', label: 'Branches', icon: MapPin },
-  { id: 'shifts', label: 'Working Hours & Shifts', icon: Clock3 },
-  { id: 'holidays', label: 'Holidays', icon: CalendarDays },
-  { id: 'modules', label: 'Modules & Features', icon: Settings },
-  { id: 'security', label: 'Security', icon: Lock },
-  { id: 'integrations', label: 'Email Integration', icon: Mail },
+  { id: 'profile', label: 'Company Profile', icon: Building, tone: 'blue' },
+  { id: 'subscription', label: 'Subscription & Plans', icon: CreditCard, tone: 'violet' },
+  { id: 'departments', label: 'Departments', icon: Layers, tone: 'cyan' },
+  { id: 'branches', label: 'Branches', icon: MapPin, tone: 'amber' },
+  { id: 'shifts', label: 'Working Hours & Shifts', icon: Clock3, tone: 'emerald' },
+  { id: 'holidays', label: 'Holidays', icon: CalendarDays, tone: 'rose' },
+  { id: 'modules', label: 'Modules & Features', icon: Settings, tone: 'indigo' },
+  { id: 'security', label: 'Security', icon: Lock, tone: 'slate' },
+  { id: 'integrations', label: 'Email Integration', icon: Mail, tone: 'teal' },
 ]
+
+const MENU_TONES = {
+  blue: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-300',
+  violet: 'bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-300',
+  cyan: 'bg-cyan-50 text-cyan-600 dark:bg-cyan-500/10 dark:text-cyan-300',
+  amber: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300',
+  emerald: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300',
+  rose: 'bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-300',
+  indigo: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300',
+  slate: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+  teal: 'bg-teal-50 text-teal-600 dark:bg-teal-500/10 dark:text-teal-300',
+}
 
 export default function CompanySettingsPage() {
   const currentUser = useAuthStore((s) => s.user)
@@ -36,6 +48,7 @@ export default function CompanySettingsPage() {
   const [tenant, setTenant] = useState(null)
   const [hrSettings, setHrSettings] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [profileError, setProfileError] = useState('')
   
   const [profMessage, setProfMessage] = useState('')
   const [profSaving, setProfSaving] = useState(false)
@@ -44,17 +57,22 @@ export default function CompanySettingsPage() {
   const [hrMessage, setHrMessage] = useState('')
   const [hrSaving, setHrSaving] = useState(false)
 
-  useEffect(() => {
+  const loadProfile = () => {
+    setLoading(true)
+    setProfileError('')
     companyApi.getProfile()
       .then((res) => {
         setTenant(res.data.data)
         setHrSettings(res.data.data.hrSettings)
       })
       .catch((err) => {
-        console.error("Failed to load company profile:", err)
+        console.error('Failed to load company profile:', err)
+        setProfileError(err.response?.data?.message || 'Company profile could not be loaded.')
       })
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { loadProfile() }, [])
 
   function toggleDay(list, day) {
     return list.includes(day) ? list.filter((d) => d !== day) : [...list, day]
@@ -91,22 +109,29 @@ export default function CompanySettingsPage() {
   }
 
   if (loading) return <PageLoader />
-  if (!tenant) return <div className="p-8 text-center text-slate-500">Failed to load company settings. Please refresh the page.</div>
+  if (!tenant) return (
+    <div className="mx-auto mt-12 max-w-lg rounded-2xl border border-rose-200 bg-rose-50 p-6 text-center dark:border-rose-900/50 dark:bg-rose-950/20">
+      <p className="font-semibold text-rose-700 dark:text-rose-300">Failed to load company settings.</p>
+      <p className="mt-1 text-sm text-rose-600 dark:text-rose-400">{profileError || 'The company profile is unavailable.'}</p>
+      <button type="button" onClick={loadProfile} className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700">Retry</button>
+    </div>
+  )
 
   const enabledModules = Object.entries(tenant?.features || {}).filter(([, enabled]) => enabled).map(([key]) => key)
 
   return (
     <div className="animate-fade-in space-y-4 pb-12">
-      <div className="relative overflow-hidden rounded-3xl bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl px-6 py-4 shadow-sm border border-slate-200/60 dark:border-slate-800/80">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-indigo-500/20 to-blue-500/20 dark:from-indigo-500/10 dark:to-blue-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+      <div className="relative overflow-hidden rounded-[26px] border border-indigo-100/80 bg-gradient-to-r from-white via-indigo-50/60 to-blue-100/70 px-6 py-5 shadow-sm dark:border-indigo-900/50 dark:from-slate-900 dark:via-indigo-950/40 dark:to-blue-950/40">
+        <div className="absolute inset-y-0 right-0 w-1/3 bg-gradient-to-l from-blue-200/40 to-transparent dark:from-blue-500/10 pointer-events-none" />
         <div className="relative z-10 group w-fit">
-          <h1 className="text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-900 via-indigo-700 to-blue-600 dark:from-indigo-200 dark:via-indigo-400 dark:to-blue-400 drop-shadow-sm transition-all duration-500 group-hover:scale-[1.02] origin-left">Settings & Preferences</h1>
-          <div className="h-1 w-12 rounded-full bg-gradient-to-r from-indigo-600 to-blue-500 mt-2 transition-all duration-500 group-hover:w-full opacity-70"></div>
+          <p className="mb-1 text-[11px] font-extrabold uppercase tracking-[0.16em] text-indigo-500 dark:text-indigo-300">Workspace control center</p>
+          <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white transition-all duration-300 group-hover:text-indigo-700 dark:group-hover:text-indigo-200">Settings & Preferences</h1>
+          <div className="mt-3 h-1 w-16 rounded-full bg-gradient-to-r from-indigo-600 via-blue-500 to-cyan-400 transition-all duration-500 group-hover:w-28" />
         </div>
       </div>
 
       <div className="flex flex-col md:flex-row gap-6 items-start">
-        <div className="w-full md:w-72 flex-shrink-0 flex md:flex-col gap-2 overflow-x-auto pb-2 md:pb-0 hide-scrollbar relative md:sticky md:top-24 z-10">
+        <div className="w-full md:w-72 flex-shrink-0 rounded-[24px] border border-slate-200/80 bg-gradient-to-b from-white to-slate-50/80 p-3 shadow-sm backdrop-blur-xl dark:border-slate-800 dark:from-slate-900 dark:to-slate-950/80 flex md:flex-col gap-1.5 overflow-x-auto pb-2 md:pb-3 hide-scrollbar relative md:sticky md:top-24 z-10">
           {MENU.map((item) => {
             const Icon = item.icon
             const isActive = activeTab === item.id
@@ -114,14 +139,16 @@ export default function CompanySettingsPage() {
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`flex items-center gap-3 px-5 py-4 rounded-2xl text-sm font-bold transition-all duration-300 whitespace-nowrap relative overflow-hidden group ${
+                className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl text-sm font-bold transition-all duration-300 whitespace-nowrap relative overflow-hidden group ${
                   isActive 
                     ? 'bg-gradient-to-r from-indigo-600 via-indigo-500 to-blue-600 text-white shadow-lg shadow-indigo-500/30 border border-indigo-500/50 scale-[1.02]'
-                    : 'text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800/80 hover:text-indigo-600 dark:hover:text-indigo-400 hover:shadow-md border border-transparent hover:border-indigo-100 dark:hover:border-indigo-900/50'
+                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/80 hover:text-indigo-600 dark:hover:text-indigo-400 border border-transparent hover:border-slate-200 dark:hover:border-slate-700'
                 }`}
               >
                 {isActive && <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent w-[200%] h-full skew-x-12 -translate-x-full group-hover:animate-[shimmer_2s_infinite]" />}
-                <Icon className={`w-5 h-5 relative z-10 transition-transform duration-300 ${isActive ? 'text-white scale-110' : 'text-slate-400 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 group-hover:scale-110'}`} />
+                <span className={`relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all duration-300 ${isActive ? 'bg-white/20 text-white' : MENU_TONES[item.tone]}`}>
+                  <Icon className="h-4 w-4" />
+                </span>
                 <span className="relative z-10">{item.label}</span>
               </button>
             )
@@ -131,11 +158,11 @@ export default function CompanySettingsPage() {
         {/* Content Area */}
         <div className="flex-1 min-w-0 space-y-6 w-full">
           {activeTab === 'profile' && (
-            <form onSubmit={handleSaveProfile} className="glass-panel animate-in fade-in slide-in-from-bottom-4 duration-500 rounded-3xl p-8 border border-white/60 dark:border-slate-700/60 shadow-xl shadow-slate-200/40 dark:shadow-none relative overflow-hidden bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl">
-              <div className="absolute top-0 right-0 w-72 h-72 bg-indigo-500/10 dark:bg-indigo-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+            <form onSubmit={handleSaveProfile} className="glass-panel animate-in fade-in slide-in-from-bottom-4 duration-500 rounded-[26px] p-8 border border-indigo-100/80 dark:border-slate-700/60 shadow-xl shadow-indigo-100/40 dark:shadow-none relative overflow-hidden bg-white/90 dark:bg-slate-900/90 backdrop-blur-2xl">
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-500 via-blue-500 to-cyan-400 pointer-events-none" />
               <div className="mb-8 pb-5 border-b border-slate-200/60 dark:border-slate-700/60 relative z-10">
                 <h3 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-3">
-                  <div className="p-3 bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-500/10 dark:to-blue-500/10 rounded-2xl text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20 shadow-sm">
+                    <div className="p-3 bg-gradient-to-br from-indigo-100 to-blue-50 dark:from-indigo-500/20 dark:to-blue-500/10 rounded-2xl text-indigo-600 dark:text-indigo-400 border border-indigo-200/70 dark:border-indigo-500/20 shadow-sm">
                     <Building className="w-6 h-6" />
                   </div>
                   Company Profile

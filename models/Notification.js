@@ -18,7 +18,7 @@ const NotificationSchema = new mongoose.Schema(
     type: { type: String, enum: ['info', 'success', 'warning', 'error'], default: 'info' },
     category: {
       type: String,
-      enum: ['leave', 'payroll', 'attendance', 'document', 'asset', 'helpdesk', 'system', 'security', 'announcement', 'general'],
+      enum: ['leave', 'payroll', 'attendance', 'document', 'asset', 'helpdesk', 'interview', 'system', 'security', 'announcement', 'general'],
       default: 'general',
       index: true,
     },

@@ -5,6 +5,7 @@ import { ok, fail } from '@/lib/apiResponse'
 import { requireAuth, requireRole, requireTenantId } from '@/lib/auth'
 import { logAction } from '@/lib/audit'
 import Tenant from '@/models/Tenant'
+import Employee from '@/models/Employee'
 
 // Bridges a tenant-side session to its own Tenant document, which lives in
 // the platform database (Tenant has no tenantId field, so it's never
@@ -14,13 +15,48 @@ import Tenant from '@/models/Tenant'
 // the other direction.
 const PROFILE_FIELDS = ['companyName', 'phone', 'logoUrl', 'address', 'city', 'state', 'country', 'gstNumber', 'panNumber', 'industryType']
 
+async function resolveTenant(session, tenantId) {
+  // Older tenant documents may not have the newer `deleted: false` field.
+  // Read by id first, then enforce soft-delete explicitly.
+  let tenant = await Tenant.findById(tenantId)
+  if (tenant?.deleted) tenant = null
+  if (tenant || !session?.userId) return tenant
+
+  // Recover from an old/stale access token whose tenant claim no longer
+  // matches the employee directory. This keeps settings available without
+  // weakening tenant isolation because the fallback still comes from the
+  // authenticated employee record.
+  const employee = await Employee.findOne({
+    _id: session.userId,
+    $or: [{ deleted: false }, { deleted: { $exists: false } }],
+  }).select('tenantId').lean()
+  if (employee?.tenantId && String(employee.tenantId) !== String(tenantId)) {
+    tenant = await Tenant.findById(employee.tenantId)
+    if (tenant?.deleted) tenant = null
+  }
+  if (tenant) return tenant
+
+  // Dev/legacy tokens can have a stale tenant id while still carrying the
+  // authoritative tenant database name or login email. Resolve only through
+  // values belonging to the authenticated session; never fall back to an
+  // arbitrary tenant record.
+  const identityQueries = []
+  if (session?.tenantDatabaseName) identityQueries.push({ databaseName: session.tenantDatabaseName })
+  if (session?.sub) identityQueries.push({ adminEmail: String(session.sub).toLowerCase() })
+  if (session?.sub) identityQueries.push({ email: String(session.sub).toLowerCase() })
+  if (identityQueries.length) {
+    tenant = await Tenant.findOne({ $or: identityQueries, deleted: { $ne: true } })
+  }
+  return tenant
+}
+
 export const GET = withApi(async () => {
   const session = await requireAuth()
   const tenantId = requireTenantId(session)
 
-  const tenant = await Tenant.findById(tenantId).select([...PROFILE_FIELDS, 'hrSettings', 'features', 'timezone', 'currency'].join(' '))
+  const tenant = await resolveTenant(session, tenantId)
   if (!tenant) return fail('Company profile not found', 404)
-  return ok(tenant)
+  return ok(await Tenant.findById(tenant._id).select([...PROFILE_FIELDS, 'hrSettings', 'features', 'timezone', 'currency'].join(' ')))
 })
 
 export const PUT = withApi(async (req) => {
@@ -29,7 +65,7 @@ export const PUT = withApi(async (req) => {
   const tenantId = requireTenantId(session)
   const body = await req.json()
 
-  const tenant = await Tenant.findById(tenantId)
+  const tenant = await resolveTenant(session, tenantId)
   if (!tenant) return fail('Company profile not found', 404)
 
   const hasProfileUpdate = PROFILE_FIELDS.some((field) => body[field] !== undefined)

@@ -18,6 +18,7 @@ dotenv.config({ path: '.env.local' })
 dotenv.config()
 
 const MONGODB_URI = process.env.MONGODB_DIRECT_URI || process.env.MONGODB_URI
+const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME || 'krisceltech_platform_admin'
 if (!MONGODB_URI) {
   console.error('MONGODB_URI is not set. Copy .env.example to .env.local and configure it first.')
   process.exit(1)
@@ -101,7 +102,7 @@ const PlatformOperator = mongoose.models.PlatformOperator || mongoose.model('Pla
 const PlatformOperatorRole = mongoose.models.PlatformOperatorRole || mongoose.model('PlatformOperatorRole', new mongoose.Schema({}, schemaOpts))
 
 async function main() {
-  await mongoose.connect(MONGODB_URI)
+  await mongoose.connect(MONGODB_URI, { dbName: MONGODB_DB_NAME })
   console.log('Connected to MongoDB')
 
   // 1. Permission catalogue

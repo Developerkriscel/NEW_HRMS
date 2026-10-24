@@ -15,6 +15,8 @@ import { checkAvailability } from '@/lib/interviewHelpers'
 import { getActorName } from '@/lib/candidateHelpers'
 import { assertTenantMailReady } from '@/lib/tenantMail'
 import { buildInterviewEmailDraft, sendInterviewInviteEmail } from '@/lib/interviewEmailDelivery'
+import { createNotification } from '@/lib/notifications'
+import mongoose from 'mongoose'
 import Interview from '@/models/Interview'
 import InterviewPanelMember from '@/models/InterviewPanelMember'
 import InterviewScheduleHistory from '@/models/InterviewScheduleHistory'
@@ -114,6 +116,7 @@ export const GET = withApi(async (req) => {
       employeeId: p.employeeId,
       name: p.employeeName,
       role: p.role,
+      assignmentStatus: p.assignmentStatus,
       feedbackStatus: p.feedbackStatus,
     })),
   }))
@@ -132,7 +135,19 @@ export const POST = withApi(async (req) => {
   for (const field of required) {
     if (!body[field]) return fail(`${field} is required`, 400, 'VALIDATION_ERROR')
   }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(body.date)) || Number.isNaN(new Date(`${body.date}T00:00:00Z`).getTime())) {
+    return fail('Interview date must be a valid calendar date (YYYY-MM-DD)', 400, 'VALIDATION_ERROR')
+  }
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(body.startTime)) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(body.endTime))) {
+    return fail('Interview start and end times must use HH:mm format', 400, 'VALIDATION_ERROR')
+  }
+  if (body.mode === 'ONLINE' && body.meetingUrl && !/^https?:\/\//i.test(String(body.meetingUrl))) {
+    return fail('Meeting link must be a valid http or https URL', 400, 'VALIDATION_ERROR')
+  }
   const requestedInterviewers = Array.isArray(body.interviewers) ? body.interviewers : []
+  const uniqueInterviewerIds = [...new Set(requestedInterviewers.map((item) => String(item.employeeId || '')).filter(Boolean))]
+  if (!uniqueInterviewerIds.length) return fail('Select at least one interviewer before scheduling the interview.', 400, 'VALIDATION_ERROR')
+  if (uniqueInterviewerIds.some((id) => !mongoose.isValidObjectId(id))) return fail('One or more selected interviewers are invalid.', 400, 'VALIDATION_ERROR')
 
   const application = await Application.findOne({ _id: body.applicationId, tenantId, deleted: false }).populate('candidateId').populate('jobId')
   if (!application) return fail('Application not found', 404, 'NOT_FOUND')
@@ -145,7 +160,9 @@ export const POST = withApi(async (req) => {
     return fail('Candidate email is missing. Add candidate email before sending interview invite.', 400, 'VALIDATION_ERROR')
   }
 
-  const employeeIds = requestedInterviewers.map((i) => i.employeeId).filter(Boolean)
+  const employeeIds = uniqueInterviewerIds
+  const employees = await Employee.find({ _id: { $in: employeeIds }, tenantId, status: 'ACTIVE' }).select('firstName lastName email role').lean()
+  if (employees.length !== employeeIds.length) return fail('One or more selected interviewers are no longer active.', 400, 'VALIDATION_ERROR')
   const availability = employeeIds.length ? await checkAvailability(tenantId, employeeIds, body.date, body.startTime, body.endTime) : {}
   const conflictCount = Object.values(availability).filter((a) => !a.available).length
 
@@ -205,15 +222,30 @@ export const POST = withApi(async (req) => {
   }
 
   if (employeeIds.length) {
-    const employees = await Employee.find({ _id: { $in: employeeIds }, tenantId }).select('firstName lastName')
     const employeeById = new Map(employees.map((e) => [String(e._id), e]))
-    await InterviewPanelMember.insertMany(requestedInterviewers.map((p) => ({
+    const panelMembers = await InterviewPanelMember.insertMany(employeeIds.map((employeeId, index) => ({
       tenantId,
       interviewId: interview._id,
-      employeeId: p.employeeId,
-      employeeName: employeeById.get(String(p.employeeId)) ? `${employeeById.get(String(p.employeeId)).firstName} ${employeeById.get(String(p.employeeId)).lastName}` : null,
-      role: p.role === PANEL_ROLE.PRIMARY ? PANEL_ROLE.PRIMARY : PANEL_ROLE.PANELIST,
+      employeeId,
+      employeeName: `${employeeById.get(String(employeeId)).firstName} ${employeeById.get(String(employeeId)).lastName}`.trim(),
+      role: requestedInterviewers.find((item) => String(item.employeeId) === String(employeeId))?.role === PANEL_ROLE.PRIMARY || index === 0 ? PANEL_ROLE.PRIMARY : PANEL_ROLE.PANELIST,
+      assignmentStatus: 'PENDING',
+      notifiedAt: new Date(),
     })))
+    await Promise.all(panelMembers.map((member) => {
+      const employee = employeeById.get(String(member.employeeId))
+      return createNotification({
+        userId: member.employeeId,
+        targetRole: employee.role || 'EMPLOYEE',
+        tenant: tenantId,
+        title: 'Interview assignment requires your response',
+        message: `You have been assigned to interview ${application.candidateId.firstName || ''} ${application.candidateId.lastName || ''} for ${application.jobId.publicTitle || application.jobId.jobTitle || 'an open position'} on ${new Date(body.date).toLocaleDateString('en-IN')} at ${body.startTime}.`,
+        type: 'warning',
+        category: 'interview',
+        link: '/notifications',
+        metadata: { kind: 'INTERVIEW_ASSIGNMENT', decision: 'PENDING', interviewId: String(interview._id), panelMemberId: String(member._id) },
+      })
+    }))
   }
 
   await InterviewScheduleHistory.create({
@@ -244,7 +276,13 @@ export const POST = withApi(async (req) => {
   if (isEarlyStage) {
     const stages = await JobPipelineStage.find({ tenantId, jobId: application.jobId._id || application.jobId, isActive: true }).sort({ order: 1 })
     const roundStage = stages.find(s => s.name?.toLowerCase() === body.roundName?.toLowerCase())
-    const interviewStage = roundStage || stages.find(s => s.category === PIPELINE_STAGE_CATEGORY.INTERVIEW || /interview|round/i.test(s.name || ''))
+    // Pipeline category is authoritative for custom stage names. A matching
+    // round name is used only when it is itself an interview stage.
+    const namedInterviewStage = roundStage?.category === PIPELINE_STAGE_CATEGORY.INTERVIEW ? roundStage : null
+    const interviewStage = namedInterviewStage
+      || stages.find((stage) => stage.category === PIPELINE_STAGE_CATEGORY.INTERVIEW)
+      || roundStage
+      || stages.find((stage) => /interview|round/i.test(stage.name || ''))
     if (interviewStage) {
       const fromStageId = application.currentStage
       const fromStageName = application.currentStageName

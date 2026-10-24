@@ -10,6 +10,10 @@ const InterviewPanelMemberSchema = new mongoose.Schema(
     employeeName: { type: String, default: null }, // denormalized for fast list rendering
 
     role: { type: String, enum: PANEL_ROLE_LIST, required: true },
+    assignmentStatus: { type: String, enum: ['PENDING', 'ACCEPTED', 'REJECTED'], default: 'PENDING' },
+    respondedAt: { type: Date, default: null },
+    responseComment: { type: String, default: null },
+    notifiedAt: { type: Date, default: null },
     attendanceStatus: { type: String, enum: ATTENDANCE_STATUS_LIST, default: ATTENDANCE_STATUS.PENDING },
     feedbackStatus: { type: String, enum: FEEDBACK_STATUS_LIST, default: FEEDBACK_STATUS.PENDING },
 

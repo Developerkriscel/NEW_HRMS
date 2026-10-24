@@ -88,6 +88,7 @@ const PreboardingSchema = new mongoose.Schema(
     conversionError: { type: String, default: null },
     convertedEmployeeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', default: null },
     employeeLoginEmail: { type: String, default: null },
+    employeePasswordHash: { type: String, default: null, select: false },
     employeePasswordConfiguredAt: { type: Date, default: null },
 
     activityLog: [ActivityEntrySchema],

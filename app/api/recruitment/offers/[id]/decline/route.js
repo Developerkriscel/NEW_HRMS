@@ -7,9 +7,14 @@ import { logAction } from '@/lib/audit'
 import { OFFER_STATUS, OFFER_MANAGE_ROLES, OFFER_CANDIDATE_ACTION, OFFER_DECLINE_REASONS, canManageOffers } from '@/lib/offerConstants'
 import { getActorName } from '@/lib/candidateHelpers'
 import { ACTIVITY_ENTRY_TYPE } from '@/lib/candidateConstants'
+import { PIPELINE_STAGE_CATEGORY } from '@/lib/jobConstants'
+import { STAGE_HISTORY_ACTION } from '@/lib/pipelineConstants'
+import { applyStageMove, recordStageHistory } from '@/lib/pipelineHelpers'
 import Offer from '@/models/Offer'
 import Application from '@/models/Application'
 import OfferCandidateAction from '@/models/OfferCandidateAction'
+import ApplicationStageHistory from '@/models/ApplicationStageHistory'
+import JobPipelineStage from '@/models/JobPipelineStage'
 
 const DECLINABLE = [OFFER_STATUS.SENT, OFFER_STATUS.VIEWED]
 
@@ -52,7 +57,35 @@ export const POST = withApi(async (req, { params }) => {
   })
 
   const application = await Application.findOne({ _id: offer.applicationId, tenantId, deleted: false })
+  let restoredStage = null
   if (application) {
+    const actorName = await getActorName(session)
+    const recentMoves = await ApplicationStageHistory.find({
+      tenantId,
+      applicationId: application._id,
+      action: STAGE_HISTORY_ACTION.MOVED,
+    }).sort({ createdAt: -1 }).limit(2).lean()
+    const previousMove = recentMoves.find((item) => String(item.toStageId || '') !== String(application.currentStage || '')) || recentMoves[1]
+    const previousStage = previousMove?.toStageId
+      ? await JobPipelineStage.findOne({ _id: previousMove.toStageId, tenantId, jobId: application.jobId, isActive: true })
+      : null
+    if (previousStage && String(application.currentStage) !== String(previousStage._id)) {
+      const move = applyStageMove(application, previousStage, { comment: 'Offer declined - returned to previous pipeline stage', actorName })
+      restoredStage = previousStage
+      await recordStageHistory({
+        tenantId,
+        application,
+        fromStageId: move.fromStageId,
+        toStageId: previousStage._id,
+        fromStageName: move.fromStageName,
+        toStageName: previousStage.name,
+        action: STAGE_HISTORY_ACTION.MOVED,
+        comment: 'Offer declined - returned to previous pipeline stage',
+        session,
+      })
+    }
+    application.readyForOffer = false
+    application.selectionStatus = restoredStage?.category === PIPELINE_STAGE_CATEGORY.SELECTED ? 'SELECTED' : null
     application.activityLog.push({
       type: ACTIVITY_ENTRY_TYPE.STATUS_CHANGED,
       message: `Offer declined — ${reason}`,
@@ -70,5 +103,9 @@ export const POST = withApi(async (req, { params }) => {
     req,
   })
 
-  return ok({ offer }, 'Offer declined')
+  return ok({ offer, stage: restoredStage ? {
+    _id: restoredStage._id,
+    name: restoredStage.name,
+    category: restoredStage.category,
+  } : null }, 'Offer declined')
 })

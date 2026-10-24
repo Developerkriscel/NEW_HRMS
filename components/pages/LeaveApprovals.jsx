@@ -12,6 +12,8 @@ export function LeaveApprovals({ title = 'Leave Approvals', subtitle = 'Pending 
   const [leaves, setLeaves] = useState([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState(null)
+  const [savingId, setSavingId] = useState('')
+  const [error, setError] = useState('')
 
   function load() {
     setLoading(true)
@@ -22,14 +24,32 @@ export function LeaveApprovals({ title = 'Leave Approvals', subtitle = 'Pending 
   useEffect(() => { load() }, [])
 
   async function approve(id) {
-    await leaveApi.approve(id, '')
-    setSelected(null)
-    load()
+    if (savingId) return
+    setSavingId(id)
+    setError('')
+    try {
+      await leaveApi.approve(id, '')
+      setSelected(null)
+      await load()
+    } catch (err) {
+      setError(err.response?.data?.message || 'Unable to approve this leave request.')
+    } finally {
+      setSavingId('')
+    }
   }
   async function reject(id) {
-    await leaveApi.reject(id, 'Rejected')
-    setSelected(null)
-    load()
+    if (savingId) return
+    setSavingId(id)
+    setError('')
+    try {
+      await leaveApi.reject(id, 'Rejected')
+      setSelected(null)
+      await load()
+    } catch (err) {
+      setError(err.response?.data?.message || 'Unable to reject this leave request.')
+    } finally {
+      setSavingId('')
+    }
   }
 
   return (
@@ -65,17 +85,19 @@ export function LeaveApprovals({ title = 'Leave Approvals', subtitle = 'Pending 
                 <button onClick={() => setSelected(l)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900">
                   <Eye className="h-3.5 w-3.5" /> View
                 </button>
-                <button onClick={() => approve(l._id)} className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-extrabold text-emerald-700 hover:bg-emerald-100">
-                  Accept
+                <button onClick={() => approve(l._id)} disabled={!!savingId} className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-extrabold text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50">
+                  {savingId === l._id ? 'Saving...' : 'Accept'}
                 </button>
-                <button onClick={() => reject(l._id)} className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-extrabold text-red-700 hover:bg-red-100">
-                  Reject
+                <button onClick={() => reject(l._id)} disabled={!!savingId} className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-extrabold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50">
+                  {savingId === l._id ? 'Saving...' : 'Reject'}
                 </button>
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {error ? <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">{error}</p> : null}
 
       {selected && (
         <Portal>

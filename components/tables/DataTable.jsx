@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { ChevronUp, ChevronDown, Search } from 'lucide-react'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
@@ -13,7 +13,7 @@ function collectSearchText(value) {
   return ''
 }
 
-export function DataTable({
+export const DataTable = memo(function DataTable({
   columns,
   data = [],
   isLoading = false,
@@ -30,21 +30,28 @@ export function DataTable({
   const [sortKey, setSortKey] = useState(null)
   const [sortDir, setSortDir] = useState('asc')
   const [page, setPage] = useState(1)
-  const filtered = data.filter((row) => {
-    if (!search) return true
-    return collectSearchText(row).toLowerCase().includes(search.toLowerCase())
-  })
+  const { sorted, paginated, totalPages } = useMemo(() => {
+    const searchTerm = search.trim().toLowerCase()
+    const filtered = data.filter((row) => {
+      if (!searchTerm) return true
+      return collectSearchText(row).toLowerCase().includes(searchTerm)
+    })
 
-  const sorted = disableSorting ? filtered : [...filtered].sort((a, b) => {
-    if (!sortKey) return 0
-    const aVal = a[sortKey]
-    const bVal = b[sortKey]
-    const cmp = String(aVal || '').localeCompare(String(bVal || ''))
-    return sortDir === 'asc' ? cmp : -cmp
-  })
+    const nextSorted = disableSorting || !sortKey
+      ? filtered
+      : [...filtered].sort((a, b) => {
+        const aVal = a[sortKey]
+        const bVal = b[sortKey]
+        const cmp = String(aVal || '').localeCompare(String(bVal || ''))
+        return sortDir === 'asc' ? cmp : -cmp
+      })
 
-  const totalPages = Math.ceil(sorted.length / pageSize)
-  const paginated = sorted.slice((page - 1) * pageSize, page * pageSize)
+    return {
+      sorted: nextSorted,
+      paginated: nextSorted.slice((page - 1) * pageSize, page * pageSize),
+      totalPages: Math.ceil(nextSorted.length / pageSize),
+    }
+  }, [data, disableSorting, page, pageSize, search, sortDir, sortKey])
 
   useEffect(() => {
     setPage(1)
@@ -197,4 +204,4 @@ export function DataTable({
       )}
     </div>
   )
-}
+})

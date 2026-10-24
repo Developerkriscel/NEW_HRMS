@@ -17,9 +17,9 @@ import { adaptPreboardingRecord } from './onboardingRecordAdapter'
 const TABS = [
   { id: 'overview', label: 'Overview', icon: User },
   { id: 'employee_details', label: 'Employee Details', icon: Briefcase },
-  { id: 'tasks', label: 'Tasks', icon: ListTodo },
   { id: 'documents', label: 'Documents', icon: FileText },
   { id: 'joining', label: 'Joining & Config', icon: Settings },
+  { id: 'tasks', label: 'Final Checklist', icon: ListTodo },
   { id: 'activity', label: 'Activity', icon: Activity }
 ]
 
@@ -31,6 +31,7 @@ export function OnboardingDetailPage({ id }) {
   const [error, setError] = useState('')
   const [activeTab, setActiveTab] = useState('overview')
   const [isConvertModalOpen, setIsConvertModalOpen] = useState(false)
+  const [conversionMode, setConversionMode] = useState('convert')
   const hasLoadedRef = useRef(false)
 
   const loadRecord = useCallback(async ({ silent = false } = {}) => {
@@ -70,13 +71,13 @@ export function OnboardingDetailPage({ id }) {
   }
 
   const converted = record.status === 'COMPLETED' || record.conversionStatus === 'COMPLETED' || !!record.convertedEmployeeId
-  const conversionStageMilestones = new Set(['login-access', 'employee-created'])
+  const conversionStageMilestones = new Set(['employee-created'])
   const pendingTasks = Array.isArray(record.pendingMilestones)
     ? record.pendingMilestones.filter(t => !conversionStageMilestones.has(t.id)).length
     : record.tasks.filter(t => t.required && !conversionStageMilestones.has(t.id) && t.status !== 'COMPLETED').length
   const pendingDocs = record.documents.filter(d => d.required && d.status !== 'VERIFIED').length
   const totalPending = converted ? 0 : Math.max(pendingTasks, pendingDocs)
-  const canConvert = !converted && record.canConvert && record.status !== 'CANCELLED'
+  const canConvert = !converted && totalPending === 0 && record.status !== 'CANCELLED'
   const joiningDateText = record.joiningDate ? new Date(record.joiningDate).toLocaleDateString() : 'Not set'
 
   return (
@@ -124,7 +125,7 @@ export function OnboardingDetailPage({ id }) {
                 onClick={() => setIsConvertModalOpen(true)}
                 className={`${canConvert ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-emerald-500/25 border-emerald-500 hover:shadow-lg' : 'bg-slate-100 text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-500 cursor-not-allowed'} font-medium px-5 py-2.5 rounded-xl border flex items-center gap-2 justify-center w-full transition-all duration-300`}
               >
-                <CheckCircle2 className="w-4 h-4" /> {converted ? 'Converted' : 'Convert to Employee'}
+                <CheckCircle2 className="w-4 h-4" /> {converted ? 'Converted' : 'Convert & Setup Login'}
               </button>
               
               {!canConvert && record.status !== 'COMPLETED' && (
@@ -172,7 +173,7 @@ export function OnboardingDetailPage({ id }) {
               </div>
             )}
             {activeTab === 'employee_details' && <OnboardingEmployeeDetails record={record} onRefresh={refreshRecord} />}
-            {activeTab === 'tasks' && <OnboardingTasks record={record} onNavigate={setActiveTab} onConvert={() => setIsConvertModalOpen(true)} />}
+            {activeTab === 'tasks' && <OnboardingTasks record={record} onNavigate={setActiveTab} onConvert={(task) => { setConversionMode(task?.id === 'login-access' ? 'access' : 'convert'); setIsConvertModalOpen(true) }} />}
             {activeTab === 'documents' && <OnboardingDocuments record={record} onRefresh={refreshRecord} />}
             {activeTab === 'joining' && <OnboardingJoiningDetails record={record} onRefresh={refreshRecord} />}
             {activeTab === 'activity' && <OnboardingActivity record={record} />}
@@ -254,10 +255,10 @@ export function OnboardingDetailPage({ id }) {
         </div>
       </div>
 
-      <ConvertToEmployeeModal isOpen={isConvertModalOpen} onClose={() => {
+      <ConvertToEmployeeModal mode={conversionMode} isOpen={isConvertModalOpen} onClose={() => {
         setIsConvertModalOpen(false)
         refreshRecord()
-      }} record={record} />
+      }} onCompleted={refreshRecord} record={record} />
     </div>
   )
 }

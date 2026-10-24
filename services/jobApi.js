@@ -3,7 +3,7 @@ import api from './api'
 export const jobApi = {
   list: (params, config = {}) => api.get('/recruitment/jobs', { ...config, params }),
   create: (data) => api.post('/recruitment/jobs', data),
-  get: (id) => api.get(`/recruitment/jobs/${id}`),
+  get: (id, config = {}) => api.get(`/recruitment/jobs/${id}`, { timeout: 30000, ...config }),
   update: (id, data) => api.patch(`/recruitment/jobs/${id}`, data),
   open: (id) => api.post(`/recruitment/jobs/${id}/open`),
   pause: (id, reason) => api.post(`/recruitment/jobs/${id}/pause`, { reason }),

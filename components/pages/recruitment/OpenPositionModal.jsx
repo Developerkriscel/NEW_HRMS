@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Briefcase, ChevronRight, Check } from 'lucide-react'
+import { X, Briefcase, ChevronRight, Check, Sparkles, Loader2 } from 'lucide-react'
 import { Portal } from '@/components/common/Portal'
+import api from '@/services/api'
 
 const STEPS = [
   'Position Details',
@@ -12,9 +13,27 @@ const STEPS = [
   'Status'
 ]
 
-export function OpenPositionModal({ onClose, onSave, initialData, options = {} }) {
+function AiWriteButton({ section, aiWriting, onWrite }) {
+  const writing = aiWriting === section
+  return (
+    <button
+      type="button"
+      onClick={() => onWrite(section)}
+      disabled={Boolean(aiWriting)}
+      title={`Generate ${section} with AI`}
+      className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-bold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-indigo-900/60 dark:bg-indigo-950/30 dark:text-indigo-300"
+    >
+      {writing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+      {writing ? 'Writing...' : 'AI Write'}
+    </button>
+  )
+}
+
+export function OpenPositionModal({ onClose, onSave, onAutoSave, initialData, options = {} }) {
   const [currentStep, setCurrentStep] = useState(0)
   const [saving, setSaving] = useState(false)
+  const [aiWriting, setAiWriting] = useState('')
+  const [aiError, setAiError] = useState('')
   
   // Basic form state
   const [form, setForm] = useState(initialData ? {
@@ -39,6 +58,40 @@ export function OpenPositionModal({ onClose, onSave, initialData, options = {} }
   const departments = options.departments || []
   const branches = options.branches || []
   const employees = options.employees || []
+
+  const writeWithAi = async (section) => {
+    if (aiWriting) return
+    const currentText = form[section] || ''
+    if (currentText.trim() && typeof window !== 'undefined' && !window.confirm('Replace the existing text with a new AI draft?')) return
+
+    setAiWriting(section)
+    setAiError('')
+    try {
+      const response = await api.post('/recruitment/jobs/ai-writer', {
+        section,
+        currentText,
+        title: form.title,
+        department: form.department,
+        jobType: form.jobType,
+        employmentType: form.employmentType,
+        workMode: form.workMode,
+        location: form.location,
+        experience: form.experience,
+        requiredSkills: form.requiredSkills,
+        preferredSkills: form.preferredSkills,
+        education: form.education,
+      })
+      const text = response.data?.data?.text || response.data?.text
+      if (!text) throw new Error('The AI provider returned empty content')
+      const nextForm = { ...form, [section]: text }
+      setForm(nextForm)
+      if (onAutoSave) await onAutoSave(nextForm)
+    } catch (error) {
+      setAiError(error.response?.data?.message || error.message || 'Unable to generate content right now')
+    } finally {
+      setAiWriting('')
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -126,28 +179,53 @@ export function OpenPositionModal({ onClose, onSave, initialData, options = {} }
         return (
           <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300">
             <div className="space-y-1.5">
-              <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Job Description <span className="text-rose-500">*</span></label>
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Job Description <span className="text-rose-500">*</span></label>
+                <button type="button" onClick={() => writeWithAi('description')} disabled={!!aiWriting} title="Generate job description with AI" className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60">
+                  {aiWriting === 'description' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                  {aiWriting === 'description' ? 'Writing...' : 'AI Write'}
+                </button>
+              </div>
               <textarea required rows={3} className="input-field" value={form.description} onChange={e => setForm({...form, description: e.target.value})} />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Responsibilities</label>
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Responsibilities</label>
+                <button type="button" onClick={() => writeWithAi('responsibilities')} disabled={!!aiWriting} title="Generate responsibilities with AI" className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60">
+                  {aiWriting === 'responsibilities' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                  {aiWriting === 'responsibilities' ? 'Writing...' : 'AI Write'}
+                </button>
+              </div>
               <textarea rows={3} className="input-field" value={form.responsibilities} onChange={e => setForm({...form, responsibilities: e.target.value})} />
             </div>
+            {aiError ? <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{aiError}</p> : null}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div className="space-y-1.5">
-                <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Required Skills <span className="text-rose-500">*</span></label>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Required Skills <span className="text-rose-500">*</span></label>
+                  <AiWriteButton section="requiredSkills" aiWriting={aiWriting} onWrite={writeWithAi} />
+                </div>
                 <input required className="input-field" placeholder="e.g. React, Node.js" value={form.requiredSkills} onChange={e => setForm({...form, requiredSkills: e.target.value})} />
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Preferred Skills</label>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Preferred Skills</label>
+                  <AiWriteButton section="preferredSkills" aiWriting={aiWriting} onWrite={writeWithAi} />
+                </div>
                 <input className="input-field" value={form.preferredSkills} onChange={e => setForm({...form, preferredSkills: e.target.value})} />
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Experience Required</label>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Experience Required</label>
+                  <AiWriteButton section="experience" aiWriting={aiWriting} onWrite={writeWithAi} />
+                </div>
                 <input className="input-field" placeholder="e.g. 3-5 Years" value={form.experience} onChange={e => setForm({...form, experience: e.target.value})} />
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Education / Qualification</label>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Education / Qualification</label>
+                  <AiWriteButton section="education" aiWriting={aiWriting} onWrite={writeWithAi} />
+                </div>
                 <input className="input-field" value={form.education} onChange={e => setForm({...form, education: e.target.value})} />
               </div>
             </div>

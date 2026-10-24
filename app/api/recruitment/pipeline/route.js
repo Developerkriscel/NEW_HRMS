@@ -21,6 +21,7 @@ import Employee from '@/models/Employee'
 import Interview from '@/models/Interview'
 import CandidateAssessment from '@/models/CandidateAssessment'
 import CompensationProposal from '@/models/CompensationProposal'
+import Offer from '@/models/Offer'
 
 // GET ?jobId=... — the Kanban board for one job. A specific job is
 // required (matches the spec's own "Job: [Backend Developer v]" mock —
@@ -33,26 +34,47 @@ export const GET = withApi(async (req) => {
   const { searchParams } = new URL(req.url)
   const jobId = searchParams.get('jobId')
   if (!jobId) return fail('jobId is required', 400, 'VALIDATION_ERROR')
+  const page = Math.max(0, Number(searchParams.get('page') || 0))
+  const size = Math.min(100, Math.max(1, Number(searchParams.get('size') || 50)))
+  const usePagination = searchParams.has('page') || searchParams.has('size')
 
   const job = await Job.findOne({ _id: jobId, tenantId, deleted: false })
   if (!job) return fail('Job not found', 404, 'NOT_FOUND')
 
   const stages = await JobPipelineStage.find({ tenantId, jobId, isActive: true }).sort({ order: 1 }).lean()
 
-  const query = { tenantId, jobId, deleted: false, status: { $in: [APPLICATION_STATUS.ACTIVE, APPLICATION_STATUS.ON_HOLD] } }
+  const query = { tenantId, jobId, deleted: false, status: { $in: [APPLICATION_STATUS.ACTIVE, APPLICATION_STATUS.ON_HOLD, APPLICATION_STATUS.HIRED] } }
 
   const recruiterFilter = searchParams.get('recruiter')
   if (recruiterFilter) query.assignedRecruiterId = recruiterFilter
   const sourceFilter = searchParams.get('source')
   if (sourceFilter) query.source = sourceFilter
 
-  let applications = await Application.find(query).populate('candidateId').populate('assignedRecruiterId', 'firstName lastName')
+  const candidateProjection = 'candidateCode firstName lastName email phone totalExperience expectedCtc noticePeriod currentLocation'
+  const hasPostFilter = ['experienceMin', 'aiMatchMin', 'tag', 'search', 'location', 'noticePeriodMax']
+    .some((name) => searchParams.get(name))
+  const applicationQuery = Application.find(query)
+    .select('applicationCode candidateId jobId source appliedAt stageEnteredAt currentStage currentStageName status assignedRecruiterId holdUntil')
+    .populate('candidateId', candidateProjection)
+    .populate('assignedRecruiterId', 'firstName lastName')
+    .sort({ appliedAt: -1, _id: -1 })
+  if (usePagination && !hasPostFilter) applicationQuery.skip(page * size).limit(size)
+  let applications = await applicationQuery.lean()
+  let totalElements = hasPostFilter ? null : await Application.countDocuments(query)
 
   const candidateIds = applications.map((a) => a.candidateId?._id).filter(Boolean)
+  const applicationIds = applications.map((a) => a._id)
   const [matches, tagAssignments] = await Promise.all([
     CandidateJobMatch.find({ tenantId, jobId }).lean(),
     CandidateTagAssignment.find({ tenantId, candidateId: { $in: candidateIds } }).populate('tagId', 'name').lean(),
   ])
+  const activeOffers = await Offer.find({
+    tenantId,
+    applicationId: { $in: applicationIds },
+    deleted: false,
+    status: { $in: ['SENT', 'VIEWED', 'ACCEPTED'] },
+  }).select('applicationId status sentAt acceptedAt').lean()
+  const offerByApplication = new Map(activeOffers.map((offer) => [String(offer.applicationId), offer]))
   const matchByApplication = new Map(matches.map((m) => [String(m.applicationId), m]))
   const tagsByCandidate = new Map()
   for (const a of tagAssignments) {
@@ -96,7 +118,12 @@ export const GET = withApi(async (req) => {
     return true
   })
 
+  if (totalElements === null) totalElements = applications.length
+  if (usePagination && hasPostFilter) applications = applications.slice(page * size, page * size + size)
+
   const stageMap = new Map(stages.map((s) => [String(s._id), s]))
+  const hiredStage = stages.find((stage) => stage.category === PIPELINE_STAGE_CATEGORY.HIRED || /hired/i.test(stage.name || ''))
+  const offerStage = stages.find((stage) => stage.category === PIPELINE_STAGE_CATEGORY.OFFER || /offer/i.test(stage.name || ''))
 
   // Which applications already have a live (non-cancelled) interview booked —
   // used to flag Interview-stage cards that were moved here but never
@@ -163,7 +190,17 @@ export const GET = withApi(async (req) => {
   for (const a of applications) {
     const candidate = a.candidateId
     const match = matchByApplication.get(String(a._id))
-    const stage = stageMap.get(String(a.currentStage))
+    const offer = offerByApplication.get(String(a._id))
+    const lifecycleStatus = offer?.status === 'ACCEPTED' || a.status === APPLICATION_STATUS.HIRED
+      ? APPLICATION_STATUS.HIRED
+      : offer && ['SENT', 'VIEWED'].includes(offer.status)
+        ? APPLICATION_STATUS.ACTIVE
+        : a.status
+    const stage = lifecycleStatus === APPLICATION_STATUS.HIRED && hiredStage
+      ? hiredStage
+      : offer && ['SENT', 'VIEWED'].includes(offer.status) && offerStage
+        ? offerStage
+        : stageMap.get(String(a.currentStage))
     const aging = computeStageAging(a, stage?.category)
     const latestAssessment = stage?.category === PIPELINE_STAGE_CATEGORY.ASSESSMENT ? latestAssessmentByApplication.get(String(a._id)) : null
     const latestCompensation = stage?.category === PIPELINE_STAGE_CATEGORY.SELECTED ? latestCompensationByApplication.get(String(a._id)) : null
@@ -180,7 +217,8 @@ export const GET = withApi(async (req) => {
       experience: candidate.totalExperience ?? null,
       noticePeriod: candidate.noticePeriod || null,
       source: a.source,
-      status: a.status,
+      status: lifecycleStatus,
+      offerStatus: offer?.status || null,
       appliedAt: a.appliedAt,
       stageEnteredAt: a.stageEnteredAt,
       shortlistedAt: shortlistedAtByApplication.get(String(a._id)) || null,
@@ -212,7 +250,11 @@ export const GET = withApi(async (req) => {
       } : null,
     }
 
-    if (byStage.has(String(a.currentStage))) byStage.get(String(a.currentStage)).push(card)
+    // A hired application may still contain its previous Selected/Offer stage
+    // for audit purposes. The lifecycle status must route it to Hired so one
+    // candidate cannot appear in two terminal lanes.
+    const targetStage = stage
+    if (targetStage && byStage.has(String(targetStage._id))) byStage.get(String(targetStage._id)).push(card)
     else unassignedCards.push(card)
   }
 
@@ -234,7 +276,8 @@ export const GET = withApi(async (req) => {
     job: { _id: job._id, jobCode: job.jobCode, jobTitle: job.jobTitle, publicTitle: job.publicTitle },
     stages: stagesWithCards,
     unassigned: unassignedCards,
-    metrics: { totalActive: applications.length, countsByStage, avgDaysInStage },
+    metrics: { totalActive: totalElements, countsByStage, avgDaysInStage },
+    pagination: { page, size, totalElements, hasMore: usePagination && (page + 1) * size < totalElements },
     recruiters: recruiters.map((r) => ({ _id: r._id, name: `${r.firstName} ${r.lastName}` })),
   })
 })

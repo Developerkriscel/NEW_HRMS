@@ -4,14 +4,15 @@ import { useRouter } from 'next/navigation'
 import { Portal } from '@/components/common/Portal'
 import { preboardingApi } from '@/services/preboardingApi'
 
-export function ConvertToEmployeeModal({ isOpen, onClose, record }) {
+export function ConvertToEmployeeModal({ isOpen, onClose, onCompleted, record, mode = 'convert' }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
   const [conversionResult, setConversionResult] = useState(null)
-  const [loginEmail, setLoginEmail] = useState(record?.candidate?.email || '')
+  const [loginEmail, setLoginEmail] = useState(record?.loginEmail || record?.candidate?.email || '')
   const [initialPassword, setInitialPassword] = useState('')
+  const setupOnly = mode === 'access'
 
   if (!isOpen || !record) return null
 
@@ -29,11 +30,28 @@ export function ConvertToEmployeeModal({ isOpen, onClose, record }) {
       setLoading(false)
       setSuccess(true)
     } catch (err) {
+      const validationFields = err.response?.data?.data?.fields
+      const validationMessage = validationFields ? Object.values(validationFields).join(', ') : ''
       const message = err.response?.data?.message || 'Failed to create employee from onboarding.'
       const missing = err.response?.data?.data?.missingRequired || []
       setError(missing.length
         ? `${message}: ${missing.map((item) => item.label || item.key).join(', ')}`
-        : message)
+        : validationMessage ? `${message}: ${validationMessage}` : message)
+      setLoading(false)
+    }
+  }
+
+  const handleSetupAccess = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      await preboardingApi.setupAccess(record.id, { loginEmail, initialPassword })
+      setConversionResult({ accessOnly: true, email: loginEmail })
+      setSuccess(true)
+      onCompleted?.()
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to save login access.')
+    } finally {
       setLoading(false)
     }
   }
@@ -48,32 +66,32 @@ export function ConvertToEmployeeModal({ isOpen, onClose, record }) {
               <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4">
                 <CheckCircle2 className="w-8 h-8" />
               </div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Employee Created Successfully</h2>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">{conversionResult?.accessOnly ? 'Login Access Saved' : 'Employee Created Successfully'}</h2>
               <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-                Employee master has been created in MongoDB and will now appear in All Employees.
+                {conversionResult?.accessOnly ? 'Login ID and password are saved. You can convert this profile when the remaining checklist items are complete.' : 'Employee master has been created in MongoDB and will now appear in All Employees.'}
               </p>
 
               <div className="space-y-3 text-left mb-8">
-                <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl p-3 flex justify-between items-center">
+                {!conversionResult?.accessOnly && <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl p-3 flex justify-between items-center">
                   <span className="text-xs font-semibold text-slate-500 uppercase">Employee ID</span>
                   <span className="font-mono text-sm font-bold text-slate-900 dark:text-white">{conversionResult?.employee?.employeeCode || '-'}</span>
-                </div>
+                </div>}
                 <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl p-3 flex justify-between items-center">
                   <span className="text-xs font-semibold text-slate-500 uppercase">Login Email</span>
                   <span className="text-sm font-medium text-slate-900 dark:text-white">{conversionResult?.employee?.email || record.candidate.email}</span>
                 </div>
-                <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl p-3 flex justify-between items-center">
+                {!conversionResult?.accessOnly && <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl p-3 flex justify-between items-center">
                   <span className="text-xs font-semibold text-slate-500 uppercase">Password</span>
                   <span className="font-mono text-sm font-bold text-slate-900 dark:text-white">{conversionResult?.tempPassword || (conversionResult?.alreadyCompleted ? 'Already created' : '-')}</span>
-                </div>
+                </div>}
               </div>
 
               <div className="flex gap-3">
                 <button onClick={() => {
                   onClose()
-                  router.push('/hr/employees')
+                  if (!conversionResult?.accessOnly) router.push('/hr/employees')
                 }} className="btn-primary w-full justify-center">
-                  View in Employees
+                  {conversionResult?.accessOnly ? 'Done' : 'View in Employees'}
                 </button>
               </div>
             </div>
@@ -81,7 +99,7 @@ export function ConvertToEmployeeModal({ isOpen, onClose, record }) {
             <>
               <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
                 <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  Convert to Employee
+                  {setupOnly ? 'Setup Login Access' : 'Convert & Setup Login'}
                 </h2>
                 <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-full transition-colors">
                   <X className="w-5 h-5" />
@@ -98,7 +116,7 @@ export function ConvertToEmployeeModal({ isOpen, onClose, record }) {
                   <AlertTriangle className="w-5 h-5 shrink-0" />
                   <div className="text-sm">
                     <p className="font-bold mb-1">Confirm action</p>
-                    <p>All mandatory onboarding requirements have been completed. This action will create a permanent active employee profile for this candidate.</p>
+                    <p>{setupOnly ? 'Save the employee login email and initial password now. Employee creation can be completed later.' : 'Enter the login credentials below. This action will create the employee profile and save its login access.'}</p>
                   </div>
                 </div>
 
@@ -140,7 +158,7 @@ export function ConvertToEmployeeModal({ isOpen, onClose, record }) {
                     </div>
                     <div>
                       <h4 className="font-bold text-slate-900 dark:text-white">Login ID & Password Setup</h4>
-                      <p className="text-xs font-medium text-slate-500">These credentials will be saved on the new employee account.</p>
+                      <p className="text-xs font-medium text-slate-500">These credentials will be saved securely on the employee account.</p>
                     </div>
                   </div>
                   <div className="space-y-3">
@@ -161,7 +179,7 @@ export function ConvertToEmployeeModal({ isOpen, onClose, record }) {
                         <KeyRound className="h-3.5 w-3.5" /> Initial Password
                       </span>
                       <input
-                        type="text"
+                        type="password"
                         value={initialPassword}
                         onChange={(event) => setInitialPassword(event.target.value)}
                         className="input-field font-mono"
@@ -174,8 +192,8 @@ export function ConvertToEmployeeModal({ isOpen, onClose, record }) {
 
               <div className="p-6 pt-0 flex gap-3">
                 <button onClick={onClose} className="btn-secondary w-full justify-center">Cancel</button>
-                <button onClick={handleConvert} disabled={loading || !loginEmail || initialPassword.length < 8} className="btn-primary w-full justify-center bg-gradient-to-r from-emerald-500 to-teal-600 shadow-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-60">
-                  {loading ? 'Creating...' : <><CheckCircle2 className="w-4 h-4" /> Create Employee</>}
+                <button onClick={setupOnly ? handleSetupAccess : handleConvert} disabled={loading || !loginEmail || initialPassword.length < 8} className="btn-primary w-full justify-center bg-gradient-to-r from-emerald-500 to-teal-600 shadow-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-60">
+                  {loading ? 'Saving...' : <><CheckCircle2 className="w-4 h-4" /> {setupOnly ? 'Save Login Access' : 'Create Employee'}</>}
                 </button>
               </div>
             </>

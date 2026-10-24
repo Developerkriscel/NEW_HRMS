@@ -118,6 +118,10 @@ EmployeeSchema.index({ tenantId: 1, deleted: 1, status: 1 })
 EmployeeSchema.index({ tenantId: 1, deleted: 1, role: 1 })
 EmployeeSchema.index({ tenantId: 1, deleted: 1, createdAt: -1 })
 EmployeeSchema.index({ tenantId: 1, firstName: 1 })
+EmployeeSchema.index({ tenantId: 1, deleted: 1, firstName: 1 })
+EmployeeSchema.index({ tenantId: 1, deleted: 1, role: 1, firstName: 1 })
+EmployeeSchema.index({ tenantId: 1, deleted: 1, employmentType: 1, firstName: 1 })
+EmployeeSchema.index({ tenantId: 1, deleted: 1, reportingManager: 1, firstName: 1 })
 
 EmployeeSchema.methods.getFullName = function () {
   return `${this.firstName} ${this.lastName}`

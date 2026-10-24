@@ -11,6 +11,13 @@ import { tenantApi } from '@/services/tenantApi'
 
 const emptyForm = { name: '', description: '', price: 0, billingCycle: 'MONTHLY', employeeLimit: 50, storageLimitMb: 5120, apiQuota: 10000, integrationLimit: 3, gracePeriodDays: 7, trialDays: 14, featuresText: '' }
 
+const RECOMMENDED_PLANS = [
+  { name: 'Trial', description: 'Explore the core HR workspace before choosing a paid plan.', price: 0, billingCycle: 'MONTHLY', employeeLimit: 10, storageLimitMb: 1024, apiQuota: 2500, integrationLimit: 1, gracePeriodDays: 0, trialDays: 14, sortOrder: 1, features: ['Core HR', 'Employee Management', 'Attendance', 'Leave Management'] },
+  { name: 'Startup', description: 'Essential HR tools for small and growing teams.', price: 2999, billingCycle: 'MONTHLY', employeeLimit: 25, storageLimitMb: 5120, apiQuota: 10000, integrationLimit: 2, gracePeriodDays: 7, trialDays: 14, sortOrder: 2, features: ['Core HR', 'Employee Management', 'Attendance', 'Leave Management', 'Reports'] },
+  { name: 'Growth', description: 'A complete HR workspace for established teams.', price: 7999, billingCycle: 'MONTHLY', employeeLimit: 100, storageLimitMb: 20480, apiQuota: 50000, integrationLimit: 5, gracePeriodDays: 14, trialDays: 14, sortOrder: 3, features: ['Core HR', 'Attendance', 'Leave Management', 'Payroll', 'Recruitment', 'Reports'] },
+  { name: 'Enterprise', description: 'Advanced controls and capacity for larger organizations.', price: 19999, billingCycle: 'YEARLY', employeeLimit: -1, storageLimitMb: 102400, apiQuota: -1, integrationLimit: -1, gracePeriodDays: 30, trialDays: 30, sortOrder: 4, features: ['All Growth features', 'Advanced Payroll', 'Performance', 'Assets', 'Approvals', 'Audit Logs', 'Priority Support'] },
+]
+
 export default function PlansPage() {
   const router = useRouter()
   const hasPermission = useAuthStore((s) => s.hasPermission)
@@ -21,6 +28,7 @@ export default function PlansPage() {
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [actionLoading, setActionLoading] = useState('')
+  const [creatingRecommended, setCreatingRecommended] = useState(false)
   const [error, setError] = useState('')
 
   async function load() {
@@ -32,8 +40,23 @@ export default function PlansPage() {
       setPlans(res.data.data)
     } catch (err) {
       if (err.response?.status === 403) setForbidden(true)
+      else setError(err.response?.data?.message || 'Failed to load plans')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleCreateRecommendedPlans() {
+    if (!window.confirm('Create Startup, Growth, Business, and Custom plans in the database?')) return
+    setCreatingRecommended(true)
+    setError('')
+    try {
+      await tenantApi.createPlans(RECOMMENDED_PLANS)
+      await load()
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to create recommended plans')
+    } finally {
+      setCreatingRecommended(false)
     }
   }
   useEffect(() => {
@@ -99,9 +122,16 @@ export default function PlansPage() {
 
         </div>
         {hasPermission('plan.create') && (
-          <button className="btn-primary" onClick={() => setShowCreate(true)}>
-            <Plus className="w-4 h-4" /> Create Plan
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {!loading && plans.length === 0 && (
+              <button className="btn-secondary" onClick={handleCreateRecommendedPlans} disabled={creatingRecommended}>
+                <Layers className="w-4 h-4" /> {creatingRecommended ? 'Creating 4 Plans...' : 'Add 4 Plans'}
+              </button>
+            )}
+            <button className="btn-primary" onClick={() => setShowCreate(true)}>
+              <Plus className="w-4 h-4" /> Create Plan
+            </button>
+          </div>
         )}
       </div>
 
@@ -110,6 +140,13 @@ export default function PlansPage() {
       ) : (
         <>
         {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">{error}</div>}
+        {!plans.length && !error && (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center dark:border-slate-700 dark:bg-slate-900">
+            <Layers className="mx-auto h-8 w-8 text-slate-400" />
+            <p className="mt-3 text-sm font-bold text-slate-700 dark:text-slate-200">No subscription plans yet</p>
+            <p className="mt-1 text-xs font-medium text-slate-500">Create a plan manually or add the four recommended plans.</p>
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           {plans.map((plan) => (
             <div key={plan._id} className="bg-white dark:bg-slate-900 rounded-[28px] p-5 border border-slate-200/80 dark:border-slate-800 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)] flex flex-col hover:border-blue-500/30 transition-all duration-300">
