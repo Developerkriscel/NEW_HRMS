@@ -17,7 +17,7 @@ export const GET = withApi(async () => {
     date: { $gte: today, $lt: tomorrow },
     tenantId,
   })
-    .select('-checkInPhoto -checkOutPhoto')
+    .select('date checkInTime checkOutTime checkInPhoto checkOutPhoto checkInLatitude checkInLongitude checkOutLatitude checkOutLongitude workingMinutes breakMinutes status lateMark earlyLogout halfDay breaks locationPolicyStatus checkInLocationName checkOutLocationName checkInDistanceMeters checkInAllowedRadiusMeters verificationStatus')
     .lean()
 
   return ok(attendance || null)

@@ -120,18 +120,18 @@ export default function CompanySettingsPage() {
   const enabledModules = Object.entries(tenant?.features || {}).filter(([, enabled]) => enabled).map(([key]) => key)
 
   return (
-    <div className="animate-fade-in space-y-4 pb-12">
-      <div className="relative overflow-hidden rounded-[26px] border border-indigo-100/80 bg-gradient-to-r from-white via-indigo-50/60 to-blue-100/70 px-6 py-5 shadow-sm dark:border-indigo-900/50 dark:from-slate-900 dark:via-indigo-950/40 dark:to-blue-950/40">
-        <div className="absolute inset-y-0 right-0 w-1/3 bg-gradient-to-l from-blue-200/40 to-transparent dark:from-blue-500/10 pointer-events-none" />
-        <div className="relative z-10 group w-fit">
-          <p className="mb-1 text-[11px] font-extrabold uppercase tracking-[0.16em] text-indigo-500 dark:text-indigo-300">Workspace control center</p>
-          <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white transition-all duration-300 group-hover:text-indigo-700 dark:group-hover:text-indigo-200">Settings & Preferences</h1>
-          <div className="mt-3 h-1 w-16 rounded-full bg-gradient-to-r from-indigo-600 via-blue-500 to-cyan-400 transition-all duration-500 group-hover:w-28" />
+    <div className="animate-fade-in space-y-3.5 pb-10">
+      <div className="page-header">
+        <div>
+          <div className="relative z-10 group w-fit mb-2">
+            <h1 className="text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-900 via-indigo-700 to-blue-600 dark:from-indigo-200 dark:via-indigo-400 dark:to-blue-400 drop-shadow-sm transition-all duration-500 group-hover:scale-[1.02] origin-left">Settings & Preferences</h1>
+            <div className="h-1 w-12 rounded-full bg-gradient-to-r from-indigo-600 to-blue-500 mt-2 transition-all duration-500 group-hover:w-full opacity-70" />
+          </div>
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-6 items-start">
-        <div className="w-full md:w-72 flex-shrink-0 rounded-[24px] border border-slate-200/80 bg-gradient-to-b from-white to-slate-50/80 p-3 shadow-sm backdrop-blur-xl dark:border-slate-800 dark:from-slate-900 dark:to-slate-950/80 flex md:flex-col gap-1.5 overflow-x-auto pb-2 md:pb-3 hide-scrollbar relative md:sticky md:top-24 z-10">
+      <div className="flex flex-col items-start gap-5 md:flex-row">
+        <div className="relative z-10 flex w-full flex-shrink-0 gap-1.5 overflow-x-auto rounded-[22px] border border-slate-200/80 bg-gradient-to-b from-white to-slate-50/80 p-2.5 pb-2 shadow-sm backdrop-blur-xl hide-scrollbar dark:border-slate-800 dark:from-slate-900 dark:to-slate-950/80 md:sticky md:top-24 md:max-h-[calc(100vh-7rem)] md:w-64 md:flex-col md:overflow-y-auto md:pb-2">
           {MENU.map((item) => {
             const Icon = item.icon
             const isActive = activeTab === item.id
@@ -139,14 +139,14 @@ export default function CompanySettingsPage() {
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl text-sm font-bold transition-all duration-300 whitespace-nowrap relative overflow-hidden group ${
+                className={`flex items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-bold transition-all duration-300 whitespace-nowrap relative overflow-hidden group ${
                   isActive 
                     ? 'bg-gradient-to-r from-indigo-600 via-indigo-500 to-blue-600 text-white shadow-lg shadow-indigo-500/30 border border-indigo-500/50 scale-[1.02]'
                     : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/80 hover:text-indigo-600 dark:hover:text-indigo-400 border border-transparent hover:border-slate-200 dark:hover:border-slate-700'
                 }`}
               >
                 {isActive && <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent w-[200%] h-full skew-x-12 -translate-x-full group-hover:animate-[shimmer_2s_infinite]" />}
-                <span className={`relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all duration-300 ${isActive ? 'bg-white/20 text-white' : MENU_TONES[item.tone]}`}>
+                <span className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-all duration-300 ${isActive ? 'bg-white/20 text-white' : MENU_TONES[item.tone]}`}>
                   <Icon className="h-4 w-4" />
                 </span>
                 <span className="relative z-10">{item.label}</span>
@@ -156,9 +156,9 @@ export default function CompanySettingsPage() {
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 min-w-0 space-y-6 w-full">
+        <div className="flex-1 min-w-0 w-full space-y-5">
           {activeTab === 'profile' && (
-            <form onSubmit={handleSaveProfile} className="glass-panel animate-in fade-in slide-in-from-bottom-4 duration-500 rounded-[26px] p-8 border border-indigo-100/80 dark:border-slate-700/60 shadow-xl shadow-indigo-100/40 dark:shadow-none relative overflow-hidden bg-white/90 dark:bg-slate-900/90 backdrop-blur-2xl">
+            <form onSubmit={handleSaveProfile} className="glass-panel animate-in fade-in slide-in-from-bottom-4 duration-500 rounded-[24px] p-7 border border-indigo-100/80 dark:border-slate-700/60 shadow-xl shadow-indigo-100/40 dark:shadow-none relative overflow-hidden bg-white/90 dark:bg-slate-900/90 backdrop-blur-2xl">
               <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-500 via-blue-500 to-cyan-400 pointer-events-none" />
               <div className="mb-8 pb-5 border-b border-slate-200/60 dark:border-slate-700/60 relative z-10">
                 <h3 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-3">
@@ -181,7 +181,7 @@ export default function CompanySettingsPage() {
                 </div>
               )}
 
-              <div className="flex flex-col sm:flex-row gap-8 mb-8 items-start">
+              <div className="flex flex-col items-start gap-7 mb-7 sm:flex-row">
                 {tenant?.logoUrl ? (
                   <div className="relative group">
                     <img src={tenant.logoUrl} alt="Company logo" className="h-24 w-24 rounded-2xl object-cover shadow-md border-2 border-white dark:border-slate-800" onError={(e) => { e.target.style.display = 'none' }} />
@@ -246,7 +246,7 @@ export default function CompanySettingsPage() {
           )}
 
           {activeTab === 'hr' && (
-            <form onSubmit={handleSaveHrSettings} className="glass-panel animate-in fade-in slide-in-from-bottom-4 duration-500 rounded-3xl p-8 border border-white/40 dark:border-slate-700/50 relative overflow-hidden">
+            <form onSubmit={handleSaveHrSettings} className="glass-panel animate-in fade-in slide-in-from-bottom-4 duration-500 rounded-3xl p-7 border border-white/40 dark:border-slate-700/50 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
               <div className="mb-8 pb-5 border-b border-slate-200/50 dark:border-slate-700/50 relative z-10">
                 <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-3">
@@ -264,7 +264,7 @@ export default function CompanySettingsPage() {
                 </div>
               )}
               
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-7">
                 <label className="block group">
                   <span className="mb-2 block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider group-focus-within:text-blue-600 transition-colors">Employee ID Prefix</span>
                   <input className="input-field uppercase border border-transparent focus:border-blue-500/30" disabled={!canEdit} value={hrSettings.employeeIdPrefix} onChange={(e) => setHrSettings({ ...hrSettings, employeeIdPrefix: e.target.value.toUpperCase() })} />
@@ -324,7 +324,7 @@ export default function CompanySettingsPage() {
           )}
 
           {activeTab === 'subscription' && (
-            <div className="glass-panel rounded-3xl p-6 md:p-8 animate-in fade-in slide-in-from-bottom-4 duration-500 relative overflow-hidden border border-white/40 dark:border-slate-700/50">
+            <div className="glass-panel rounded-3xl p-5 md:p-7 animate-in fade-in slide-in-from-bottom-4 duration-500 relative overflow-hidden border border-white/40 dark:border-slate-700/50">
               <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 dark:bg-blue-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
               <div className="relative z-10">
                 <SubscriptionSection />
@@ -333,7 +333,7 @@ export default function CompanySettingsPage() {
           )}
 
           {activeTab === 'departments' && (
-            <div className="glass-panel rounded-3xl p-6 md:p-8 animate-in fade-in slide-in-from-bottom-4 duration-500 relative overflow-hidden border border-white/40 dark:border-slate-700/50">
+            <div className="glass-panel rounded-3xl p-5 md:p-7 animate-in fade-in slide-in-from-bottom-4 duration-500 relative overflow-hidden border border-white/40 dark:border-slate-700/50">
               <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 dark:bg-indigo-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
               <div className="relative z-10">
                 <DepartmentsSection />
@@ -342,7 +342,7 @@ export default function CompanySettingsPage() {
           )}
 
           {activeTab === 'branches' && (
-            <div className="glass-panel rounded-3xl p-6 md:p-8 animate-in fade-in slide-in-from-bottom-4 duration-500 relative overflow-hidden border border-white/40 dark:border-slate-700/50">
+            <div className="glass-panel rounded-3xl p-5 md:p-7 animate-in fade-in slide-in-from-bottom-4 duration-500 relative overflow-hidden border border-white/40 dark:border-slate-700/50">
               <div className="absolute top-0 right-0 w-64 h-64 bg-rose-500/10 dark:bg-rose-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
               <div className="relative z-10">
                 <BranchesSection />
@@ -351,7 +351,7 @@ export default function CompanySettingsPage() {
           )}
 
           {activeTab === 'shifts' && (
-            <div className="glass-panel rounded-3xl p-6 md:p-8 animate-in fade-in slide-in-from-bottom-4 duration-500 relative overflow-hidden border border-white/40 dark:border-slate-700/50">
+            <div className="glass-panel rounded-3xl p-5 md:p-7 animate-in fade-in slide-in-from-bottom-4 duration-500 relative overflow-hidden border border-white/40 dark:border-slate-700/50">
               <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 dark:bg-amber-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
               <div className="relative z-10">
                 <ShiftsSection />
@@ -360,7 +360,7 @@ export default function CompanySettingsPage() {
           )}
 
           {activeTab === 'holidays' && (
-            <div className="glass-panel rounded-3xl p-6 md:p-8 animate-in fade-in slide-in-from-bottom-4 duration-500 relative overflow-hidden border border-white/40 dark:border-slate-700/50">
+            <div className="glass-panel rounded-3xl p-5 md:p-7 animate-in fade-in slide-in-from-bottom-4 duration-500 relative overflow-hidden border border-white/40 dark:border-slate-700/50">
               <div className="absolute top-0 right-0 w-64 h-64 bg-pink-500/10 dark:bg-pink-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
               <div className="relative z-10">
                 <HolidaysSection />
@@ -379,8 +379,8 @@ export default function CompanySettingsPage() {
           )}
 
           {activeTab === 'modules_legacy' && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="glass-panel rounded-3xl p-8 border border-white/40 dark:border-slate-700/50 relative overflow-hidden">
+            <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="glass-panel rounded-3xl p-7 border border-white/40 dark:border-slate-700/50 relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
                 <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-4 relative z-10">Enabled Modules</h3>
                 <div className="flex flex-wrap gap-2.5 relative z-10">
@@ -393,7 +393,7 @@ export default function CompanySettingsPage() {
                 <p className="text-sm text-slate-500 mt-6 relative z-10 font-medium">Enabling additional modules requires a plan upgrade — contact your platform administrator.</p>
               </div>
 
-              <div className="glass-panel rounded-3xl p-8 border border-white/40 dark:border-slate-700/50">
+              <div className="glass-panel rounded-3xl p-7 border border-white/40 dark:border-slate-700/50">
                 <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-3">Coming Soon</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400 font-medium leading-relaxed">Approval workflows, notifications and email settings aren't built yet — this app has no email-delivery service in place, so these would be non-functional forms today. They'll land once that's in place.</p>
               </div>

@@ -16,6 +16,7 @@ import { candidateApi } from '@/services/candidateApi'
 import { jobApi } from '@/services/jobApi'
 import { interviewApi } from '@/services/interviewApi'
 import { employeeApi } from '@/services/employeeApi'
+import { departmentApi } from '@/services/departmentApi'
 
 // Utility: parse a CSV string into an array of candidate-shaped objects
 // Supports any common column names (partial match, case-insensitive)
@@ -300,6 +301,8 @@ export default function RecruitmentDashboardPage() {
   const [selectedCandidateInfo, setSelectedCandidateInfo] = useState(null)
   const [positionsLoading, setPositionsLoading] = useState(true)
   const [positionsError, setPositionsError] = useState('')
+  const [departments, setDepartments] = useState([])
+  const [employees, setEmployees] = useState([])
   const [positionActionLoading, setPositionActionLoading] = useState(false)
   const [positionActionError, setPositionActionError] = useState(null)
   
@@ -346,6 +349,10 @@ export default function RecruitmentDashboardPage() {
         openings: job.totalOpenings || 1,
         location: job.location?.name || job.location,
         locationId: job.location?._id || job.location,
+        hiringManager: job.hiringManager?.firstName ? `${job.hiringManager.firstName} ${job.hiringManager.lastName || ''}`.trim() : '',
+        hiringManagerId: job.hiringManager?._id || job.hiringManager,
+        recruiter: job.recruiter?.firstName ? `${job.recruiter.firstName} ${job.recruiter.lastName || ''}`.trim() : '',
+        recruiterId: job.recruiter?._id || job.recruiter,
         description: job.jobSummary || '',
         responsibilities: job.responsibilities || '',
         requiredSkills: job.requiredQualifications || '',
@@ -610,6 +617,28 @@ export default function RecruitmentDashboardPage() {
 
   useEffect(() => {
     fetchPositions()
+    let cancelled = false
+    departmentApi.getAll()
+      .then((response) => {
+        if (cancelled) return
+        const rows = response.data?.data?.content || response.data?.data || []
+        setDepartments(Array.isArray(rows) ? rows.filter((department) => department.active !== false) : [])
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setDepartments([])
+      })
+    employeeApi.getAll({ page: 0, size: 100, status: 'ACTIVE' })
+      .then((response) => {
+        if (cancelled) return
+        const data = response?.data?.data
+        const rows = data?.content || data?.items || data || []
+        setEmployees(Array.isArray(rows) ? rows : [])
+      })
+      .catch(() => {
+        if (!cancelled) setEmployees([])
+      })
+    return () => { cancelled = true }
   }, [])
 
   const formatInterviewSchedule = (cand) => {
@@ -1428,6 +1457,9 @@ export default function RecruitmentDashboardPage() {
 
   const handleSavePosition = async (form, { close = true } = {}) => {
     try {
+      const experienceNumbers = [...String(form.experience || '').matchAll(/\d+(?:\.\d+)?/g)].map((match) => Number(match[0]))
+      const minExperience = experienceNumbers[0]
+      const maxExperience = experienceNumbers[1] ?? experienceNumbers[0]
       const payload = {
         jobTitle: form.title,
         department: form.departmentId && form.departmentId.match(/^[0-9a-fA-F]{24}$/) ? form.departmentId : undefined,
@@ -1439,7 +1471,8 @@ export default function RecruitmentDashboardPage() {
         responsibilities: form.responsibilities,
         requiredQualifications: form.requiredSkills,
         preferredQualifications: form.preferredSkills,
-        minExperience: form.experience ? parseInt(form.experience) || undefined : undefined,
+        minExperience: Number.isFinite(minExperience) ? minExperience : undefined,
+        maxExperience: Number.isFinite(maxExperience) ? maxExperience : undefined,
         minEducation: form.education || undefined,
         benefits: form.benefits || undefined,
         internalMinCtc: form.salaryMin ? parseInt(form.salaryMin) : undefined,
@@ -1465,7 +1498,11 @@ export default function RecruitmentDashboardPage() {
       await fetchPositions({ force: true })
     } catch (e) {
       console.error('Failed to save position:', e)
-      setPositionActionError(e.response?.data?.message || e.message || 'Failed to save position.')
+      const fieldErrors = e.response?.data?.data?.errors || e.response?.data?.errors
+      const details = fieldErrors && typeof fieldErrors === 'object'
+        ? Object.values(fieldErrors).filter(Boolean).join(' ')
+        : ''
+      setPositionActionError(details || e.response?.data?.message || e.message || 'Failed to save position.')
     }
   }
 
@@ -3172,6 +3209,8 @@ export default function RecruitmentDashboardPage() {
       {showOpenPositionModal && (
         <OpenPositionModal 
           initialData={editingPositionForModal}
+          options={{ departments, employees }}
+          saveError={positionActionError}
           onSave={handleSavePosition}
           onAutoSave={editingPositionForModal ? (form) => handleSavePosition(form, { close: false }) : undefined}
           onClose={() => {

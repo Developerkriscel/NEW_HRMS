@@ -200,7 +200,7 @@ export const GET = withApi(async (req) => {
         { checkInTime: { $gte: queryFrom, $lte: queryTo } },
       ],
     })
-      .select('date checkInTime checkOutTime workingMinutes breakMinutes status lateMark earlyLogout halfDay breaks locationPolicyStatus checkInLocationName checkOutLocationName checkInDistanceMeters checkInAllowedRadiusMeters verificationStatus')
+      .select('date checkInTime checkOutTime checkInPhoto checkOutPhoto workingMinutes breakMinutes status lateMark earlyLogout halfDay breaks locationPolicyStatus checkInLocationName checkOutLocationName checkInDistanceMeters checkInAllowedRadiusMeters verificationStatus')
       .sort({ date: -1 })
       .lean(),
     Holiday.find({ tenantId, deleted: false, date: { $gte: queryFrom, $lte: queryTo } })

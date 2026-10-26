@@ -13,8 +13,24 @@ export const GET = withApi(async (req) => {
   const { searchParams } = new URL(req.url)
   const month = Number(searchParams.get('month'))
   const year = Number(searchParams.get('year'))
+  const from = searchParams.get('from')
+  const to = searchParams.get('to')
+  const employeeId = searchParams.get('employeeId')
 
-  if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year) || year < 2000) {
+  const monthKeys = []
+  if (from || to) {
+    const start = from ? new Date(`${from}T00:00:00`) : new Date(year, month - 1, 1)
+    const end = to ? new Date(`${to}T00:00:00`) : start
+    const cursor = new Date(start.getFullYear(), start.getMonth(), 1)
+    const endMonth = new Date(end.getFullYear(), end.getMonth(), 1)
+    while (cursor <= endMonth) {
+      monthKeys.push({ month: cursor.getMonth() + 1, year: cursor.getFullYear() })
+      cursor.setMonth(cursor.getMonth() + 1)
+    }
+  } else if (Number.isInteger(month) && month >= 1 && month <= 12 && Number.isInteger(year) && year >= 2000) {
+    monthKeys.push({ month, year })
+  }
+  if (!monthKeys.length) {
     return ok({
       processedCount: 0,
       totalGross: 0,
@@ -25,10 +41,12 @@ export const GET = withApi(async (req) => {
     })
   }
 
-  const payslips = await Payslip.find({ tenantId, month, year, deleted: false })
+  const query = { tenantId, deleted: false, $or: monthKeys }
+  if (employeeId && employeeId !== 'all') query.employee = employeeId
+  const payslips = await Payslip.find(query)
     .populate({
       path: 'employee',
-      select: 'department',
+      select: 'firstName lastName employeeCode department',
       populate: { path: 'department', select: 'name' },
     })
     .limit(10000)
@@ -63,6 +81,18 @@ export const GET = withApi(async (req) => {
     totalNet: totals.netSalary,
     totalDeductions: totals.totalDeductions,
     byDepartment: Array.from(departmentMap.values()),
+    records: payslips.map((payslip) => ({
+      _id: payslip._id,
+      employeeId: payslip.employee?._id || payslip.employee,
+      employeeName: payslip.employee ? `${payslip.employee.firstName || ''} ${payslip.employee.lastName || ''}`.trim() : 'Unknown Employee',
+      employeeCode: payslip.employee?.employeeCode || '',
+      month: payslip.month,
+      year: payslip.year,
+      grossSalary: payslip.grossSalary || 0,
+      totalDeductions: payslip.totalDeductions || 0,
+      netSalary: payslip.netSalary || 0,
+      status: payslip.status,
+    })),
     statutory: {
       basicSalary: totals.basicSalary,
       pfDeduction: totals.pfDeduction,

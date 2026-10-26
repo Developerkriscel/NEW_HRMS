@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { X, Briefcase, ChevronRight, Check, Sparkles, Loader2 } from 'lucide-react'
 import { Portal } from '@/components/common/Portal'
 import api from '@/services/api'
@@ -29,7 +29,7 @@ function AiWriteButton({ section, aiWriting, onWrite }) {
   )
 }
 
-export function OpenPositionModal({ onClose, onSave, onAutoSave, initialData, options = {} }) {
+export function OpenPositionModal({ onClose, onSave, onAutoSave, initialData, options = {}, saveError = '' }) {
   const [currentStep, setCurrentStep] = useState(0)
   const [saving, setSaving] = useState(false)
   const [aiWriting, setAiWriting] = useState('')
@@ -55,9 +55,41 @@ export function OpenPositionModal({ onClose, onSave, onAutoSave, initialData, op
   const handleNext = () => setCurrentStep(p => Math.min(p + 1, STEPS.length - 1))
   const handlePrev = () => setCurrentStep(p => Math.max(p - 1, 0))
 
-  const departments = options.departments || []
+  const departments = useMemo(() => options.departments || [], [options.departments])
   const branches = options.branches || []
-  const employees = options.employees || []
+  const employees = useMemo(() => options.employees || [], [options.employees])
+
+  useEffect(() => {
+    if (!initialData || form.departmentId || !form.department || !departments.length) return
+    const matchingDepartment = departments.find((department) => (
+      String(department.name || '').trim().toLowerCase() === String(form.department).trim().toLowerCase()
+    ))
+    if (matchingDepartment?._id) {
+      setForm((current) => ({
+        ...current,
+        departmentId: String(matchingDepartment._id),
+        department: matchingDepartment.name,
+      }))
+    }
+  }, [departments, form.department, form.departmentId, initialData])
+
+  useEffect(() => {
+    if (!initialData || !employees.length) return
+    const resolveEmployeeId = (id, name) => {
+      if (id && employees.some((employee) => String(employee._id) === String(id))) return String(id)
+      const normalizedName = String(name || '').trim().toLowerCase()
+      if (!normalizedName) return ''
+      const match = employees.find((employee) => (
+        `${employee.firstName || ''} ${employee.lastName || ''}`.trim().toLowerCase() === normalizedName
+      ))
+      return match?._id ? String(match._id) : ''
+    }
+    const hiringManagerId = resolveEmployeeId(form.hiringManagerId, form.hiringManager)
+    const recruiterId = resolveEmployeeId(form.recruiterId, form.recruiter)
+    if (hiringManagerId !== String(form.hiringManagerId || '') || recruiterId !== String(form.recruiterId || '')) {
+      setForm((current) => ({ ...current, hiringManagerId, recruiterId }))
+    }
+  }, [employees, form.hiringManager, form.hiringManagerId, form.recruiter, form.recruiterId, initialData])
 
   const writeWithAi = async (section) => {
     if (aiWriting) return
@@ -124,17 +156,14 @@ export function OpenPositionModal({ onClose, onSave, onAutoSave, initialData, op
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Department <span className="text-rose-500">*</span></label>
-                {departments.length ? (
-                  <select required className="input-field" value={form.departmentId || ''} onChange={e => {
-                    const dept = departments.find((item) => String(item._id) === e.target.value)
-                    setForm({...form, departmentId: e.target.value, department: dept?.name || ''})
-                  }}>
-                    <option value="">Select department</option>
-                    {departments.map((dept) => <option key={dept._id} value={dept._id}>{dept.name}</option>)}
-                  </select>
-                ) : (
-                  <input required className="input-field" value={form.department} onChange={e => setForm({...form, department: e.target.value})} />
-                )}
+                <select required className="input-field" value={form.departmentId || ''} onChange={e => {
+                  const dept = departments.find((item) => String(item._id) === e.target.value)
+                  setForm({...form, departmentId: e.target.value, department: dept?.name || ''})
+                }} disabled={!departments.length}>
+                  <option value="">{departments.length ? 'Select department' : 'No departments available'}</option>
+                  {departments.map((dept) => <option key={dept._id} value={dept._id}>{dept.name}</option>)}
+                </select>
+                {!departments.length && <p className="text-xs font-medium text-amber-600">Create an active department in Settings first.</p>}
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Number of Openings <span className="text-rose-500">*</span></label>
@@ -397,6 +426,7 @@ export function OpenPositionModal({ onClose, onSave, onAutoSave, initialData, op
 
         {/* Form Content */}
         <div className="p-6 sm:p-8 overflow-y-auto flex-1 relative z-10 custom-scrollbar">
+          {saveError ? <div role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{saveError}</div> : null}
           <form id="open-position-form" onSubmit={handleSubmit}>
             {renderStepContent()}
           </form>

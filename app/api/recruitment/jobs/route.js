@@ -7,7 +7,7 @@ import { logAction } from '@/lib/audit'
 import {
   JOB_VIEW_ROLES, JOB_STATUS, canCreateWithoutRequisition, computeRemainingOpenings,
 } from '@/lib/jobConstants'
-import { validateAlways } from '@/lib/jobValidation'
+import { validateAlways, validateForOpen } from '@/lib/jobValidation'
 import {
   populateJob, generateJobCode, getActorName, syncJobSkills, syncScreeningQuestions,
   syncApplicationFields, syncPipelineStages, getJobRelatedData, applyWritableJobFields,
@@ -56,11 +56,13 @@ export const GET = withApi(async (req) => {
   const countBaseQuery = { tenantId, deleted: false }
   const listStartedAt = Date.now()
   const contentQuery = Job.find(query)
-    // The positions page only needs summary fields. Full requirements and
-    // pipeline data are loaded by GET /jobs/:id when a position is opened.
-    .select('jobCode jobTitle publicTitle status employmentType workMode totalOpenings filledOpenings department location internalMinCtc internalMaxCtc currency openingDate targetClosingDate expectedJoiningDate minExperience')
+    // Include editable job content so position forms retain AI-written text
+    // after the recruitment page is refreshed. Pipeline data remains detail-only.
+    .select('jobCode jobTitle publicTitle status employmentType workMode totalOpenings filledOpenings department location hiringManager recruiter internalMinCtc internalMaxCtc currency openingDate targetClosingDate expectedJoiningDate minExperience jobSummary responsibilities requiredQualifications preferredQualifications')
     .populate('department', 'name')
     .populate('location', 'name')
+    .populate('hiringManager', 'firstName lastName employeeCode')
+    .populate('recruiter', 'firstName lastName employeeCode')
     .sort({ createdAt: -1 })
     .skip(page * size)
     .limit(size)
@@ -112,7 +114,12 @@ export const POST = withApi(async (req) => {
   }
   if (!body.jobTitle) return fail('Job title is required', 400)
 
-  const fieldErrors = validateAlways(body)
+  const requestedStatus = body.status || JOB_STATUS.DRAFT
+  if (![JOB_STATUS.DRAFT, JOB_STATUS.OPEN, JOB_STATUS.PAUSED].includes(requestedStatus)) {
+    return fail('A new position can only be created as Draft, Open, or On Hold', 400, 'INVALID_INITIAL_STATUS')
+  }
+
+  const fieldErrors = requestedStatus === JOB_STATUS.OPEN ? validateForOpen(body) : validateAlways(body)
   if (Object.keys(fieldErrors).length) return fail('Please fix the highlighted fields', 400, 'VALIDATION_ERROR', { errors: fieldErrors })
 
   const jobCode = await generateJobCode(Job, tenantId)
@@ -120,7 +127,7 @@ export const POST = withApi(async (req) => {
 
   const job = new Job({
     jobCode,
-    status: JOB_STATUS.DRAFT,
+    status: requestedStatus,
     createdByEmployee: session.userId,
     tenantId,
     createdBy: session.sub,

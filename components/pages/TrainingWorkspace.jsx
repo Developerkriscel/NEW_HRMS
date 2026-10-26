@@ -198,7 +198,6 @@ export function TrainingWorkspace() {
           <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full flex items-center gap-2">
             <GraduationCap className="w-6 h-6 text-indigo-500" /> Training Programs
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Schedule sessions, assign courses, and track completion.</p>
         </div>
         <button onClick={() => setIsModalOpen(true)} className="btn-primary shadow-[0_0_15px_-3px_rgba(79,70,229,0.4)]">
           <Plus className="w-4 h-4 mr-2" /> Schedule Training

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { FilePlus, Plus, X, FileText, ExternalLink, Check, Trash2, Upload, Eye } from 'lucide-react'
 import { Badge } from '@/components/common/Badge'
 import { DataTable } from '@/components/tables/DataTable'
@@ -26,10 +26,6 @@ function getEmployeeId(value) {
   return value._id || value.id || ''
 }
 
-function sameDocumentSlot(document, requiredDocument) {
-  return document.title === requiredDocument.title || document.category === requiredDocument.category
-}
-
 function buildDocumentChecklist(documents, employee = null) {
   const employeeId = getEmployeeId(employee)
   const scopedDocuments = employeeId
@@ -39,12 +35,12 @@ function buildDocumentChecklist(documents, employee = null) {
   const checklist = []
 
   REQUIRED_DOCS.forEach((requiredDocument) => {
-    const matchingDocs = scopedDocuments.filter((doc) => sameDocumentSlot(doc, requiredDocument))
-    if (matchingDocs.length > 0) {
-      matchingDocs.forEach((doc) => {
-        checklist.push(doc)
-        usedDocIds.add(doc._id)
-      })
+    const exactMatch = scopedDocuments.find((doc) => !usedDocIds.has(doc._id) && doc.title === requiredDocument.title)
+    const categoryMatch = scopedDocuments.find((doc) => !usedDocIds.has(doc._id) && doc.category === requiredDocument.category)
+    const matchingDocument = exactMatch || categoryMatch
+    if (matchingDocument) {
+      checklist.push(matchingDocument)
+      usedDocIds.add(matchingDocument._id)
     } else {
       checklist.push({
         ...requiredDocument,
@@ -75,6 +71,8 @@ export function DocumentsWorkspace({ title, subtitle, employeeMode = false }) {
   const [form, setForm] = useState({ employeeId: '', title: '', category: 'GENERAL', fileUrl: '', notes: '' })
   const [selectedFile, setSelectedFile] = useState(null)
   const [isRequestMode, setIsRequestMode] = useState(false)
+  const [documentStatusFilter, setDocumentStatusFilter] = useState('ALL')
+  const [documentTypeFilter, setDocumentTypeFilter] = useState('ALL')
 
   function load({ silent = false } = {}) {
     if (silent) setRefreshing(true)
@@ -191,6 +189,19 @@ export function DocumentsWorkspace({ title, subtitle, employeeMode = false }) {
     }
   }
 
+  function isValidDocumentUrl(fileUrl) {
+    return fileUrl && (fileUrl.startsWith('http') || fileUrl.startsWith('/api') || fileUrl.startsWith('data:'))
+  }
+
+  function getFilteredDocuments(employee) {
+    return buildDocumentChecklist(documents, employee).filter((doc) => {
+      const status = isValidDocumentUrl(doc.fileUrl) ? doc.status : 'PENDING'
+      const matchesStatus = documentStatusFilter === 'ALL' || status === documentStatusFilter
+      const matchesType = documentTypeFilter === 'ALL' || doc.title === documentTypeFilter
+      return matchesStatus && matchesType
+    })
+  }
+
   const columns = [
     { header: 'Document', accessor: 'title', render: (_, row) => {
       const isValidUrl = row.fileUrl && (row.fileUrl.startsWith('http') || row.fileUrl.startsWith('/api') || row.fileUrl.startsWith('data:'));
@@ -248,16 +259,16 @@ export function DocumentsWorkspace({ title, subtitle, employeeMode = false }) {
       key: 'documents',
       sortable: false,
       render: (_, employee) => {
-        const empDocs = buildDocumentChecklist(documents, employee)
+        const empDocs = getFilteredDocuments(employee)
         
         return (
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-nowrap gap-3 overflow-x-auto pb-1">
             {empDocs.map(doc => {
-              const isValidUrl = doc.fileUrl && (doc.fileUrl.startsWith('http') || doc.fileUrl.startsWith('/api') || doc.fileUrl.startsWith('data:'))
+              const isValidUrl = isValidDocumentUrl(doc.fileUrl)
               const docStatus = isValidUrl ? doc.status : 'PENDING'
               
               return (
-                <div key={doc._id} className="flex items-center gap-3 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm">
+                <div key={doc._id} className="flex min-w-[250px] shrink-0 items-center gap-3 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm">
                   <div className="flex flex-col">
                     <div className="flex items-center gap-1.5">
                       <span className="font-semibold text-sm text-slate-800 dark:text-slate-200">{doc.title}</span>
@@ -324,12 +335,34 @@ export function DocumentsWorkspace({ title, subtitle, employeeMode = false }) {
     }
   ]
 
-  const dataToRender = useMemo(() => (
-    employeeMode ? buildDocumentChecklist(documents) : employees
-  ), [employeeMode, documents, employees]);
+  const dataToRender = employeeMode
+    ? buildDocumentChecklist(documents)
+    : employees.filter((employee) => getFilteredDocuments(employee).length > 0)
 
   const columnsToRender = employeeMode ? columns : adminColumns
   const searchPlaceholder = employeeMode ? "Search documents..." : "Search employees..."
+  const filterActions = !employeeMode ? (
+    <>
+      <select
+        value={documentTypeFilter}
+        onChange={(event) => setDocumentTypeFilter(event.target.value)}
+        className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+        aria-label="Filter by document type"
+      >
+        <option value="ALL">All document types</option>
+        {REQUIRED_DOCS.map((doc) => <option key={doc.title} value={doc.title}>{doc.title}</option>)}
+      </select>
+      <select
+        value={documentStatusFilter}
+        onChange={(event) => setDocumentStatusFilter(event.target.value)}
+        className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+        aria-label="Filter by document status"
+      >
+        <option value="ALL">All statuses</option>
+        {STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+      </select>
+    </>
+  ) : null
 
   return (
     <div className="animate-fade-in space-y-8 pb-12">
@@ -338,9 +371,6 @@ export function DocumentsWorkspace({ title, subtitle, employeeMode = false }) {
           <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full">
             {title}
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-2 font-medium">
-            {subtitle}
-          </p>
         </div>
         <div className="flex items-center gap-3">
           {!employeeMode && (
@@ -435,7 +465,7 @@ export function DocumentsWorkspace({ title, subtitle, employeeMode = false }) {
 
       {message && <p className="text-sm text-slate-500 dark:text-slate-400">{message}</p>}
       {refreshing && <p className="text-xs font-semibold text-slate-400">Refreshing in background...</p>}
-      <DataTable columns={columnsToRender} data={dataToRender} isLoading={loading} searchPlaceholder={searchPlaceholder} emptyMessage="No records found" pageSize={50} />
+      <DataTable columns={columnsToRender} data={dataToRender} isLoading={loading} searchPlaceholder={searchPlaceholder} actions={filterActions} emptyMessage="No records found" pageSize={50} />
     </div>
   )
 }

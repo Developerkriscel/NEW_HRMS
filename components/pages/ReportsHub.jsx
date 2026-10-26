@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { employeeApi } from '@/services/employeeApi'
 import { attendanceApi } from '@/services/attendanceApi'
 import { leaveApi } from '@/services/leaveApi'
 import { payrollApi } from '@/services/payrollApi'
 import { GenericAreaChart, GenericBarChart, GenericLineChart, DepartmentPieChart } from '@/components/charts/DynamicDashboardCharts'
 import { formatCurrency } from '@/lib/utils'
-import { Users, Clock, CalendarDays, Banknote, Calendar, ChevronDown, BarChart3, LineChart } from 'lucide-react'
+import { Users, Clock, CalendarDays, Banknote, BarChart3, LineChart, Download } from 'lucide-react'
 
 const TABS = [
   { id: 'Employee', icon: Users, desc: 'Headcount & trends' },
@@ -46,41 +46,108 @@ function ChartCard({ title, icon: Icon = BarChart3, children }) {
   )
 }
 
-function MonthYearPicker({ month, year, onChange }) {
+function toDateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function getReportRange(preset, customStart, customEnd) {
+  const today = new Date()
+  const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  if (preset === 'Custom') return { from: customStart || toDateKey(startOfDay), to: customEnd || toDateKey(startOfDay) }
+  if (preset === 'Today') return { from: toDateKey(startOfDay), to: toDateKey(startOfDay) }
+  if (preset === 'This Week') {
+    const start = new Date(startOfDay)
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7))
+    return { from: toDateKey(start), to: toDateKey(startOfDay) }
+  }
+  if (preset === 'Last Week') {
+    const end = new Date(startOfDay)
+    end.setDate(end.getDate() - ((end.getDay() + 6) % 7) - 1)
+    const start = new Date(end)
+    start.setDate(start.getDate() - 6)
+    return { from: toDateKey(start), to: toDateKey(end) }
+  }
+  if (preset === 'Last Month') {
+    const start = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+    const end = new Date(today.getFullYear(), today.getMonth(), 0)
+    return { from: toDateKey(start), to: toDateKey(end) }
+  }
+  if (preset === 'All Time') return { from: '2000-01-01', to: toDateKey(startOfDay) }
+  return { from: toDateKey(new Date(today.getFullYear(), today.getMonth(), 1)), to: toDateKey(startOfDay) }
+}
+
+function ReportFilters({ range, onRangeChange, employeeId, onEmployeeChange, employees, customStart, customEnd, onCustomChange }) {
   return (
-    <div className="flex bg-white/60 dark:bg-slate-800/60 backdrop-blur-md border border-slate-200/50 dark:border-slate-700/50 rounded-xl shadow-sm p-1 items-center hover:bg-white dark:hover:bg-slate-800 transition-colors">
-      <Calendar className="w-3.5 h-3.5 text-indigo-500 ml-2 mr-1" />
-      <div className="relative">
-        <select 
-          className="appearance-none bg-transparent pl-2 pr-6 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none cursor-pointer" 
-          value={month} 
-          onChange={(e) => onChange({ month: Number(e.target.value), year })}
-        >
-          {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-            <option key={m} value={m}>{new Date(2000, m - 1).toLocaleString('default', { month: 'short' })}</option>
-          ))}
+    <div className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-200/70 bg-white/70 p-2 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+      <label className="w-[145px] text-[11px] font-bold text-slate-500 dark:text-slate-400">
+        Date Range
+        <select className="input-field mt-1 h-9 px-3 text-xs" value={range} onChange={(event) => onRangeChange(event.target.value)}>
+          {['Today', 'This Week', 'Last Week', 'This Month', 'Last Month', 'All Time', 'Custom Range'].map((option) => <option key={option} value={option === 'Custom Range' ? 'Custom' : option}>{option}</option>)}
         </select>
-        <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-      </div>
-      <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1"></div>
-      <div className="relative">
-        <select 
-          className="appearance-none bg-transparent pl-2 pr-6 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none cursor-pointer" 
-          value={year} 
-          onChange={(e) => onChange({ month, year: Number(e.target.value) })}
-        >
-          {[year - 1, year, year + 1].map((y) => <option key={y} value={y}>{y}</option>)}
+      </label>
+      {range === 'Custom' && (
+        <>
+          <label className="w-[125px] text-[11px] font-bold text-slate-500 dark:text-slate-400">From<input type="date" className="input-field mt-1 h-9 px-2 text-xs" value={customStart} onChange={(event) => onCustomChange({ start: event.target.value })} /></label>
+          <label className="w-[125px] text-[11px] font-bold text-slate-500 dark:text-slate-400">To<input type="date" className="input-field mt-1 h-9 px-2 text-xs" value={customEnd} onChange={(event) => onCustomChange({ end: event.target.value })} /></label>
+        </>
+      )}
+      <label className="w-[205px] text-[11px] font-bold text-slate-500 dark:text-slate-400">
+        Employee
+        <select className="input-field mt-1 h-9 px-3 text-xs" value={employeeId} onChange={(event) => onEmployeeChange(event.target.value)}>
+          <option value="all">All Employees</option>
+          {employees.map((employee) => <option key={employee._id} value={employee._id}>{[employee.firstName, employee.lastName].filter(Boolean).join(' ')}{employee.employeeCode ? ` (${employee.employeeCode})` : ''}</option>)}
         </select>
-        <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-      </div>
+      </label>
     </div>
   )
 }
 
+function ReportTable({ columns, rows = [], empty = 'No records found for the selected filters.' }) {
+  return (
+    <div className="overflow-x-auto rounded-2xl border border-slate-200/70 bg-white/80 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+      <table className="w-full min-w-[720px] text-left text-sm">
+        <thead className="bg-slate-50 text-[10px] font-extrabold uppercase tracking-widest text-slate-500 dark:bg-slate-800/70 dark:text-slate-400">
+          <tr>{columns.map((column) => <th key={column.key} className="px-4 py-3">{column.label}</th>)}</tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+          {rows.length ? rows.map((row) => <tr key={row._id || `${row.employeeId}-${row.date || row.month}`} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50">{columns.map((column) => <td key={column.key} className="whitespace-nowrap px-4 py-3 font-medium text-slate-700 dark:text-slate-300">{column.render ? column.render(row) : row[column.key] || '—'}</td>)}</tr>) : <tr><td colSpan={columns.length} className="px-4 py-10 text-center text-sm font-semibold text-slate-400">{empty}</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function reportDate(value) {
+  return value ? new Date(value).toISOString().slice(0, 10) : '—'
+}
+
+function reportTime(value) {
+  return value ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'
+}
+
+function csvValue(value) {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`
+}
+
+function downloadCsv(filename, headers, rows) {
+  const csv = [headers, ...rows].map((row) => row.map(csvValue).join(',')).join('\r\n')
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
 export function ReportsHub() {
-  const now = new Date()
   const [tab, setTab] = useState('Employee')
-  const [period, setPeriod] = useState({ month: now.getMonth() + 1, year: now.getFullYear() })
+  const [range, setRange] = useState('This Month')
+  const [customStart, setCustomStart] = useState('')
+  const [customEnd, setCustomEnd] = useState('')
+  const [employeeId, setEmployeeId] = useState('all')
+  const [employees, setEmployees] = useState([])
 
   const [employeeReport, setEmployeeReport] = useState(null)
   const [attendanceReport, setAttendanceReport] = useState(null)
@@ -88,18 +155,66 @@ export function ReportsHub() {
   const [payrollReport, setPayrollReport] = useState(null)
   const [loading, setLoading] = useState(true)
 
+  const reportRange = useMemo(() => getReportRange(range, customStart, customEnd), [range, customStart, customEnd])
+
+  function exportCurrentReport() {
+    const stamp = `${reportRange.from}_to_${reportRange.to}`
+    if (tab === 'Employee' && employeeReport) {
+      const rows = [
+        ['Total Employees', employeeReport.totalEmployees],
+        ['Departments', employeeReport.byDepartment?.length || 0],
+        ['New Joiners', employeeReport.newJoinersTrend?.reduce((sum, item) => sum + item.count, 0) || 0],
+        ...((employeeReport.byStatus || []).map((item) => [`Status: ${item.status}`, item.count])),
+        ...((employeeReport.byDepartment || []).map((item) => [`Department: ${item.name}`, item.count])),
+      ]
+      downloadCsv('employee-report.csv', ['Metric', 'Value'], rows)
+      return
+    }
+
+    if (tab === 'Attendance' && attendanceReport) {
+      downloadCsv(`attendance-report-${stamp}.csv`, ['Date', 'Employee Name', 'Employee Code', 'Punch In', 'Punch Out', 'Status', 'Late Mark', 'Working Minutes', 'Overtime Minutes'], (attendanceReport.records || []).map((row) => [
+        reportDate(row.date), row.employeeName, row.employeeCode, reportTime(row.checkInTime), reportTime(row.checkOutTime), row.status, row.lateMark ? 'Yes' : 'No', row.workingMinutes, row.overtimeMinutes,
+      ]))
+      return
+    }
+
+    if (tab === 'Leave' && leaveReport) {
+      downloadCsv(`leave-report-${stamp}.csv`, ['Start Date', 'End Date', 'Employee Name', 'Employee Code', 'Leave Type', 'Days', 'Status'], (leaveReport.records || []).map((row) => [
+        reportDate(row.startDate), reportDate(row.endDate), row.employeeName, row.employeeCode, row.leaveType, row.numberOfDays, row.status,
+      ]))
+      return
+    }
+
+    if (tab === 'Payroll' && payrollReport) {
+      downloadCsv(`payroll-report-${stamp}.csv`, ['Month', 'Year', 'Employee Name', 'Employee Code', 'Gross Pay', 'Deductions', 'Net Pay', 'Status'], (payrollReport.records || []).map((row) => [
+        row.month, row.year, row.employeeName, row.employeeCode, row.grossSalary, row.totalDeductions, row.netSalary, row.status,
+      ]))
+    }
+  }
+
+  const activeReport = tab === 'Employee' ? employeeReport : tab === 'Attendance' ? attendanceReport : tab === 'Leave' ? leaveReport : payrollReport
+
+  useEffect(() => {
+    employeeApi.getAll({ page: 0, size: 500, status: 'ACTIVE' })
+      .then((res) => {
+        const data = res.data?.data
+        setEmployees(data?.content || data?.items || data || [])
+      })
+      .catch(() => setEmployees([]))
+  }, [])
+
   useEffect(() => {
     setLoading(true)
     if (tab === 'Employee') {
       employeeApi.getReports({ months: 6 }).then((res) => setEmployeeReport(res.data.data)).finally(() => setLoading(false))
     } else if (tab === 'Attendance') {
-      attendanceApi.getMonthlyReport(period).then((res) => setAttendanceReport(res.data.data)).finally(() => setLoading(false))
+      attendanceApi.getMonthlyReport({ ...reportRange, employeeId }).then((res) => setAttendanceReport(res.data.data)).finally(() => setLoading(false))
     } else if (tab === 'Leave') {
-      leaveApi.getReports(period).then((res) => setLeaveReport(res.data.data)).finally(() => setLoading(false))
+      leaveApi.getReports({ ...reportRange, employeeId }).then((res) => setLeaveReport(res.data.data)).finally(() => setLoading(false))
     } else if (tab === 'Payroll') {
-      payrollApi.getReports(period).then((res) => setPayrollReport(res.data.data)).finally(() => setLoading(false))
+      payrollApi.getReports({ ...reportRange, employeeId }).then((res) => setPayrollReport(res.data.data)).finally(() => setLoading(false))
     }
-  }, [tab, period])
+  }, [tab, reportRange, employeeId])
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 space-y-6 pb-8">
@@ -118,9 +233,13 @@ export function ReportsHub() {
             Data-driven reports across all HR modules to help you make better decisions.
           </p>
         </div>
-        {tab !== 'Employee' && (
-          <MonthYearPicker month={period.month} year={period.year} onChange={setPeriod} />
-        )}
+        <div className="flex flex-wrap items-end justify-end gap-3">
+          {tab !== 'Employee' && <ReportFilters range={range} onRangeChange={setRange} employeeId={employeeId} onEmployeeChange={setEmployeeId} employees={employees} customStart={customStart} customEnd={customEnd} onCustomChange={({ start, end }) => { if (start !== undefined) setCustomStart(start); if (end !== undefined) setCustomEnd(end) }} />}
+          <button type="button" onClick={exportCurrentReport} disabled={!activeReport || loading} className="inline-flex h-10 items-center gap-2 rounded-xl bg-indigo-600 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50" title="Export current report as CSV">
+            <Download className="h-4 w-4" />
+            Export CSV
+          </button>
+        </div>
       </div>
 
       {/* Premium Tab Switcher */}
@@ -249,6 +368,18 @@ export function ReportsHub() {
                   </ChartCard>
                 </div>
               </div>
+              <ReportTable
+                columns={[
+                  { key: 'date', label: 'Date', render: (row) => reportDate(row.date) },
+                  { key: 'employeeName', label: 'Employee', render: (row) => <div><div>{row.employeeName}</div><span className="text-xs text-slate-400">{row.employeeCode || '-'}</span></div> },
+                  { key: 'checkInTime', label: 'Punch In', render: (row) => reportTime(row.checkInTime) },
+                  { key: 'checkOutTime', label: 'Punch Out', render: (row) => reportTime(row.checkOutTime) },
+                  { key: 'status', label: 'Status' },
+                  { key: 'workingMinutes', label: 'Working Hours', render: (row) => `${Math.floor((row.workingMinutes || 0) / 60)}h ${(row.workingMinutes || 0) % 60}m` },
+                ]}
+                rows={attendanceReport.records}
+                empty="No attendance punches found for the selected filters."
+              />
             </div>
           )}
 
@@ -294,6 +425,18 @@ export function ReportsHub() {
                   </div>
                 </ChartCard>
               </div>
+              <ReportTable
+                columns={[
+                  { key: 'startDate', label: 'Start Date', render: (row) => reportDate(row.startDate) },
+                  { key: 'employeeName', label: 'Employee', render: (row) => <div><div>{row.employeeName}</div><span className="text-xs text-slate-400">{row.employeeCode || '-'}</span></div> },
+                  { key: 'leaveType', label: 'Leave Type' },
+                  { key: 'endDate', label: 'End Date', render: (row) => reportDate(row.endDate) },
+                  { key: 'numberOfDays', label: 'Days' },
+                  { key: 'status', label: 'Status' },
+                ]}
+                rows={leaveReport.records}
+                empty="No approved leave found for the selected filters."
+              />
             </div>
           )}
 
@@ -339,6 +482,18 @@ export function ReportsHub() {
                   </div>
                 </ChartCard>
               </div>
+              <ReportTable
+                columns={[
+                  { key: 'month', label: 'Payroll Period', render: (row) => `${row.month}/${row.year}` },
+                  { key: 'employeeName', label: 'Employee', render: (row) => <div><div>{row.employeeName}</div><span className="text-xs text-slate-400">{row.employeeCode || '-'}</span></div> },
+                  { key: 'grossSalary', label: 'Gross Pay', render: (row) => formatCurrency(row.grossSalary) },
+                  { key: 'totalDeductions', label: 'Deductions', render: (row) => formatCurrency(row.totalDeductions) },
+                  { key: 'netSalary', label: 'Net Pay', render: (row) => formatCurrency(row.netSalary) },
+                  { key: 'status', label: 'Status' },
+                ]}
+                rows={payrollReport.records}
+                empty="No payroll records found for the selected filters."
+              />
             </div>
           )}
         </div>

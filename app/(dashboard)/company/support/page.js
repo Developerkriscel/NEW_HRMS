@@ -45,13 +45,12 @@ export default function CompanySupportDashboardPage() {
 
   return (
     <div className="animate-fade-in space-y-6">
-      <div className="page-header flex justify-between items-center">
+      <div className="page-header flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <LifeBuoy className="w-6 h-6 text-indigo-500" />
-            Support Center
-          </h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Get help, track support requests, and connect with platform support.</p>
+          <div className="group w-fit">
+            <h1 className="text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-900 via-indigo-700 to-blue-600 dark:from-indigo-200 dark:via-indigo-400 dark:to-blue-400 drop-shadow-sm transition-all duration-500 group-hover:scale-[1.02] origin-left">Support Center</h1>
+            <div className="mt-2 h-1 w-12 rounded-full bg-gradient-to-r from-indigo-600 to-blue-500 transition-all duration-500 group-hover:w-full opacity-70" />
+          </div>
         </div>
         <button onClick={() => setShowCreateModal(true)} className="btn-primary flex items-center gap-2">
           <Plus className="w-4 h-4" /> Create Ticket

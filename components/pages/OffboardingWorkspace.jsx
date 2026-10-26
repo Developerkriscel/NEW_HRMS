@@ -407,19 +407,19 @@ export function OffboardingWorkspace() {
         </select>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
           { label: 'Total Exits', value: summary.total, icon: UserMinus, color: 'text-rose-600', bg: 'bg-rose-50' },
           { label: 'Pending Decisions', value: summary.pending, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
           { label: 'Handover Pending', value: summary.handoverPending, icon: ClipboardCheck, color: 'text-blue-600', bg: 'bg-blue-50' },
           { label: 'Approved Exits', value: summary.approved, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
         ].map((card) => (
-          <div key={card.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <div className={`mb-3 flex h-8 w-8 items-center justify-center rounded-xl ${card.bg} ${card.color}`}>
-              <card.icon className="h-4 w-4" />
+          <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className={`mb-2 flex h-7 w-7 items-center justify-center rounded-lg ${card.bg} ${card.color}`}>
+              <card.icon className="h-3.5 w-3.5" />
             </div>
-            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{card.label}</p>
-            <p className="mt-0.5 text-xl font-extrabold text-slate-900 dark:text-white">{card.value}</p>
+            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">{card.label}</p>
+            <p className="mt-0.5 text-lg font-extrabold leading-none text-slate-900 dark:text-white">{card.value}</p>
           </div>
         ))}
       </div>
