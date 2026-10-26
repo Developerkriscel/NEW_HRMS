@@ -49,6 +49,9 @@ export const POST = withApi(async (req, { params }) => {
   const actorName = await getActorName(session)
   const succeeded = results.filter((r) => r.status === PUBLICATION_STATUS.PUBLISHED).map((r) => PUBLISHING_CHANNEL_LABELS[r.channel])
   if (succeeded.length) {
+    if (results.some((result) => result.channel === 'CAREER_PAGE' && result.status === PUBLICATION_STATUS.PUBLISHED)) {
+      job.visibility = 'PUBLIC'
+    }
     job.activityLog.push({
       type: JOB_ACTIVITY_TYPE.PUBLISHED,
       message: `Published to ${succeeded.join(', ')} by ${actorName}`,

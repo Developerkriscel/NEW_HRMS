@@ -13,22 +13,6 @@ const STEPS = [
   'Status'
 ]
 
-function AiWriteButton({ section, aiWriting, onWrite }) {
-  const writing = aiWriting === section
-  return (
-    <button
-      type="button"
-      onClick={() => onWrite(section)}
-      disabled={Boolean(aiWriting)}
-      title={`Generate ${section} with AI`}
-      className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-bold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-indigo-900/60 dark:bg-indigo-950/30 dark:text-indigo-300"
-    >
-      {writing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-      {writing ? 'Writing...' : 'AI Write'}
-    </button>
-  )
-}
-
 export function OpenPositionModal({ onClose, onSave, onAutoSave, initialData, options = {}, saveError = '' }) {
   const [currentStep, setCurrentStep] = useState(0)
   const [saving, setSaving] = useState(false)
@@ -45,7 +29,7 @@ export function OpenPositionModal({ onClose, onSave, onAutoSave, initialData, op
     // Step 2
     description: '', requiredSkills: '', experience: '', education: '', preferredSkills: '', responsibilities: '',
     // Step 3
-    salaryMin: '', salaryMax: '', salaryType: 'Annual', currency: 'INR', benefits: '',
+    salaryMin: '', salaryMax: '', salaryType: 'ANNUAL', currency: 'INR', benefits: '',
     // Step 4
     hiringManager: '', recruiter: '', priority: 'Medium', openingDate: '', targetClosingDate: '', expectedJoiningDate: '',
     // Step 5
@@ -56,7 +40,7 @@ export function OpenPositionModal({ onClose, onSave, onAutoSave, initialData, op
   const handlePrev = () => setCurrentStep(p => Math.max(p - 1, 0))
 
   const departments = useMemo(() => options.departments || [], [options.departments])
-  const branches = options.branches || []
+  const branches = useMemo(() => options.branches || [], [options.branches])
   const employees = useMemo(() => options.employees || [], [options.employees])
 
   useEffect(() => {
@@ -91,17 +75,23 @@ export function OpenPositionModal({ onClose, onSave, onAutoSave, initialData, op
     }
   }, [employees, form.hiringManager, form.hiringManagerId, form.recruiter, form.recruiterId, initialData])
 
-  const writeWithAi = async (section) => {
+  const generateRequirementsWithAi = async () => {
     if (aiWriting) return
-    const currentText = form[section] || ''
-    if (currentText.trim() && typeof window !== 'undefined' && !window.confirm('Replace the existing text with a new AI draft?')) return
+    if (!String(form.title || '').trim()) {
+      setAiError('Add a job title in Position Details first so the requirements fit the role.')
+      return
+    }
 
-    setAiWriting(section)
+    const requirementFields = ['description', 'responsibilities', 'requiredSkills', 'preferredSkills', 'experience', 'education']
+    const hasExistingContent = requirementFields.some((field) => String(form[field] || '').trim())
+    if (hasExistingContent && typeof window !== 'undefined' && !window.confirm('Generate all job requirements and replace the current text in these fields?')) return
+
+    setAiWriting('all')
     setAiError('')
     try {
       const response = await api.post('/recruitment/jobs/ai-writer', {
-        section,
-        currentText,
+        section: 'all',
+        currentText: Object.fromEntries(requirementFields.map((field) => [field, form[field] || ''])),
         title: form.title,
         department: form.department,
         jobType: form.jobType,
@@ -113,11 +103,22 @@ export function OpenPositionModal({ onClose, onSave, onAutoSave, initialData, op
         preferredSkills: form.preferredSkills,
         education: form.education,
       })
-      const text = response.data?.data?.text || response.data?.text
-      if (!text) throw new Error('The AI provider returned empty content')
-      const nextForm = { ...form, [section]: text }
+      const generatedFields = response.data?.data?.sections || response.data?.sections
+      if (!generatedFields || requirementFields.some((field) => !String(generatedFields[field] || '').trim())) {
+        throw new Error('The generator did not return all job requirement fields. Please try again.')
+      }
+      const nextForm = { ...form, ...generatedFields }
       setForm(nextForm)
-      if (onAutoSave) await onAutoSave(nextForm)
+      if (onAutoSave) {
+        try {
+          const saved = await onAutoSave(nextForm)
+          if (saved === false) {
+            setAiError('Requirements were generated, but the draft could not be saved. Your text is still here; save the position to keep it.')
+          }
+        } catch {
+          setAiError('Requirements were generated, but the draft could not be saved. Your text is still here; save the position to keep it.')
+        }
+      }
     } catch (error) {
       setAiError(error.response?.data?.message || error.message || 'Unable to generate content right now')
     } finally {
@@ -189,17 +190,14 @@ export function OpenPositionModal({ onClose, onSave, onAutoSave, initialData, op
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Location</label>
-                {branches.length ? (
-                  <select className="input-field" value={form.locationId || ''} onChange={e => {
+                <select className="input-field" value={form.locationId || ''} onChange={e => {
                     const branch = branches.find((item) => String(item._id) === e.target.value)
                     setForm({...form, locationId: e.target.value, location: branch?.name || ''})
-                  }}>
-                    <option value="">Select branch/location</option>
-                    {branches.map((branch) => <option key={branch._id} value={branch._id}>{branch.name} {branch.city ? `- ${branch.city}` : ''}</option>)}
-                  </select>
-                ) : (
-                  <input className="input-field" value={form.location} onChange={e => setForm({...form, location: e.target.value})} />
-                )}
+                  }} disabled={!branches.length}>
+                  <option value="">{branches.length ? 'Select branch/location' : 'No active branches available'}</option>
+                  {branches.map((branch) => <option key={branch._id} value={branch._id}>{branch.name} {branch.city ? `- ${branch.city}` : ''}</option>)}
+                </select>
+                {!branches.length && <p className="text-xs font-medium text-amber-600">Create an active branch in Settings first.</p>}
               </div>
             </div>
           </div>
@@ -207,54 +205,40 @@ export function OpenPositionModal({ onClose, onSave, onAutoSave, initialData, op
       case 1:
         return (
           <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300">
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between gap-3">
-                <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Job Description <span className="text-rose-500">*</span></label>
-                <button type="button" onClick={() => writeWithAi('description')} disabled={!!aiWriting} title="Generate job description with AI" className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60">
-                  {aiWriting === 'description' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                  {aiWriting === 'description' ? 'Writing...' : 'AI Write'}
-                </button>
+            <div className="flex flex-col gap-3 rounded-xl border border-indigo-100 bg-indigo-50/70 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-indigo-900/50 dark:bg-indigo-950/20">
+              <div>
+                <p className="text-sm font-bold text-slate-800 dark:text-slate-100">Create a complete job requirement draft</p>
+                <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">Uses the job title and details to fill the description, responsibilities, skills, experience, and education.</p>
               </div>
+              <button type="button" onClick={generateRequirementsWithAi} disabled={Boolean(aiWriting)} title="Generate all job requirements with AI" className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60">
+                {aiWriting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                {aiWriting ? 'Generating requirements...' : 'Generate with AI'}
+              </button>
+            </div>
+            {aiError ? <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{aiError}</p> : null}
+            <div className="space-y-1.5">
+              <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Job Description <span className="text-rose-500">*</span></label>
               <textarea required rows={3} className="input-field" value={form.description} onChange={e => setForm({...form, description: e.target.value})} />
             </div>
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between gap-3">
-                <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Responsibilities</label>
-                <button type="button" onClick={() => writeWithAi('responsibilities')} disabled={!!aiWriting} title="Generate responsibilities with AI" className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60">
-                  {aiWriting === 'responsibilities' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                  {aiWriting === 'responsibilities' ? 'Writing...' : 'AI Write'}
-                </button>
-              </div>
+              <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Responsibilities</label>
               <textarea rows={3} className="input-field" value={form.responsibilities} onChange={e => setForm({...form, responsibilities: e.target.value})} />
             </div>
-            {aiError ? <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{aiError}</p> : null}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div className="space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Required Skills <span className="text-rose-500">*</span></label>
-                  <AiWriteButton section="requiredSkills" aiWriting={aiWriting} onWrite={writeWithAi} />
-                </div>
+                <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Required Skills <span className="text-rose-500">*</span></label>
                 <input required className="input-field" placeholder="e.g. React, Node.js" value={form.requiredSkills} onChange={e => setForm({...form, requiredSkills: e.target.value})} />
               </div>
               <div className="space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Preferred Skills</label>
-                  <AiWriteButton section="preferredSkills" aiWriting={aiWriting} onWrite={writeWithAi} />
-                </div>
+                <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Preferred Skills</label>
                 <input className="input-field" value={form.preferredSkills} onChange={e => setForm({...form, preferredSkills: e.target.value})} />
               </div>
               <div className="space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Experience Required</label>
-                  <AiWriteButton section="experience" aiWriting={aiWriting} onWrite={writeWithAi} />
-                </div>
+                <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Experience Required</label>
                 <input className="input-field" placeholder="e.g. 3-5 Years" value={form.experience} onChange={e => setForm({...form, experience: e.target.value})} />
               </div>
               <div className="space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Education / Qualification</label>
-                  <AiWriteButton section="education" aiWriting={aiWriting} onWrite={writeWithAi} />
-                </div>
+                <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Education / Qualification</label>
                 <input className="input-field" value={form.education} onChange={e => setForm({...form, education: e.target.value})} />
               </div>
             </div>
@@ -275,7 +259,7 @@ export function OpenPositionModal({ onClose, onSave, onAutoSave, initialData, op
               <div className="space-y-1.5">
                 <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Salary Type</label>
                 <select className="input-field" value={form.salaryType} onChange={e => setForm({...form, salaryType: e.target.value})}>
-                  <option>Annual</option><option>Monthly</option><option>Hourly</option>
+                  <option value="ANNUAL">Annual</option><option value="MONTHLY">Monthly</option><option value="HOURLY">Hourly</option>
                 </select>
               </div>
               <div className="space-y-1.5">
@@ -358,7 +342,7 @@ export function OpenPositionModal({ onClose, onSave, onAutoSave, initialData, op
           <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300 text-center py-8">
             <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6">Set Position Status</h3>
             <div className="flex flex-wrap justify-center gap-4 max-w-lg mx-auto">
-              {['Draft', 'Open', 'On Hold', 'Closed', 'Cancelled'].map(s => (
+              {['Draft', 'Open', 'On Hold'].map(s => (
                 <label key={s} className={`flex-1 min-w-[120px] flex items-center justify-center p-4 rounded-2xl border-2 cursor-pointer transition-all ${
                   form.status === s ? 'bg-indigo-50 border-indigo-500 text-indigo-700 shadow-md transform scale-105' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                 }`}>

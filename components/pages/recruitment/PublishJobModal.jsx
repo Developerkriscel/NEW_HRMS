@@ -1,18 +1,31 @@
-import { useState } from 'react'
-import { X, Globe, CheckCircle2, Loader2, Linkedin, Twitter, ExternalLink } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { X, Globe, CheckCircle2, Loader2, Linkedin, ExternalLink, Users, Briefcase, AlertCircle } from 'lucide-react'
 import { Portal } from '@/components/common/Portal'
+import { publishingApi } from '@/services/publishingApi'
 
 const PLATFORMS = [
-  { id: 'linkedin', name: 'LinkedIn', icon: Linkedin, color: 'bg-blue-600', active: true },
-  { id: 'indeed', name: 'Indeed', icon: Globe, color: 'bg-blue-500', active: true },
-  { id: 'glassdoor', name: 'Glassdoor', icon: Globe, color: 'bg-green-500', active: false },
-  { id: 'monster', name: 'Monster', icon: Globe, color: 'bg-purple-600', active: false },
+  { id: 'CAREER_PAGE', name: 'Company Career Page', icon: Briefcase, color: 'bg-indigo-600' },
+  { id: 'REFERRAL', name: 'Employee Referral', icon: Users, color: 'bg-emerald-600' },
+  { id: 'LINKEDIN', name: 'LinkedIn', icon: Linkedin, color: 'bg-blue-600' },
+  { id: 'NAUKRI', name: 'Naukri', icon: Globe, color: 'bg-blue-500' },
+  { id: 'INDEED', name: 'Indeed', icon: Globe, color: 'bg-cyan-600' },
+  { id: 'FOUNDIT', name: 'Foundit', icon: Globe, color: 'bg-violet-600' },
 ]
 
 export function PublishJobModal({ position, onClose, onPublish }) {
-  const [selectedPlatforms, setSelectedPlatforms] = useState(['linkedin', 'indeed'])
+  const [selectedPlatforms, setSelectedPlatforms] = useState(['CAREER_PAGE'])
   const [publishing, setPublishing] = useState(false)
   const [published, setPublished] = useState(false)
+  const [results, setResults] = useState([])
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    setSelectedPlatforms(['CAREER_PAGE'])
+    setPublishing(false)
+    setPublished(false)
+    setResults([])
+    setError('')
+  }, [position?.id])
 
   if (!position) return null
 
@@ -22,17 +35,22 @@ export function PublishJobModal({ position, onClose, onPublish }) {
     )
   }
 
-  const handlePublish = () => {
+  const handlePublish = async () => {
+    setError('')
     setPublishing(true)
-    // Simulate API call to job boards
-    setTimeout(() => {
+    try {
+      const response = await publishingApi.publish(position.id, selectedPlatforms)
+      const publishedResults = response.data?.data?.results || []
+      setResults(publishedResults)
+      const allPublished = publishedResults.length > 0 && publishedResults.every((item) => item.status === 'PUBLISHED')
+      setPublished(allPublished)
+      if (publishedResults.some((item) => item.status === 'PUBLISHED')) onPublish?.(position.id, publishedResults)
+    } catch (requestError) {
+      const fieldErrors = requestError.response?.data?.data?.errors
+      setError(fieldErrors ? Object.values(fieldErrors).join(' ') : requestError.response?.data?.message || requestError.message || 'Publishing failed. Please try again.')
+    } finally {
       setPublishing(false)
-      setPublished(true)
-      setTimeout(() => {
-        if (onPublish) onPublish(position.id, selectedPlatforms)
-        onClose()
-      }, 1500)
-    }, 2000)
+    }
   }
 
   return (
@@ -57,7 +75,7 @@ export function PublishJobModal({ position, onClose, onPublish }) {
           <div className="mb-6">
             <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">Position to publish</p>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">{position.title}</h3>
-            <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">Automatically push this job listing to the selected platforms via API integration.</p>
+            <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">Publish the open position to the selected channels. External job boards require a connected integration.</p>
           </div>
 
           <div className="space-y-3 mb-8">
@@ -67,7 +85,7 @@ export function PublishJobModal({ position, onClose, onPublish }) {
               return (
                 <div 
                   key={platform.id}
-                  onClick={() => !publishing && togglePlatform(platform.id)}
+                  onClick={() => !publishing && !published && togglePlatform(platform.id)}
                   className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all cursor-pointer ${
                     isSelected 
                       ? 'border-indigo-500 bg-indigo-50/50 dark:border-indigo-500 dark:bg-indigo-500/10' 
@@ -93,12 +111,23 @@ export function PublishJobModal({ position, onClose, onPublish }) {
             })}
           </div>
 
-          {published ? (
-            <div className="bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 p-4 rounded-xl flex items-center gap-3 font-bold">
-              <CheckCircle2 className="w-5 h-5" />
-              Job published successfully!
+          {error ? <div role="alert" className="mb-4 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{error}</div> : null}
+          {results.length > 0 && (
+            <div className="mb-4 space-y-2" aria-live="polite">
+              {results.map((result) => {
+                const channel = PLATFORMS.find((item) => item.id === result.channel)
+                const success = result.status === 'PUBLISHED'
+                return <div key={result.channel} className={`flex items-start gap-2 rounded-xl border p-3 text-sm ${success ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
+                  {success ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />}
+                  <div className="min-w-0"><div className="font-bold">{channel?.name || result.channel}: {success ? 'Published' : result.status}</div>{result.errorMessage ? <p className="mt-0.5 text-xs">{result.errorMessage}</p> : null}{result.externalUrl ? <a className="mt-1 block truncate text-xs underline" href={result.externalUrl.startsWith('http') ? result.externalUrl : `/${result.externalUrl.replace(/^\//, '')}`} target="_blank" rel="noreferrer">View listing</a> : null}</div>
+                </div>
+              })}
             </div>
-          ) : (
+          )}
+          {published ? (
+            <div className="mb-4 rounded-xl bg-emerald-50 p-3 text-sm font-bold text-emerald-700">All selected channels published successfully.</div>
+          ) : null}
+          {!published && (
             <button 
               onClick={handlePublish}
               disabled={publishing || selectedPlatforms.length === 0}
@@ -107,7 +136,7 @@ export function PublishJobModal({ position, onClose, onPublish }) {
               {publishing ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Publishing to {selectedPlatforms.length} platforms...
+                  Publishing to {selectedPlatforms.length} channels...
                 </>
               ) : (
                 <>

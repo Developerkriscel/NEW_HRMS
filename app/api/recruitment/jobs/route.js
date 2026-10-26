@@ -58,7 +58,7 @@ export const GET = withApi(async (req) => {
   const contentQuery = Job.find(query)
     // Include editable job content so position forms retain AI-written text
     // after the recruitment page is refreshed. Pipeline data remains detail-only.
-    .select('jobCode jobTitle publicTitle status employmentType workMode totalOpenings filledOpenings department location hiringManager recruiter internalMinCtc internalMaxCtc currency openingDate targetClosingDate expectedJoiningDate minExperience jobSummary responsibilities requiredQualifications preferredQualifications')
+    .select('jobCode jobTitle publicTitle status employmentType employmentNature salaryPeriod workMode totalOpenings filledOpenings department location hiringManager recruiter internalMinCtc internalMaxCtc currency openingDate targetClosingDate expectedJoiningDate minExperience maxExperience jobSummary responsibilities requiredQualifications preferredQualifications')
     .populate('department', 'name')
     .populate('location', 'name')
     .populate('hiringManager', 'firstName lastName employeeCode')

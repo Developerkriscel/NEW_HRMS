@@ -45,7 +45,7 @@ export const PATCH = withApi(async (req, { params }) => {
   }
 
   const merged = { ...job.toObject(), ...body }
-  const fieldErrors = validateAlways(merged)
+  const fieldErrors = job.status === 'OPEN' ? validateForOpen(merged) : validateAlways(merged)
   if (Object.keys(fieldErrors).length) return fail('Please fix the highlighted fields', 400, 'VALIDATION_ERROR', { errors: fieldErrors })
 
   const majorChangeMessages = describeMajorChanges(job, body)

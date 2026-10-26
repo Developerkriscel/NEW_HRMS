@@ -16,7 +16,6 @@ import { candidateApi } from '@/services/candidateApi'
 import { jobApi } from '@/services/jobApi'
 import { interviewApi } from '@/services/interviewApi'
 import { employeeApi } from '@/services/employeeApi'
-import { departmentApi } from '@/services/departmentApi'
 
 // Utility: parse a CSV string into an array of candidate-shaped objects
 // Supports any common column names (partial match, case-insensitive)
@@ -43,6 +42,57 @@ function findColIdx(headers, patterns) {
   return headers.findIndex(h => patterns.some(p => h.includes(p)))
 }
 
+function normalizeCandidateName(value) {
+  const name = String(value || '').trim()
+  const normalized = name.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ')
+  const headerLikeValues = new Set([
+    'name', 'candidate', 'candidate name', 'full name', 'first name', 'last name',
+    'professional experience', 'experience', 'work experience', 'education', 'skills',
+    'contact details', 'resume summary', 'profile summary',
+  ])
+  return headerLikeValues.has(normalized) ? '' : name
+}
+
+function getCandidatePreviewLabel(candidate, index) {
+  return normalizeCandidateName(candidate.name)
+    || String(candidate.email || '').trim()
+    || `Candidate ${index + 1}`
+}
+
+function formatCandidatePreviewValue(value, fields = []) {
+  if (value == null || value === '') return ''
+  if (Array.isArray(value)) {
+    return value.map((item) => {
+      if (item && typeof item === 'object') {
+        return fields.map((field) => item[field]).filter(Boolean).join(' · ')
+      }
+      return String(item || '').trim()
+    }).filter(Boolean).join(', ')
+  }
+  if (typeof value === 'object') {
+    return fields.map((field) => value[field]).filter(Boolean).join(' · ')
+  }
+  return String(value).trim()
+}
+
+function getCandidatePreviewSkills(candidate) {
+  const skills = Array.isArray(candidate.skills)
+    ? candidate.skills.map((skill) => typeof skill === 'object' ? skill.skillName || skill.name : skill)
+    : splitList(candidate.skills)
+  return [...new Set(skills.map((skill) => String(skill || '').trim()).filter(Boolean))]
+}
+
+function getSafeExternalUrl(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  try {
+    const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`)
+    return ['http:', 'https:'].includes(url.protocol) ? url.toString() : ''
+  } catch {
+    return ''
+  }
+}
+
 function detectDelimitedFileSeparator(headerLine = '') {
   const candidates = [',', '\t', ';']
   return candidates
@@ -60,15 +110,23 @@ function parseCSVToCandidates(csvText, delimiterOverride = null) {
   const headers = rawHeaders.map(h => h.toLowerCase().replace(/["'\r]/g, '').trim())
   
   // Flexible header matching - partial, case-insensitive
-  const nameIdx = findColIdx(headers, ['name', 'candidate', 'full name', 'fullname'])
-  const firstIdx = findColIdx(headers, ['first'])
-  const lastIdx = findColIdx(headers, ['last', 'surname'])
+  const nameIdx = headers.findIndex(h => ['name', 'full name', 'fullname', 'candidate', 'candidate name'].includes(h))
+  const firstIdx = headers.findIndex(h => ['first', 'first name', 'given name'].includes(h))
+  const lastIdx = headers.findIndex(h => ['last', 'last name', 'surname', 'family name'].includes(h))
   const emailIdx = findColIdx(headers, ['email', 'e-mail', 'mail'])
   const phoneIdx = findColIdx(headers, ['phone', 'mobile', 'contact', 'cell'])
   const expIdx = findColIdx(headers, ['exp', 'experience', 'years', 'yrs'])
   const roleIdx = findColIdx(headers, ['role', 'title', 'position', 'designation', 'job'])
   const skillsIdx = findColIdx(headers, ['skill', 'technology', 'tech stack'])
   const locationIdx = findColIdx(headers, ['location', 'city'])
+  const companyIdx = findColIdx(headers, ['current company', 'employer', 'company'])
+  const educationIdx = findColIdx(headers, ['education', 'degree', 'qualification', 'university'])
+  const historyIdx = findColIdx(headers, ['work history', 'employment history', 'experience summary', 'professional experience'])
+  const currentCtcIdx = findColIdx(headers, ['current ctc', 'current salary', 'current compensation'])
+  const expectedCtcIdx = findColIdx(headers, ['expected ctc', 'expected salary', 'expected compensation'])
+  const noticeIdx = findColIdx(headers, ['notice period', 'availability'])
+  const linkedinIdx = findColIdx(headers, ['linkedin'])
+  const portfolioIdx = findColIdx(headers, ['portfolio', 'personal website'])
   
   // Need at least one identifying column
   const hasName = nameIdx !== -1 || (firstIdx !== -1)
@@ -106,13 +164,23 @@ function parseCSVToCandidates(csvText, delimiterOverride = null) {
     }
     return {
       id: `csv-${i}`,
-      name: name.replace(/\r/g, ''),
+      name: normalizeCandidateName(name.replace(/\r/g, '')),
       email: (emailIdx !== -1 ? cols[emailIdx] : '') || '',
       phone: (phoneIdx !== -1 ? cols[phoneIdx] : '') || '',
       exp: expIdx !== -1 ? cols[expIdx] || null : null,
+      totalExperience: expIdx !== -1 ? cols[expIdx] || null : null,
       role: roleIdx !== -1 ? cols[roleIdx] || '' : '',
+      currentDesignation: roleIdx !== -1 ? cols[roleIdx] || '' : '',
+      currentCompany: companyIdx !== -1 ? cols[companyIdx] || '' : '',
       skills: skillsIdx !== -1 ? splitList(cols[skillsIdx]) : [],
+      education: educationIdx !== -1 ? cols[educationIdx] || '' : '',
+      experience: historyIdx !== -1 ? cols[historyIdx] || '' : '',
       location: locationIdx !== -1 ? cols[locationIdx] || '' : '',
+      currentCtc: currentCtcIdx !== -1 ? cols[currentCtcIdx] || '' : '',
+      expectedCtcText: expectedCtcIdx !== -1 ? cols[expectedCtcIdx] || '' : '',
+      noticePeriod: noticeIdx !== -1 ? cols[noticeIdx] || '' : '',
+      linkedinUrl: linkedinIdx !== -1 ? cols[linkedinIdx] || '' : '',
+      portfolioUrl: portfolioIdx !== -1 ? cols[portfolioIdx] || '' : '',
       score: null,
       source: 'CSV',
     }
@@ -302,6 +370,7 @@ export default function RecruitmentDashboardPage() {
   const [positionsLoading, setPositionsLoading] = useState(true)
   const [positionsError, setPositionsError] = useState('')
   const [departments, setDepartments] = useState([])
+  const [branches, setBranches] = useState([])
   const [employees, setEmployees] = useState([])
   const [positionActionLoading, setPositionActionLoading] = useState(false)
   const [positionActionError, setPositionActionError] = useState(null)
@@ -340,11 +409,12 @@ export default function RecruitmentDashboardPage() {
       const mappedJobs = jobs.map(job => ({
         id: job._id || job.id,
         title: job.jobTitle || job.title,
-        department: job.department?.name || job.department || 'Unknown',
+        department: job.department?.name || (typeof job.department === 'string' ? job.department : ''),
         departmentId: job.department?._id || job.department,
         status: job.status === 'OPEN' ? 'Active' : job.status === 'DRAFT' ? 'Draft' : ['ON_HOLD', 'PAUSED'].includes(job.status) ? 'On Hold' : job.status === 'CLOSED' ? 'Closed' : job.status === 'CANCELLED' ? 'Cancelled' : job.status,
-        jobType: job.employmentType === 'FULL_TIME' ? 'Full-time' : job.employmentType === 'PART_TIME' ? 'Part-time' : job.employmentType === 'CONTRACT' ? 'Contract' : job.employmentType === 'INTERN' ? 'Intern' : 'Full-time',
-        employmentType: 'Permanent',
+        jobType: job.employmentType === 'FULL_TIME' ? 'Full-time' : job.employmentType === 'PART_TIME' ? 'Part-time' : job.employmentType === 'CONTRACT' ? 'Contract' : job.employmentType === 'INTERNSHIP' ? 'Intern' : 'Full-time',
+        employmentType: job.employmentNature === 'TEMPORARY' ? 'Temporary' : 'Permanent',
+        salaryType: job.salaryPeriod || 'ANNUAL',
         workMode: job.workMode === 'ONSITE' ? 'On-site' : job.workMode === 'HYBRID' ? 'Hybrid' : job.workMode === 'REMOTE' ? 'Remote' : 'On-site',
         openings: job.totalOpenings || 1,
         location: job.location?.name || job.location,
@@ -357,7 +427,7 @@ export default function RecruitmentDashboardPage() {
         responsibilities: job.responsibilities || '',
         requiredSkills: job.requiredQualifications || '',
         preferredSkills: job.preferredQualifications || '',
-        experience: job.minExperience ? `${job.minExperience}+ Years` : '',
+        experience: job.minExperience != null ? (job.maxExperience != null ? `${job.minExperience}-${job.maxExperience} Years` : `${job.minExperience}+ Years`) : '',
         salaryMin: job.internalMinCtc || '',
         salaryMax: job.internalMaxCtc || '',
         currency: job.currency || 'INR',
@@ -618,25 +688,20 @@ export default function RecruitmentDashboardPage() {
   useEffect(() => {
     fetchPositions()
     let cancelled = false
-    departmentApi.getAll()
+    jobApi.getOptions()
       .then((response) => {
         if (cancelled) return
-        const rows = response.data?.data?.content || response.data?.data || []
-        setDepartments(Array.isArray(rows) ? rows.filter((department) => department.active !== false) : [])
-      })
-      .catch((error) => {
-        if (cancelled) return
-        setDepartments([])
-      })
-    employeeApi.getAll({ page: 0, size: 100, status: 'ACTIVE' })
-      .then((response) => {
-        if (cancelled) return
-        const data = response?.data?.data
-        const rows = data?.content || data?.items || data || []
-        setEmployees(Array.isArray(rows) ? rows : [])
+        const data = response.data?.data || {}
+        setDepartments(Array.isArray(data.departments) ? data.departments : [])
+        setBranches(Array.isArray(data.branches) ? data.branches : [])
+        setEmployees(Array.isArray(data.employees) ? data.employees : [])
       })
       .catch(() => {
-        if (!cancelled) setEmployees([])
+        if (!cancelled) {
+          setDepartments([])
+          setBranches([])
+          setEmployees([])
+        }
       })
     return () => { cancelled = true }
   }, [])
@@ -1151,11 +1216,16 @@ export default function RecruitmentDashboardPage() {
           const key = Object.keys(obj).find(k => patterns.some(p => k.toLowerCase().includes(p)))
           return key ? String(obj[key] || '').trim() : ''
         }
+        function flexFindExact(obj, labels) {
+          const normalizedLabels = new Set(labels)
+          const key = Object.keys(obj).find((column) => normalizedLabels.has(column.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()))
+          return key ? String(obj[key] || '').trim() : ''
+        }
         const candidates = jsonRows.map((row, i) => {
-          const fullName = flexFind(row, ['full name', 'fullname', 'candidate name', 'candidate'])
-          const firstName = flexFind(row, ['first name', 'first'])
-          const lastName = flexFind(row, ['last name', 'surname', 'last'])
-          const name = fullName || [firstName, lastName].filter(Boolean).join(' ')
+          const fullName = flexFindExact(row, ['name', 'full name', 'fullname', 'candidate', 'candidate name'])
+          const firstName = flexFindExact(row, ['first name', 'first'])
+          const lastName = flexFindExact(row, ['last name', 'surname', 'last'])
+          const name = normalizeCandidateName(fullName || [firstName, lastName].filter(Boolean).join(' '))
           const experience = flexFind(row, ['past experience', 'experience summary', 'work history'])
           const resumeSummary = flexFind(row, ['resume summary', 'profile summary', 'summary', 'objective'])
           const education = flexFind(row, ['education', 'degree', 'qualification'])
@@ -1428,7 +1498,7 @@ export default function RecruitmentDashboardPage() {
       responsibilities: fullJob.responsibilities || '',
       requiredSkills: fullJob.requiredQualifications || '',
       preferredSkills: fullJob.preferredQualifications || '',
-      experience: fullJob.minExperience ? `${fullJob.minExperience}+ Years` : '',
+      experience: fullJob.minExperience != null ? (fullJob.maxExperience != null ? `${fullJob.minExperience}-${fullJob.maxExperience} Years` : `${fullJob.minExperience}+ Years`) : '',
       education: fullJob.minEducation || fullJob.preferredEducation || fullJob.education || '',
       pipelineStages: fullJob.pipelineStages || [],
     }
@@ -1457,14 +1527,18 @@ export default function RecruitmentDashboardPage() {
 
   const handleSavePosition = async (form, { close = true } = {}) => {
     try {
-      const experienceNumbers = [...String(form.experience || '').matchAll(/\d+(?:\.\d+)?/g)].map((match) => Number(match[0]))
-      const minExperience = experienceNumbers[0]
-      const maxExperience = experienceNumbers[1] ?? experienceNumbers[0]
+      const experienceText = String(form.experience || '').trim()
+      const experienceRange = experienceText.match(/(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)/i)
+      const experienceSingle = experienceText.match(/\d+(?:\.\d+)?/)
+      const minExperience = experienceRange ? Number(experienceRange[1]) : experienceSingle ? Number(experienceSingle[0]) : undefined
+      const maxExperience = experienceRange ? Number(experienceRange[2]) : (experienceSingle && !experienceText.includes('+') ? Number(experienceSingle[0]) : undefined)
       const payload = {
         jobTitle: form.title,
         department: form.departmentId && form.departmentId.match(/^[0-9a-fA-F]{24}$/) ? form.departmentId : undefined,
         totalOpenings: parseInt(form.openings, 10) || 1,
-        employmentType: form.jobType === 'Full-time' ? 'FULL_TIME' : form.jobType === 'Part-time' ? 'PART_TIME' : form.jobType === 'Contract' ? 'CONTRACT' : form.jobType === 'Intern' ? 'INTERN' : undefined,
+        employmentType: form.jobType === 'Full-time' ? 'FULL_TIME' : form.jobType === 'Part-time' ? 'PART_TIME' : form.jobType === 'Contract' ? 'CONTRACT' : form.jobType === 'Intern' ? 'INTERNSHIP' : undefined,
+        employmentNature: form.employmentType === 'Temporary' ? 'TEMPORARY' : 'PERMANENT',
+        salaryPeriod: form.salaryType || 'ANNUAL',
         workMode: form.workMode === 'On-site' ? 'ONSITE' : form.workMode === 'Hybrid' ? 'HYBRID' : form.workMode === 'Remote' ? 'REMOTE' : undefined,
         location: form.locationId && form.locationId.match(/^[0-9a-fA-F]{24}$/) ? form.locationId : undefined,
         jobSummary: form.description,
@@ -1483,7 +1557,7 @@ export default function RecruitmentDashboardPage() {
         openingDate: form.openingDate || undefined,
         targetClosingDate: form.targetClosingDate || undefined,
         expectedJoiningDate: form.expectedJoiningDate || undefined,
-        status: form.status === 'Open' ? 'OPEN' : form.status === 'Draft' ? 'DRAFT' : form.status === 'On Hold' ? 'PAUSED' : form.status === 'Closed' ? 'CLOSED' : form.status === 'Cancelled' ? 'CANCELLED' : 'DRAFT'
+        status: form.status === 'Open' ? 'OPEN' : form.status === 'On Hold' ? 'PAUSED' : 'DRAFT'
       }
 
       if (editingPositionForModal) {
@@ -1496,6 +1570,7 @@ export default function RecruitmentDashboardPage() {
         setEditingPositionForModal(null)
       }
       await fetchPositions({ force: true })
+      return true
     } catch (e) {
       console.error('Failed to save position:', e)
       const fieldErrors = e.response?.data?.data?.errors || e.response?.data?.errors
@@ -1503,6 +1578,7 @@ export default function RecruitmentDashboardPage() {
         ? Object.values(fieldErrors).filter(Boolean).join(' ')
         : ''
       setPositionActionError(details || e.response?.data?.message || e.message || 'Failed to save position.')
+      return false
     }
   }
 
@@ -2778,7 +2854,7 @@ export default function RecruitmentDashboardPage() {
           )}
 
           {candidatePhase === 'uploaded' && (
-            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex min-h-[420px] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <div className="border-b border-slate-100 bg-gradient-to-r from-emerald-50 via-white to-indigo-50 px-6 py-5 dark:border-slate-800 dark:from-emerald-500/10 dark:via-slate-900 dark:to-indigo-500/10">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div>
@@ -2792,7 +2868,7 @@ export default function RecruitmentDashboardPage() {
                       {parsedCandidates.length} candidate{parsedCandidates.length !== 1 ? 's' : ''} loaded from {uploadFileName || 'uploaded file'}.
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-3">
+                  <div className="flex flex-wrap gap-4 lg:justify-end">
                     <button onClick={() => setCandidatePhase('upload')} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
                       Upload Another
                     </button>
@@ -2809,11 +2885,11 @@ export default function RecruitmentDashboardPage() {
                 </div>
               </div>
 
-              <div className="grid gap-4 p-6 lg:grid-cols-3">
+              <div className="grid gap-4 px-6 py-7 lg:grid-cols-3">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/40">
                   <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Target Position</p>
                   <p className="mt-1 text-lg font-black text-slate-900 dark:text-white">{selectedPositionForCandidates?.title || 'No position selected'}</p>
-                  <p className="text-sm font-medium text-slate-500">{selectedPositionForCandidates?.department || 'Department not set'}</p>
+                  {selectedPositionForCandidates?.department && <p className="mt-1 text-sm font-medium text-slate-500">{selectedPositionForCandidates.department}</p>}
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/40">
                   <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Matching Signals</p>
@@ -2837,14 +2913,76 @@ export default function RecruitmentDashboardPage() {
                 </div>
               )}
 
-              <div className="border-t border-slate-100 px-6 py-4 dark:border-slate-800">
-                <div className="flex flex-wrap gap-2">
-                  {parsedCandidates.slice(0, 8).map((candidate) => (
-                    <span key={candidate.id || candidate.email} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                      {candidate.name || candidate.email}
-                    </span>
-                  ))}
-                  {parsedCandidates.length > 8 && <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-black text-indigo-600">+{parsedCandidates.length - 8} more</span>}
+              <div className="mt-auto border-t border-slate-100 px-6 py-5 dark:border-slate-800">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Review candidate details</p>
+                    <p className="mt-0.5 text-xs text-slate-500">Check the extracted information before analysis or saving.</p>
+                  </div>
+                  <p className="text-xs font-medium text-slate-500">{parsedCandidates.length} candidate{parsedCandidates.length === 1 ? '' : 's'}</p>
+                </div>
+                <div className="grid max-h-[640px] gap-3 overflow-y-auto pr-1 md:grid-cols-2">
+                  {parsedCandidates.map((candidate, index) => {
+                    const skills = getCandidatePreviewSkills(candidate)
+                    const experienceYears = candidate.totalExperience ?? candidate.exp
+                    const workHistory = formatCandidatePreviewValue(candidate.experience, ['designation', 'companyName', 'company', 'duration'])
+                    const education = formatCandidatePreviewValue(candidate.education, ['degree', 'institution', 'school', 'field'])
+                    const summary = candidate.resumeSummary || candidate.profileSummary || ''
+                    const role = candidate.currentDesignation || candidate.role || ''
+                    const company = candidate.currentCompany || ''
+                    const currentCompensation = candidate.currentCtc || candidate.currentSalary || ''
+                    const expectedCompensation = candidate.expectedCtc || candidate.expectedCtcText || candidate.expectedSalary || ''
+                    const noticePeriod = candidate.noticePeriod || ''
+                    const linkedinUrl = getSafeExternalUrl(candidate.linkedinUrl)
+                    const githubUrl = getSafeExternalUrl(candidate.githubUrl)
+                    const portfolioUrl = getSafeExternalUrl(candidate.portfolioUrl)
+                    const key = candidate.id || candidate.email || `uploaded-candidate-${index}`
+
+                    return (
+                      <article key={key} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/40">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h3 className="truncate font-bold text-slate-900 dark:text-white">{getCandidatePreviewLabel(candidate, index)}</h3>
+                            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{role || 'Role not provided'}{company ? ` · ${company}` : ''}</p>
+                          </div>
+                          <span className="shrink-0 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300">
+                            {experienceYears !== null && experienceYears !== undefined && experienceYears !== '' ? `${experienceYears}${typeof experienceYears === 'number' || /^\d+(\.\d+)?$/.test(String(experienceYears)) ? ' years' : ''}` : 'Experience not provided'}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                          <span className="inline-flex min-w-0 items-center gap-1.5"><Mail className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{candidate.email || 'Email not provided'}</span></span>
+                          <span className="inline-flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" />{candidate.phone || 'Phone not provided'}</span>
+                          <span className="inline-flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" />{candidate.location || 'Location not provided'}</span>
+                        </div>
+                        {(linkedinUrl || githubUrl || portfolioUrl) && (
+                          <div className="mt-2 flex flex-wrap gap-3 text-xs font-semibold text-indigo-600 dark:text-indigo-300">
+                            {linkedinUrl && <a href={linkedinUrl} target="_blank" rel="noreferrer" className="hover:underline">LinkedIn</a>}
+                            {githubUrl && <a href={githubUrl} target="_blank" rel="noreferrer" className="hover:underline">GitHub</a>}
+                            {portfolioUrl && <a href={portfolioUrl} target="_blank" rel="noreferrer" className="hover:underline">Portfolio</a>}
+                          </div>
+                        )}
+
+                        <div className="mt-3">
+                          <p className="mb-1.5 text-[10px] font-black uppercase tracking-wider text-slate-400">Skills</p>
+                          {skills.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {skills.slice(0, 12).map((skill, skillIndex) => <span key={`${skill}-${skillIndex}`} className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{skill}</span>)}
+                              {skills.length > 12 && <span className="px-1.5 py-1 text-[11px] font-semibold text-slate-500">+{skills.length - 12} more</span>}
+                            </div>
+                          ) : <p className="text-xs text-slate-500 dark:text-slate-400">No skills extracted from this file.</p>}
+                        </div>
+
+                        <div className="mt-3 space-y-2 border-t border-slate-100 pt-3 text-xs dark:border-slate-800">
+                          <p><span className="font-bold text-slate-600 dark:text-slate-300">Education: </span><span className="text-slate-500 dark:text-slate-400">{education || 'Not provided'}</span></p>
+                          {workHistory && <p><span className="font-bold text-slate-600 dark:text-slate-300">Work history: </span><span className="text-slate-500 dark:text-slate-400">{workHistory}</span></p>}
+                          {(currentCompensation || expectedCompensation) && <p><span className="font-bold text-slate-600 dark:text-slate-300">Compensation: </span><span className="text-slate-500 dark:text-slate-400">{[currentCompensation && `Current ${currentCompensation}`, expectedCompensation && `Expected ${expectedCompensation}`].filter(Boolean).join(' · ')}</span></p>}
+                          {noticePeriod && <p><span className="font-bold text-slate-600 dark:text-slate-300">Notice period: </span><span className="text-slate-500 dark:text-slate-400">{noticePeriod}</span></p>}
+                          {summary && <p className="line-clamp-3 text-slate-500 dark:text-slate-400">{summary}</p>}
+                        </div>
+                      </article>
+                    )
+                  })}
                 </div>
               </div>
             </div>
@@ -3209,7 +3347,7 @@ export default function RecruitmentDashboardPage() {
       {showOpenPositionModal && (
         <OpenPositionModal 
           initialData={editingPositionForModal}
-          options={{ departments, employees }}
+          options={{ departments, branches, employees }}
           saveError={positionActionError}
           onSave={handleSavePosition}
           onAutoSave={editingPositionForModal ? (form) => handleSavePosition(form, { close: false }) : undefined}
@@ -3273,10 +3411,7 @@ export default function RecruitmentDashboardPage() {
       <PublishJobModal 
         position={publishingPosition}
         onClose={() => setPublishingPosition(null)}
-        onPublish={(id, platforms) => {
-          // You could save this to the position state here
-          console.log(`Published position ${id} to`, platforms)
-        }}
+        onPublish={() => fetchPositions({ force: true })}
       />
 
       {/* Schedule Interview Modal */}

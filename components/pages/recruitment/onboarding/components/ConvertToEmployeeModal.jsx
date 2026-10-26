@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { X, CheckCircle2, AlertTriangle, KeyRound, Mail } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { Portal } from '@/components/common/Portal'
@@ -9,32 +9,61 @@ export function ConvertToEmployeeModal({ isOpen, onClose, onCompleted, record, m
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
+  const [duplicateReview, setDuplicateReview] = useState(null)
   const [conversionResult, setConversionResult] = useState(null)
   const [loginEmail, setLoginEmail] = useState(record?.loginEmail || record?.candidate?.email || '')
   const [initialPassword, setInitialPassword] = useState('')
   const setupOnly = mode === 'access'
 
+  useEffect(() => {
+    if (!isOpen) return
+    setLoginEmail(record?.loginEmail || record?.candidate?.email || '')
+    setInitialPassword('')
+    setError('')
+    setDuplicateReview(null)
+    setConversionResult(null)
+    setSuccess(false)
+  }, [isOpen, record?.id, record?.loginEmail, record?.candidate?.email])
+
   if (!isOpen || !record) return null
 
-  const handleConvert = async () => {
+  const handleCredentialsSubmit = (event) => {
+    event.preventDefault()
+    if (setupOnly) handleSetupAccess()
+    else handleConvert()
+  }
+
+  const handleConvert = async (overrideDuplicate = false) => {
     setLoading(true)
     setError('')
-    setConversionResult(null)
+    setDuplicateReview(null)
     try {
       if (record.rawStatus === 'READY_TO_JOIN') {
         await preboardingApi.markJoined(record.id)
       }
-      const res = await preboardingApi.convertToEmployee(record.id, { loginEmail, initialPassword })
+      const res = await preboardingApi.convertToEmployee(record.id, { loginEmail, initialPassword, overrideDuplicate })
       const result = res.data.data
       setConversionResult(result)
       setLoading(false)
       setSuccess(true)
     } catch (err) {
+      const responseData = err.response?.data?.data || {}
+      const errorCode = err.response?.data?.errorCode
+      if (errorCode === 'DUPLICATE_EMPLOYEE' || errorCode === 'LOGIN_EMAIL_IN_USE') {
+        setDuplicateReview({ code: errorCode, matches: responseData.duplicates || [], message: err.response?.data?.message || '' })
+      }
       const validationFields = err.response?.data?.data?.fields
       const validationMessage = validationFields ? Object.values(validationFields).join(', ') : ''
-      const message = err.response?.data?.message || 'Failed to create employee from onboarding.'
+      const message = err.response?.data?.message
+        || (err.code === 'ECONNABORTED'
+          ? 'The conversion request timed out. Check the employee list before retrying to avoid creating a duplicate.'
+          : !err.response
+            ? 'Could not reach the server. Check your connection and try again.'
+            : 'Employee conversion failed. Please retry or contact your HR administrator.')
       const missing = err.response?.data?.data?.missingRequired || []
-      setError(missing.length
+      setError(errorCode === 'DUPLICATE_EMPLOYEE'
+        ? ''
+        : missing.length
         ? `${message}: ${missing.map((item) => item.label || item.key).join(', ')}`
         : validationMessage ? `${message}: ${validationMessage}` : message)
       setLoading(false)
@@ -106,10 +135,26 @@ export function ConvertToEmployeeModal({ isOpen, onClose, onCompleted, record, m
                 </button>
               </div>
 
+              <form onSubmit={handleCredentialsSubmit} className="flex min-h-0 flex-1 flex-col">
               <div className="p-6">
                 {error && (
                   <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
                     {error}
+                  </div>
+                )}
+                {duplicateReview && (
+                  <div className={`mb-4 rounded-2xl border p-4 text-sm ${duplicateReview.code === 'DUPLICATE_EMPLOYEE' ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200' : 'border-red-200 bg-red-50 text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200'}`}>
+                    <p className="font-bold">{duplicateReview.code === 'DUPLICATE_EMPLOYEE' ? 'Review possible employee match' : 'Login email is already in use'}</p>
+                    <p className="mt-1">{duplicateReview.code === 'DUPLICATE_EMPLOYEE'
+                      ? 'We found an employee with matching personal information. Check the match before continuing. If this is the same person, cancel and contact your HR administrator instead of creating a second employee.'
+                      : duplicateReview.message || 'Choose a different login email to continue.'}</p>
+                    {duplicateReview.matches.map((match, index) => (
+                      <div key={`${match.employee?.employeeCode || 'match'}-${index}`} className="mt-3 rounded-xl border border-current/10 bg-white/70 p-3 dark:bg-slate-950/30">
+                        <p className="font-bold">{[match.employee?.firstName, match.employee?.lastName].filter(Boolean).join(' ') || 'Existing employee'}{match.employee?.employeeCode ? ` · ${match.employee.employeeCode}` : ''}</p>
+                        <p className="mt-1 text-xs">{match.employee?.email || match.employee?.personalEmail || match.employee?.phone || 'Contact details unavailable'}</p>
+                        {match.matches?.length > 0 && <p className="mt-1 text-xs">Matched on: {match.matches.join(', ')}</p>}
+                      </div>
+                    ))}
                   </div>
                 )}
                 <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30 rounded-2xl p-4 mb-6 flex gap-4 text-amber-800 dark:text-amber-400">
@@ -168,8 +213,13 @@ export function ConvertToEmployeeModal({ isOpen, onClose, onCompleted, record, m
                       </span>
                       <input
                         type="email"
+                        required
+                        autoComplete="username"
                         value={loginEmail}
-                        onChange={(event) => setLoginEmail(event.target.value)}
+                        onChange={(event) => {
+                          setLoginEmail(event.target.value)
+                          if (duplicateReview?.code === 'LOGIN_EMAIL_IN_USE') setDuplicateReview(null)
+                        }}
                         className="input-field"
                         placeholder="employee@company.com"
                       />
@@ -180,6 +230,9 @@ export function ConvertToEmployeeModal({ isOpen, onClose, onCompleted, record, m
                       </span>
                       <input
                         type="password"
+                        required
+                        minLength={8}
+                        autoComplete="new-password"
                         value={initialPassword}
                         onChange={(event) => setInitialPassword(event.target.value)}
                         className="input-field font-mono"
@@ -191,11 +244,18 @@ export function ConvertToEmployeeModal({ isOpen, onClose, onCompleted, record, m
               </div>
 
               <div className="p-6 pt-0 flex gap-3">
-                <button onClick={onClose} className="btn-secondary w-full justify-center">Cancel</button>
-                <button onClick={setupOnly ? handleSetupAccess : handleConvert} disabled={loading || !loginEmail || initialPassword.length < 8} className="btn-primary w-full justify-center bg-gradient-to-r from-emerald-500 to-teal-600 shadow-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-60">
-                  {loading ? 'Saving...' : <><CheckCircle2 className="w-4 h-4" /> {setupOnly ? 'Save Login Access' : 'Create Employee'}</>}
-                </button>
+                <button type="button" onClick={onClose} className="btn-secondary w-full justify-center">Cancel</button>
+                {duplicateReview?.code === 'DUPLICATE_EMPLOYEE' ? (
+                  <button type="button" onClick={() => handleConvert(true)} disabled={loading || !loginEmail || initialPassword.length < 8} className="btn-primary w-full justify-center bg-amber-600 shadow-amber-500/25 hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60">
+                    {loading ? 'Checking and creating...' : <>Confirm different person & continue</>}
+                  </button>
+                ) : (
+                  <button type="submit" disabled={loading || !loginEmail || initialPassword.length < 8} className="btn-primary w-full justify-center bg-gradient-to-r from-emerald-500 to-teal-600 shadow-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-60">
+                    {loading ? 'Saving...' : <><CheckCircle2 className="w-4 h-4" /> {setupOnly ? 'Save Login Access' : 'Create Employee'}</>}
+                  </button>
+                )}
               </div>
+              </form>
             </>
           )}
         </div>

@@ -16,6 +16,8 @@ import { getActorName } from '@/lib/candidateHelpers'
 import { assertTenantMailReady } from '@/lib/tenantMail'
 import { buildInterviewEmailDraft, sendInterviewInviteEmail } from '@/lib/interviewEmailDelivery'
 import { createNotification } from '@/lib/notifications'
+import { withOptionalMongoTransaction } from '@/lib/mongoTransaction'
+import ApplicationStageHistory from '@/models/ApplicationStageHistory'
 import mongoose from 'mongoose'
 import Interview from '@/models/Interview'
 import InterviewPanelMember from '@/models/InterviewPanelMember'
@@ -138,9 +140,26 @@ export const POST = withApi(async (req) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(body.date)) || Number.isNaN(new Date(`${body.date}T00:00:00Z`).getTime())) {
     return fail('Interview date must be a valid calendar date (YYYY-MM-DD)', 400, 'VALIDATION_ERROR')
   }
+  if (new Date(`${body.date}T00:00:00Z`).toISOString().slice(0, 10) !== body.date) {
+    return fail('Interview date must be a valid calendar date (YYYY-MM-DD)', 400, 'VALIDATION_ERROR')
+  }
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(body.startTime)) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(body.endTime))) {
     return fail('Interview start and end times must use HH:mm format', 400, 'VALIDATION_ERROR')
   }
+  const toMinutes = (value) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5))
+  if (toMinutes(body.endTime) <= toMinutes(body.startTime)) {
+    return fail('Interview end time must be later than the start time', 400, 'VALIDATION_ERROR')
+  }
+  const interviewTimezone = body.timezone || 'Asia/Kolkata'
+  let localToday
+  try {
+    const parts = new Intl.DateTimeFormat('en', { timeZone: interviewTimezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date())
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+    localToday = `${values.year}-${values.month}-${values.day}`
+  } catch {
+    return fail('Interview timezone is invalid', 400, 'VALIDATION_ERROR')
+  }
+  if (body.date < localToday) return fail('Interview date cannot be in the past', 400, 'VALIDATION_ERROR')
   if (body.mode === 'ONLINE' && body.meetingUrl && !/^https?:\/\//i.test(String(body.meetingUrl))) {
     return fail('Meeting link must be a valid http or https URL', 400, 'VALIDATION_ERROR')
   }
@@ -167,38 +186,132 @@ export const POST = withApi(async (req) => {
   const conflictCount = Object.values(availability).filter((a) => !a.available).length
 
   const actorName = await getActorName(session)
-  const interview = await Interview.create({
-    tenantId,
-    applicationId: application._id,
-    candidateId: application.candidateId._id || application.candidateId,
-    jobId: application.jobId._id || application.jobId,
-    pipelineStageId: body.pipelineStageId || application.currentStage || null,
-    roundName: body.roundName,
-    type: body.type,
-    date: new Date(body.date),
-    startTime: body.startTime,
-    endTime: body.endTime,
-    timezone: body.timezone || 'Asia/Kolkata',
-    mode: body.mode,
-    meetingProvider: body.meetingProvider || null,
-    meetingUrl: body.meetingUrl || null,
-    location: body.location || null,
-    candidateInstructions: body.candidateInstructions || body.candidateEmailBody || null,
-    internalNotes: body.internalNotes || null,
-    scorecardTemplateId: body.scorecardTemplateId || null,
-    status: INTERVIEW_STATUS.SCHEDULED,
-    scheduledBy: session.userId,
-    scheduledByName: actorName,
-    scheduledAt: new Date(),
-  })
+  const jobId = application.jobId._id || application.jobId
+  const isEarlyStage = !application.currentStage || application.currentStageName === 'Applied' || /screen|shortlist/i.test(application.currentStageName || '')
+  let interviewStage = null
+  if (isEarlyStage) {
+    const stages = await JobPipelineStage.find({ tenantId, jobId, isActive: true }).sort({ order: 1 })
+    const roundStage = stages.find((stage) => stage.name?.toLowerCase() === body.roundName?.toLowerCase())
+    interviewStage = (roundStage?.category === PIPELINE_STAGE_CATEGORY.INTERVIEW ? roundStage : null)
+      || stages.find((stage) => stage.category === PIPELINE_STAGE_CATEGORY.INTERVIEW)
+      || roundStage
+      || stages.find((stage) => /interview|round/i.test(stage.name || ''))
+      || null
+  }
+
+  const employeeById = new Map(employees.map((employee) => [String(employee._id), employee]))
+  const applicationBefore = {
+    currentStage: application.currentStage,
+    currentStageName: application.currentStageName,
+    stageEnteredAt: application.stageEnteredAt,
+    selectionStatus: application.selectionStatus,
+    activityLog: application.activityLog.map((entry) => entry.toObject ? entry.toObject() : { ...entry }),
+  }
+  let interview = null
+  let panelMembers = []
+  let stageHistoryId = null
+
+  try {
+    await withOptionalMongoTransaction(async (dbSession) => {
+      const sessionOptions = dbSession ? { session: dbSession } : undefined
+      ;[interview] = await Interview.create([{
+        tenantId,
+        applicationId: application._id,
+        candidateId: application.candidateId._id || application.candidateId,
+        jobId,
+        pipelineStageId: interviewStage?._id || application.currentStage || null,
+        roundName: body.roundName,
+        type: body.type,
+        date: new Date(body.date),
+        startTime: body.startTime,
+        endTime: body.endTime,
+        timezone: interviewTimezone,
+        mode: body.mode,
+        meetingProvider: body.meetingProvider || null,
+        meetingUrl: body.meetingUrl || null,
+        location: body.location || null,
+        candidateInstructions: body.candidateInstructions || body.candidateEmailBody || null,
+        internalNotes: body.internalNotes || null,
+        scorecardTemplateId: body.scorecardTemplateId || null,
+        status: INTERVIEW_STATUS.SCHEDULED,
+        scheduledBy: session.userId,
+        scheduledByName: actorName,
+        scheduledAt: new Date(),
+      }], sessionOptions)
+
+      panelMembers = await InterviewPanelMember.insertMany(employeeIds.map((employeeId, index) => ({
+        tenantId,
+        interviewId: interview._id,
+        employeeId,
+        employeeName: `${employeeById.get(String(employeeId)).firstName} ${employeeById.get(String(employeeId)).lastName}`.trim(),
+        role: requestedInterviewers.find((item) => String(item.employeeId) === String(employeeId))?.role === PANEL_ROLE.PRIMARY || index === 0 ? PANEL_ROLE.PRIMARY : PANEL_ROLE.PANELIST,
+        assignmentStatus: 'PENDING',
+        notifiedAt: new Date(),
+      })), sessionOptions)
+
+      if (interviewStage) {
+        const { fromStageId, fromStageName } = applyStageMove(application, interviewStage, { comment: `Interview scheduled: ${body.roundName}`, actorName })
+        const history = await recordStageHistory({
+          tenantId,
+          application,
+          fromStageId,
+          toStageId: interviewStage._id,
+          fromStageName,
+          toStageName: interviewStage.name,
+          action: STAGE_HISTORY_ACTION.MOVED,
+          comment: `Interview scheduled: ${body.roundName}`,
+          session,
+          dbSession,
+        })
+        stageHistoryId = history?._id || null
+      }
+
+      application.activityLog.push({
+        type: ACTIVITY_ENTRY_TYPE.UPDATED,
+        message: `Interview scheduled: ${body.roundName} on ${new Date(body.date).toDateString()} at ${body.startTime}`,
+        actorName,
+      })
+      await application.save(sessionOptions)
+
+      await InterviewScheduleHistory.create([{
+        tenantId,
+        interviewId: interview._id,
+        action: SCHEDULE_HISTORY_ACTION.SCHEDULED,
+        newDate: interview.date,
+        newStartTime: interview.startTime,
+        newEndTime: interview.endTime,
+        changedBy: session.userId,
+        changedByName: actorName,
+        changedAt: new Date(),
+      }], sessionOptions)
+    })
+  } catch (error) {
+    if (interview?._id) {
+      await Promise.all([
+        Interview.deleteOne({ _id: interview._id, tenantId }).catch(() => {}),
+        InterviewPanelMember.deleteMany({ interviewId: interview._id, tenantId }).catch(() => {}),
+        InterviewScheduleHistory.deleteMany({ interviewId: interview._id, tenantId }).catch(() => {}),
+        ...(stageHistoryId ? [ApplicationStageHistory.deleteOne({ _id: stageHistoryId, tenantId }).catch(() => {})] : []),
+      ])
+      application.currentStage = applicationBefore.currentStage
+      application.currentStageName = applicationBefore.currentStageName
+      application.stageEnteredAt = applicationBefore.stageEnteredAt
+      application.selectionStatus = applicationBefore.selectionStatus
+      application.activityLog = applicationBefore.activityLog
+      await application.save().catch(() => {})
+    }
+    throw error
+  }
+
+  // External email and notification services run after the scheduling records
+  // commit. Their failure is reported or ignored without leaving half a schedule.
+  if (body.candidateEmail && application.candidateId && application.candidateId.email !== body.candidateEmail) {
+    application.candidateId.email = body.candidateEmail
+    await application.candidateId.save().catch((error) => console.warn('Could not save candidate email update:', error.message))
+  }
 
   if (shouldSendCandidateEmail) {
-    const draft = buildInterviewEmailDraft({
-      candidate: application.candidateId,
-      job: application.jobId,
-      interview,
-      body,
-    })
+    const draft = buildInterviewEmailDraft({ candidate: application.candidateId, job: application.jobId, interview, body })
     interview.candidateInviteSubject = draft.subject
     interview.candidateInstructions = draft.body
     try {
@@ -213,102 +326,27 @@ export const POST = withApi(async (req) => {
       interview.candidateInviteStatus = 'SENT'
       interview.candidateInviteSentAt = new Date()
       interview.candidateInviteError = null
-      await interview.save()
-    } catch (err) {
+    } catch (error) {
       interview.candidateInviteStatus = 'FAILED'
-      interview.candidateInviteError = err.message || 'Interview invite email failed'
-      await interview.save()
+      interview.candidateInviteError = error.message || 'Interview invite email failed'
     }
+    await interview.save().catch((error) => console.warn('Could not save interview invite delivery status:', error.message))
   }
 
-  if (employeeIds.length) {
-    const employeeById = new Map(employees.map((e) => [String(e._id), e]))
-    const panelMembers = await InterviewPanelMember.insertMany(employeeIds.map((employeeId, index) => ({
-      tenantId,
-      interviewId: interview._id,
-      employeeId,
-      employeeName: `${employeeById.get(String(employeeId)).firstName} ${employeeById.get(String(employeeId)).lastName}`.trim(),
-      role: requestedInterviewers.find((item) => String(item.employeeId) === String(employeeId))?.role === PANEL_ROLE.PRIMARY || index === 0 ? PANEL_ROLE.PRIMARY : PANEL_ROLE.PANELIST,
-      assignmentStatus: 'PENDING',
-      notifiedAt: new Date(),
-    })))
-    await Promise.all(panelMembers.map((member) => {
-      const employee = employeeById.get(String(member.employeeId))
-      return createNotification({
-        userId: member.employeeId,
-        targetRole: employee.role || 'EMPLOYEE',
-        tenant: tenantId,
-        title: 'Interview assignment requires your response',
-        message: `You have been assigned to interview ${application.candidateId.firstName || ''} ${application.candidateId.lastName || ''} for ${application.jobId.publicTitle || application.jobId.jobTitle || 'an open position'} on ${new Date(body.date).toLocaleDateString('en-IN')} at ${body.startTime}.`,
-        type: 'warning',
-        category: 'interview',
-        link: '/notifications',
-        metadata: { kind: 'INTERVIEW_ASSIGNMENT', decision: 'PENDING', interviewId: String(interview._id), panelMemberId: String(member._id) },
-      })
-    }))
-  }
-
-  await InterviewScheduleHistory.create({
-    tenantId,
-    interviewId: interview._id,
-    action: SCHEDULE_HISTORY_ACTION.SCHEDULED,
-    newDate: interview.date,
-    newStartTime: interview.startTime,
-    newEndTime: interview.endTime,
-    changedBy: session.userId,
-    changedByName: actorName,
-    changedAt: new Date(),
-  })
-
-  if (body.candidateEmail && application.candidateId) {
-    if (!application.candidateId.email || application.candidateId.email !== body.candidateEmail) {
-      application.candidateId.email = body.candidateEmail
-      try {
-        await application.candidateId.save()
-      } catch (e) {
-        console.warn('Could not save candidate email update:', e.message)
-      }
-    }
-  }
-
-  // Auto-advance application to the Interview round/stage if it's currently in early stages (Applied/Screening/Shortlisted)
-  const isEarlyStage = !application.currentStage || application.currentStageName === 'Applied' || /screen|shortlist/i.test(application.currentStageName || '')
-  if (isEarlyStage) {
-    const stages = await JobPipelineStage.find({ tenantId, jobId: application.jobId._id || application.jobId, isActive: true }).sort({ order: 1 })
-    const roundStage = stages.find(s => s.name?.toLowerCase() === body.roundName?.toLowerCase())
-    // Pipeline category is authoritative for custom stage names. A matching
-    // round name is used only when it is itself an interview stage.
-    const namedInterviewStage = roundStage?.category === PIPELINE_STAGE_CATEGORY.INTERVIEW ? roundStage : null
-    const interviewStage = namedInterviewStage
-      || stages.find((stage) => stage.category === PIPELINE_STAGE_CATEGORY.INTERVIEW)
-      || roundStage
-      || stages.find((stage) => /interview|round/i.test(stage.name || ''))
-    if (interviewStage) {
-      const fromStageId = application.currentStage
-      const fromStageName = application.currentStageName
-      applyStageMove(application, interviewStage, { comment: `Interview scheduled: ${body.roundName}`, actorName })
-      await recordStageHistory({
-        tenantId,
-        application,
-        fromStageId,
-        toStageId: interviewStage._id,
-        fromStageName,
-        toStageName: interviewStage.name,
-        action: STAGE_HISTORY_ACTION.MOVED,
-        comment: `Interview scheduled: ${body.roundName}`,
-        session,
-      })
-      interview.pipelineStageId = interviewStage._id
-      await interview.save()
-    }
-  }
-
-  application.activityLog.push({
-    type: ACTIVITY_ENTRY_TYPE.UPDATED,
-    message: `Interview scheduled: ${body.roundName} on ${new Date(body.date).toDateString()} at ${body.startTime}`,
-    actorName,
-  })
-  await application.save()
+  await Promise.allSettled(panelMembers.map((member) => {
+    const employee = employeeById.get(String(member.employeeId))
+    return createNotification({
+      userId: member.employeeId,
+      targetRole: employee.role || 'EMPLOYEE',
+      tenant: tenantId,
+      title: 'Interview assignment requires your response',
+      message: `You have been assigned to interview ${application.candidateId.firstName || ''} ${application.candidateId.lastName || ''} for ${application.jobId.publicTitle || application.jobId.jobTitle || 'an open position'} on ${new Date(body.date).toLocaleDateString('en-IN')} at ${body.startTime}.`,
+      type: 'warning',
+      category: 'interview',
+      link: '/notifications',
+      metadata: { kind: 'INTERVIEW_ASSIGNMENT', decision: 'PENDING', interviewId: String(interview._id), panelMemberId: String(member._id) },
+    })
+  }))
 
   await logAction(session, { action: 'INTERVIEW_SCHEDULED', entityType: 'Interview', entityId: interview._id, description: `Scheduled ${body.roundName} for application ${application.applicationCode}`, req })
 

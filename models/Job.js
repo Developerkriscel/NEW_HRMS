@@ -1,7 +1,8 @@
 import mongoose from 'mongoose'
 import { tenantFields, model } from './_base'
 import {
-  JOB_STATUS, JOB_STATUS_LIST, JOB_EMPLOYMENT_TYPE_LIST, WORK_MODE_LIST, JOB_VISIBILITY_LIST,
+  JOB_STATUS, JOB_STATUS_LIST, JOB_EMPLOYMENT_TYPE_LIST, JOB_EMPLOYMENT_NATURE_LIST,
+  JOB_SALARY_PERIOD_LIST, WORK_MODE_LIST, JOB_VISIBILITY_LIST,
 } from '@/lib/jobConstants'
 
 // Same denormalized activity-entry shape as JobRequisition's — kept
@@ -34,6 +35,8 @@ const JobSchema = new mongoose.Schema(
     totalOpenings: { type: Number, default: 1, min: 1 },
     filledOpenings: { type: Number, default: 0, min: 0 },
     employmentType: { type: String, enum: JOB_EMPLOYMENT_TYPE_LIST, default: null },
+    employmentNature: { type: String, enum: JOB_EMPLOYMENT_NATURE_LIST, default: 'PERMANENT' },
+    salaryPeriod: { type: String, enum: JOB_SALARY_PERIOD_LIST, default: 'ANNUAL' },
     workMode: { type: String, enum: WORK_MODE_LIST, default: null },
     location: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', default: null },
     hiringManager: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', default: null },

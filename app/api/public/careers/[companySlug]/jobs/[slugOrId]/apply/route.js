@@ -96,9 +96,12 @@ export const POST = withApi(async (req, { params }) => {
       return fail('Please fix the highlighted fields', 400, 'VALIDATION_ERROR', { errors: fieldErrors })
     }
 
-    // Duplicate detection — reuse the existing person rather than creating
-    // a second Candidate for the same email/phone.
-    let candidate = await findExistingCandidate(Candidate, tenant._id, { email: data.email, phone: data.phone })
+    // A public form cannot prove ownership of the supplied email or phone.
+    // Never attach an unauthenticated submission to an existing profile.
+    const existingCandidate = await findExistingCandidate(Candidate, tenant._id, { email: data.email, phone: data.phone })
+    if (existingCandidate) {
+      return fail('We could not submit this application automatically. Please contact the recruiting team to continue.', 409, 'CANDIDATE_MATCH_REVIEW')
+    }
 
     const { searchParams } = new URL(req.url)
     const source = normalizeSource(searchParams.get('source'))
@@ -111,39 +114,8 @@ export const POST = withApi(async (req, { params }) => {
       referrerEmployeeId = referrer?._id || null
     }
 
-    if (candidate) {
-      // Rule: no duplicate application for the same candidate + same job.
-      const duplicate = await Application.findOne({ tenantId: tenant._id, candidateId: candidate._id, jobId: job._id })
-      if (duplicate) {
-        return fail('You have already applied for this position with this email/phone', 400, 'DUPLICATE_APPLICATION')
-      }
-    }
-
-    const newCandidateCode = candidate ? null : await generateCandidateCode(Candidate, tenant._id)
-
-    if (candidate) {
-      // A returning candidate's most recent submission is treated as their
-      // freshest profile info — updates the master record rather than
-      // silently keeping stale data from their first-ever application.
-      Object.assign(candidate, {
-        firstName: data.firstName ?? candidate.firstName, lastName: data.lastName ?? candidate.lastName,
-        phone: data.phone, currentLocation: data.currentLocation ?? candidate.currentLocation,
-        currentCompany: data.currentCompany ?? candidate.currentCompany,
-        currentDesignation: data.currentDesignation ?? candidate.currentDesignation,
-        totalExperience: data.totalExperience ?? candidate.totalExperience,
-        relevantExperience: data.relevantExperience ?? candidate.relevantExperience,
-        currentCtc: data.currentCtc ?? candidate.currentCtc,
-        expectedCtc: data.expectedCtc ?? candidate.expectedCtc,
-        noticePeriod: data.noticePeriod ?? candidate.noticePeriod,
-        lastWorkingDate: data.lastWorkingDate ?? candidate.lastWorkingDate,
-        linkedinUrl: data.linkedinUrl ?? candidate.linkedinUrl,
-        githubUrl: data.githubUrl ?? candidate.githubUrl,
-        portfolioUrl: data.portfolioUrl ?? candidate.portfolioUrl,
-      })
-      candidate.activityLog.push({ type: 'APPLICATION_ADDED', message: `Applied for ${job.jobTitle}`, actorName: candidate.getFullName() })
-      await candidate.save()
-    } else {
-      candidate = await Candidate.create({
+    const newCandidateCode = await generateCandidateCode(Candidate, tenant._id)
+    const candidate = await Candidate.create({
         candidateCode: newCandidateCode,
         firstName: data.firstName, lastName: data.lastName || '',
         email: data.email, phone: data.phone,
@@ -156,7 +128,6 @@ export const POST = withApi(async (req, { params }) => {
         tenantId: tenant._id,
         activityLog: [{ type: 'CREATED', message: `Candidate created from application for ${job.jobTitle}` }],
       })
-    }
 
     const firstStage = await JobPipelineStage.findOne({ tenantId: tenant._id, jobId: job._id, isActive: true }).sort({ order: 1 })
 

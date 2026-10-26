@@ -44,13 +44,13 @@ export const POST = withApi(async (req, { params }) => {
       entityId: params.id,
       description: result.alreadyCompleted
         ? 'Employee conversion returned existing completed employee'
-        : `Candidate converted into employee ${result.employee?.employeeCode}`,
+        : `Candidate converted into employee ${result.employee?.employeeCode}${body.overrideDuplicate ? ' after duplicate review' : ''}`,
       req,
     })
 
     return ok(result, result.alreadyCompleted ? 'Employee already created' : 'Employee created successfully', result.alreadyCompleted ? 200 : 201)
   } catch (err) {
-    if (err.errorCode === 'DUPLICATE_EMPLOYEE') {
+    if (err.errorCode === 'DUPLICATE_EMPLOYEE' || err.errorCode === 'LOGIN_EMAIL_IN_USE') {
       return fail(err.message, 409, err.errorCode, { duplicates: err.duplicates })
     }
     if (err.errorCode === 'NOT_READY') {
