@@ -324,12 +324,12 @@ export function Navbar({ onMobileMenuToggle }) {
                 className="flex max-w-[240px] items-center gap-2.5 rounded-xl border border-slate-200/80 bg-white/95 px-2.5 py-1.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900/95 dark:hover:border-emerald-700"
                 aria-label={`Open ${user.companyName || 'company profile'}`}
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-emerald-100 bg-white dark:border-emerald-900/40 dark:bg-slate-800">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-emerald-100 bg-white dark:border-emerald-900/40 dark:bg-slate-800">
                   {user.companyLogoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={user.companyLogoUrl} alt="" className="h-full w-full object-contain p-1" />
                   ) : (
-                    <Building2 className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
+                    <Building2 className="h-5 w-5 text-emerald-600 dark:text-emerald-300" />
                   )}
                 </span>
                 <span className="truncate text-xs font-black uppercase tracking-[0.12em] text-slate-700 dark:text-slate-200">{user.companyName || 'KRISCEL TECH'}</span>
