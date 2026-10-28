@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Clock3, RefreshCw, ThumbsDown, ThumbsUp, Users } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Calendar, Clock3, RefreshCw, ThumbsDown, ThumbsUp, Users } from 'lucide-react'
 import api from '@/services/api'
 import { interviewApi } from '@/services/interviewApi'
 
@@ -11,6 +12,7 @@ const formatDate = (value) => {
 }
 
 export default function InterviewReviewPage() {
+  const router = useRouter()
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -66,9 +68,14 @@ export default function InterviewReviewPage() {
             <h1 className="mt-1 text-3xl font-black text-slate-900 dark:text-white">Interview</h1>
             <p className="mt-1 text-sm text-slate-500">Manage interview requests, interviewer recommendations, and final HR/Admin decisions.</p>
           </div>
-          <button type="button" onClick={load} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-white px-4 py-2.5 text-sm font-bold text-indigo-700 shadow-sm hover:bg-indigo-50 disabled:opacity-50 dark:border-indigo-500/30 dark:bg-slate-900 dark:text-indigo-300">
-            <RefreshCw className={loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} /> Refresh
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => router.push('/hr/recruitment')} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-indigo-700">
+              <Calendar className="h-4 w-4" /> Schedule interview
+            </button>
+            <button type="button" onClick={load} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-white px-4 py-2.5 text-sm font-bold text-indigo-700 shadow-sm hover:bg-indigo-50 disabled:opacity-50 dark:border-indigo-500/30 dark:bg-slate-900 dark:text-indigo-300">
+              <RefreshCw className={loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} /> Refresh
+            </button>
+          </div>
         </div>
 
         <div className="mb-6 grid gap-4 sm:grid-cols-3">
@@ -83,6 +90,7 @@ export default function InterviewReviewPage() {
             {rows.map((row) => {
               const recommendations = (row.panel || []).filter((member) => member.interviewDecision && member.interviewDecision !== 'PENDING')
               const accepted = (row.panel || []).filter((member) => member.assignmentStatus === 'ACCEPTED').length
+              const canFinalize = ['COMPLETED', 'FEEDBACK_PENDING'].includes(row.status) && accepted > 0
               const finalAction = action?.startsWith(`${row._id}:`) ? action.split(':')[1] : null
               return <article key={row._id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <div className="flex flex-wrap items-start justify-between gap-4">
@@ -91,8 +99,9 @@ export default function InterviewReviewPage() {
                 </div>
                 <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto]">
                   <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-800/70"><div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-500"><Users className="h-4 w-4" /> Interviewer recommendations ({accepted} accepted)</div><div className="flex flex-wrap gap-2">{(row.panel || []).map((member) => <span key={String(member.employeeId)} className={`rounded-full px-3 py-1.5 text-xs font-bold ${member.interviewDecision === 'SELECTED' ? 'bg-emerald-100 text-emerald-700' : member.interviewDecision === 'REJECTED' ? 'bg-rose-100 text-rose-700' : member.assignmentStatus === 'ACCEPTED' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>{member.name || 'Interviewer'} · {member.interviewDecision === 'SELECTED' ? 'Select' : member.interviewDecision === 'REJECTED' ? 'Reject' : member.assignmentStatus === 'ACCEPTED' ? 'Available' : member.assignmentStatus}</span>)}</div>{recommendations.length > 0 && <p className="mt-3 text-xs font-semibold text-slate-500">HR/Admin should review these recommendations before taking the final action.</p>}</div>
-                  <div className="flex items-center gap-2 lg:flex-col lg:items-stretch lg:justify-center">{row.applicationId && <><button type="button" disabled={!recommendations.length || !!action} onClick={() => finalize(row, 'SELECTED')} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"><ThumbsUp className="h-4 w-4" /> {finalAction === 'SELECTED' ? 'Saving...' : 'Final Select'}</button><button type="button" disabled={!recommendations.length || !!action} onClick={() => finalize(row, 'REJECTED')} className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"><ThumbsDown className="h-4 w-4" /> {finalAction === 'REJECTED' ? 'Saving...' : 'Final Reject'}</button></>}</div>
+                  <div className="flex items-center gap-2 lg:flex-col lg:items-stretch lg:justify-center">{row.applicationId && <><button type="button" disabled={!canFinalize || !!action} onClick={() => finalize(row, 'SELECTED')} title={!canFinalize ? 'Complete the interview and wait for an interviewer to accept the assignment.' : 'Record final selection'} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"><ThumbsUp className="h-4 w-4" /> {finalAction === 'SELECTED' ? 'Saving...' : 'Final Select'}</button><button type="button" disabled={!canFinalize || !!action} onClick={() => finalize(row, 'REJECTED')} title={!canFinalize ? 'Complete the interview and wait for an interviewer to accept the assignment.' : 'Record final rejection'} className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"><ThumbsDown className="h-4 w-4" /> {finalAction === 'REJECTED' ? 'Saving...' : 'Final Reject'}</button></>}</div>
                 </div>
+                {!canFinalize && row.applicationId && <p className="mt-3 text-xs font-semibold text-amber-700">Final decision becomes available after the interview is completed and at least one interviewer accepts the assignment.</p>}
               </article>
             })}
           </div>
