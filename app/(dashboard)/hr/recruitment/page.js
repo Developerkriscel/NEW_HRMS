@@ -325,6 +325,7 @@ export default function RecruitmentDashboardPage() {
   const [allCandidatesPage, setAllCandidatesPage] = useState(0)
   const [allCandidatesHasMore, setAllCandidatesHasMore] = useState(false)
   const [allCandidatesError, setAllCandidatesError] = useState('')
+  const [exportingCandidates, setExportingCandidates] = useState(false)
   
   // Candidate Data State
   const [isDragging, setIsDragging] = useState(false)
@@ -402,6 +403,10 @@ export default function RecruitmentDashboardPage() {
     return () => { cancelled = true }
   }, [selectedCandidateInfo])
   const [positionsLoading, setPositionsLoading] = useState(true)
+  const [positionsLoadingMore, setPositionsLoadingMore] = useState(false)
+  const [positionsPage, setPositionsPage] = useState(0)
+  const [positionsHasMore, setPositionsHasMore] = useState(false)
+  const [positionStatusCounts, setPositionStatusCounts] = useState(null)
   const [positionsError, setPositionsError] = useState('')
   const [departments, setDepartments] = useState([])
   const [branches, setBranches] = useState([])
@@ -434,11 +439,15 @@ export default function RecruitmentDashboardPage() {
     return () => { cancelled = true }
   }, [schedulingCandidateKey])
   
-  const fetchPositions = async ({ force = false } = {}) => {
-    setPositionsLoading(true)
+  const fetchPositions = async ({ force = false, append = false } = {}) => {
+    const page = append ? positionsPage + 1 : 0
+    if (append ? positionsLoadingMore : positionsLoading) return
+    if (append && !positionsHasMore) return
+    if (append) setPositionsLoadingMore(true)
+    else setPositionsLoading(true)
     setPositionsError('')
     try {
-      const res = await jobApi.list({ size: 50 }, { devMock: false, ...(force ? { skipCache: true } : {}) })
+      const res = await jobApi.list({ page, size: 50 }, { devMock: false, ...(force ? { skipCache: true } : {}) })
       const jobs = res.data?.data?.content || res.data?.data || []
       const mappedJobs = jobs.map(job => ({
         id: job._id || job.id,
@@ -473,13 +482,19 @@ export default function RecruitmentDashboardPage() {
         targetClosingDate: job.targetClosingDate ? new Date(job.targetClosingDate).toISOString().split('T')[0] : '',
         expectedJoiningDate: job.expectedJoiningDate ? new Date(job.expectedJoiningDate).toISOString().split('T')[0] : ''
       }))
-      setPositionsList(mappedJobs)
+      setPositionsList((previous) => append
+        ? [...previous, ...mappedJobs.filter((job) => !previous.some((item) => String(item.id) === String(job.id)))]
+        : mappedJobs)
+      setPositionsPage(page)
+      setPositionsHasMore(page < Number(res.data?.data?.totalPages || 1) - 1)
+      setPositionStatusCounts(res.data?.data?.statusCounts || null)
       setPositionActionError(null)
     } catch (e) {
       console.error('Failed to fetch positions', e)
       setPositionsError(e.response?.data?.message || e.message || 'Failed to load positions. Please retry.')
     } finally {
       setPositionsLoading(false)
+      setPositionsLoadingMore(false)
     }
   }
 
@@ -521,9 +536,24 @@ export default function RecruitmentDashboardPage() {
     await loadAllCandidates()
   }
 
-  const exportAllCandidates = () => {
-    if (!allCandidatesRows.length) return
-    const rows = allCandidatesRows.map((candidate) => ({
+  const exportAllCandidates = async () => {
+    if (!allCandidatesRows.length || exportingCandidates) return
+    setExportingCandidates(true)
+    try {
+      const exportRows = []
+      let page = 0
+      let totalPages = 1
+      do {
+        const response = await candidateApi.list(
+          { openPositionsOnly: 'true', page, size: 100 },
+          { skipCache: true, devMock: false }
+        )
+        const data = response.data?.data || {}
+        exportRows.push(...(Array.isArray(data.content) ? data.content : []))
+        totalPages = Number(data.totalPages || 1)
+        page += 1
+      } while (page < totalPages)
+      const rows = exportRows.map((candidate) => ({
       Candidate: candidate.candidateName || 'Unnamed candidate',
       'Candidate ID': candidate.candidateCode || '',
       Position: candidate.jobTitle || 'Position unavailable',
@@ -536,16 +566,21 @@ export default function RecruitmentDashboardPage() {
       Stage: candidate.stage || '',
       Status: candidate.status || '',
       'Applied On': candidate.appliedAt ? new Date(candidate.appliedAt).toLocaleString() : '',
-    }))
-    const worksheet = XLSX.utils.json_to_sheet(rows)
-    worksheet['!cols'] = [
+      }))
+      const worksheet = XLSX.utils.json_to_sheet(rows)
+      worksheet['!cols'] = [
       { wch: 24 }, { wch: 16 }, { wch: 30 }, { wch: 16 }, { wch: 18 },
       { wch: 30 }, { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 18 },
       { wch: 14 }, { wch: 22 },
-    ]
-    const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Candidates')
-    XLSX.writeFile(workbook, `nexahr-candidates-${new Date().toISOString().slice(0, 10)}.xlsx`)
+      ]
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Candidates')
+      XLSX.writeFile(workbook, `nexahr-candidates-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    } catch (error) {
+      setAllCandidatesError(error.response?.data?.message || error.message || 'Failed to export candidates.')
+    } finally {
+      setExportingCandidates(false)
+    }
   }
 
   const openCandidatePosition = async (candidate) => {
@@ -624,9 +659,6 @@ export default function RecruitmentDashboardPage() {
     setCandidateActionLoading((prev) => ({ ...prev, [actionKey]: true }))
     try {
       await updateCandidateStage(candidateId, stageName)
-      void fetchCandidates({ ...candidateFetchParams(), force: true }).catch((error) => {
-        console.warn('Candidate refresh after stage change failed:', error)
-      })
     } catch (error) {
       setAnalysisError(error.response?.data?.message || error.message || 'Failed to move candidate to the selected stage.')
     } finally {
@@ -673,9 +705,6 @@ export default function RecruitmentDashboardPage() {
     try {
       if (decision === 'accept') await acceptOffer(candidate)
       else await rejectOffer(candidate)
-      void fetchCandidates({ ...candidateFetchParams(), force: true }).catch((error) => {
-        console.warn('Candidate refresh after offer action failed:', error)
-      })
     } catch (error) {
       setAnalysisError(error.response?.data?.message || error.message || `Failed to ${decision} offer.`)
     } finally {
@@ -695,13 +724,6 @@ export default function RecruitmentDashboardPage() {
     setUndoConfirmError(null)
     try {
       await undoCandidateStage(candidate)
-      try {
-        await fetchCandidates({ ...candidateFetchParams(), force: true })
-      } catch (refreshError) {
-        // The undo write has already succeeded; a slow read must not make the
-        // user retry the action and create a misleading failure state.
-        console.warn('Candidate undo succeeded but refresh failed:', refreshError)
-      }
       setCandidateToUndo(null)
     } catch (error) {
       const message = error.response?.data?.message || error.message || 'Failed to return candidate to the previous stage.'
@@ -731,11 +753,6 @@ export default function RecruitmentDashboardPage() {
     setAnalysisError(null)
     try {
       await deleteRejectedCandidate(candidate)
-      try {
-        await fetchCandidates({ ...candidateFetchParams(), force: true })
-      } catch (refreshError) {
-        console.warn('Rejected application deleted but candidate refresh failed:', refreshError)
-      }
     } catch (error) {
       setAnalysisError(error.response?.data?.message || error.message || 'Failed to delete rejected application.')
     } finally {
@@ -766,6 +783,9 @@ export default function RecruitmentDashboardPage() {
         }
       })
     return () => { cancelled = true }
+  // fetchPositions is intentionally invoked once on mount; action handlers
+  // call it explicitly when a fresh positions snapshot is required.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Keep the selected pipeline position across a browser refresh. The
@@ -1532,9 +1552,6 @@ export default function RecruitmentDashboardPage() {
         setCandidateActionLoading(prev => ({ ...prev, [actionKey]: true }))
         await updateCandidateStatus(cand, 'Rejected')
         setLocalCandidateStatuses(prev => ({ ...prev, [actionKey]: newStatus }))
-        void fetchCandidates({ ...candidateFetchParams(), force: true }).catch((error) => {
-          console.warn('Candidate refresh after rejection failed:', error)
-        })
       } catch (err) {
         setAnalysisError(err.response?.data?.message || err.message || 'Reject failed.')
       } finally {
@@ -1546,9 +1563,6 @@ export default function RecruitmentDashboardPage() {
         await selectCandidate(cand)
         setLocalCandidateStatuses(prev => ({ ...prev, [actionKey]: newStatus }))
         setSelectedOfferCandidate({ ...cand, status: 'Selected' })
-        void fetchCandidates({ ...candidateFetchParams(), force: true }).catch((error) => {
-          console.warn('Candidate refresh after selection failed:', error)
-        })
       } catch (err) {
         setAnalysisError(err.response?.data?.message || err.message || 'Selection failed.')
       } finally {
@@ -2098,8 +2112,8 @@ export default function RecruitmentDashboardPage() {
           {/* KPI Boxes */}
           <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
             {[
-              { id: 'positions', label: 'Open Positions', value: positionsLoading ? '...' : positionsList.filter(p => !['Closed', 'Cancelled'].includes(p.status)).length.toString(), icon: Briefcase, colorClass: 'bg-gradient-to-br from-blue-500 to-blue-600 shadow-blue-500/30' },
-              { id: 'closed', label: 'Closed Positions', value: positionsLoading ? '...' : positionsList.filter(p => p.status === 'Closed').length.toString(), icon: Briefcase, colorClass: 'bg-gradient-to-br from-indigo-500 to-indigo-600 shadow-indigo-500/30' },
+              { id: 'positions', label: 'Open Positions', value: positionsLoading ? '...' : (positionStatusCounts ? ['DRAFT', 'OPEN', 'ACTIVE', 'PAUSED', 'ON_HOLD'].reduce((sum, key) => sum + Number(positionStatusCounts[key] || 0), 0) : positionsList.filter(p => !['Closed', 'Cancelled'].includes(p.status)).length).toString(), icon: Briefcase, colorClass: 'bg-gradient-to-br from-blue-500 to-blue-600 shadow-blue-500/30' },
+              { id: 'closed', label: 'Closed Positions', value: positionsLoading ? '...' : (positionStatusCounts ? Number(positionStatusCounts.CLOSED || 0) : positionsList.filter(p => p.status === 'Closed').length).toString(), icon: Briefcase, colorClass: 'bg-gradient-to-br from-indigo-500 to-indigo-600 shadow-indigo-500/30' },
             ].map(kpi => {
               const Icon = kpi.icon
               const isActive = activeKpi === kpi.id
@@ -2263,6 +2277,13 @@ export default function RecruitmentDashboardPage() {
                 </tbody>
               </table>
             </div>
+            {!positionsLoading && positionsHasMore && (
+              <div className="flex justify-center border-t border-slate-100 px-6 py-4 dark:border-slate-800">
+                <button type="button" onClick={() => fetchPositions({ append: true })} disabled={positionsLoadingMore} className="rounded-xl border border-indigo-200 bg-white px-5 py-2 text-sm font-bold text-indigo-600 shadow-sm hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-indigo-500/30 dark:bg-slate-900 dark:text-indigo-300">
+                  {positionsLoadingMore ? 'Loading positions...' : 'Load more positions'}
+                </button>
+              </div>
+            )}
           </div>
 
 
@@ -3312,8 +3333,8 @@ export default function RecruitmentDashboardPage() {
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Candidates grouped by every currently open position.</p>
               </div>
               <div className="flex items-center gap-2">
-                <button type="button" onClick={exportAllCandidates} disabled={!allCandidatesRows.length || allCandidatesLoading} className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300" title="Export the loaded candidate applications">
-                  <Download className="h-4 w-4" /> Export Excel
+                <button type="button" onClick={exportAllCandidates} disabled={!allCandidatesRows.length || allCandidatesLoading || exportingCandidates} className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300" title="Export all candidate applications from open positions">
+                  <Download className="h-4 w-4" /> {exportingCandidates ? 'Exporting...' : 'Export Excel'}
                 </button>
                 <button type="button" onClick={() => setShowAllCandidatesModal(false)} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200" title="Close all candidates">
                   <X className="h-5 w-5" />
@@ -3440,9 +3461,6 @@ export default function RecruitmentDashboardPage() {
             }
           }
           await sendOffer(candidate)
-          void fetchCandidates({ ...candidateFetchParams(), force: true }).catch((error) => {
-            console.warn('Candidate refresh after offer send failed:', error)
-          })
           setSelectedOfferCandidate(null)
         }}
       />
@@ -3764,9 +3782,6 @@ export default function RecruitmentDashboardPage() {
                           candidateEmailSubject: `Interview Invite: ${schedulingFormData.type} at NexaHR`,
                           candidateEmail: schedulingCandidate.email.trim(),
                           interviewers: selectedInterviewerIds.map((employeeId, index) => ({ employeeId, role: index === 0 ? 'PRIMARY' : 'PANELIST' })),
-                        })
-                        void fetchCandidates({ ...candidateFetchParams(), force: true }).catch((error) => {
-                          console.warn('Candidate refresh after interview scheduling failed:', error)
                         })
                         setScheduleSuccess({
                           name: schedulingCandidate.name,

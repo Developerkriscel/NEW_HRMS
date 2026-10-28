@@ -52,20 +52,14 @@ async function syncManualProfileData({ tenantId, candidateDoc, cand, session }) 
     const mergedSkills = [...(candidateDoc.skills || [])]
     for (const skillName of skills) {
       if (!existingSkills.has(skillName.toLowerCase())) mergedSkills.push(skillName)
-      await CandidateSkill.updateOne(
-        { tenantId, candidateId: candidateDoc._id, skillName: new RegExp(`^${skillName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
-        {
-          $setOnInsert: {
-            tenantId,
-            candidateId: candidateDoc._id,
-            skillName,
-            source: 'MANUAL',
-            createdBy: session.sub,
-          },
-        },
-        { upsert: true }
-      )
     }
+    await CandidateSkill.bulkWrite(skills.map((skillName) => ({
+      updateOne: {
+        filter: { tenantId, candidateId: candidateDoc._id, skillName: new RegExp(`^${skillName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+        update: { $setOnInsert: { tenantId, candidateId: candidateDoc._id, skillName, source: 'MANUAL', createdBy: session.sub } },
+        upsert: true,
+      },
+    })))
     candidateDoc.skills = mergedSkills
   }
 
@@ -159,7 +153,10 @@ export const POST = withApi(async (req) => {
       .sort({ order: 1 })
       .select('_id name')
     const actorName = await getActorName(session)
-    for (const cand of candidates) {
+    const uniqueCandidates = [...new Map(candidates
+      .filter((candidate) => candidate?.email)
+      .map((candidate) => [String(candidate.email).trim().toLowerCase(), candidate])).values()]
+    for (const cand of uniqueCandidates) {
       if (!cand.firstName?.trim() && !cand.name?.trim()) continue
       if (!cand.email?.trim()) continue
 

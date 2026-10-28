@@ -342,10 +342,17 @@ export const POST = withApi(async (req) => {
     return fail('Valid Job Position is required for AI matching', 400)
   }
 
-    // Process all candidates in parallel (or sequentially to avoid rate limits, let's do sequentially to be safe)
+    // Run a small bounded worker pool. The previous implementation processed
+    // every candidate sequentially and added a fixed 1.5s delay per row,
+    // making normal spreadsheet imports unnecessarily slow. The AI service
+    // already handles provider retries/rate limits, while this cap prevents
+    // an import from flooding the provider.
     const analyzedCandidates = []
-    
-    for (const cand of candidates) {
+    const queue = [...candidates]
+    const worker = async () => {
+      while (queue.length) {
+        const cand = queue.shift()
+        if (!cand) continue
       const resumeParsedData = {
         personalInfo: {
           name: cand.name,
@@ -387,16 +394,16 @@ export const POST = withApi(async (req) => {
           })
         }
         
-        // Wait 1.5 seconds between requests to avoid Mistral free tier rate limits (1 req/sec)
-        await new Promise(resolve => setTimeout(resolve, 1500))
-        
       } catch (err) {
         analyzedCandidates.push({
           ...buildLogicalAnalysis(cand, jobData, 'AI analysis failed'),
           analysisError: err.message || 'AI analysis failed',
         })
       }
+      }
     }
+    const workers = Array.from({ length: Math.min(3, queue.length) }, () => worker())
+    await Promise.all(workers)
 
     analyzedCandidates.sort((a, b) => {
       const scoreDiff = (b.score || 0) - (a.score || 0)

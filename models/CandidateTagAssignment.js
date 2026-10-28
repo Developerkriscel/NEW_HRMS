@@ -15,5 +15,6 @@ const CandidateTagAssignmentSchema = new mongoose.Schema(
 )
 
 CandidateTagAssignmentSchema.index({ tenantId: 1, candidateId: 1, tagId: 1 }, { unique: true })
+CandidateTagAssignmentSchema.index({ tenantId: 1, tagId: 1, candidateId: 1 })
 
 export default model('CandidateTagAssignment', CandidateTagAssignmentSchema)

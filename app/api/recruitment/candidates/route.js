@@ -14,6 +14,7 @@ import Application from '@/models/Application'
 import ApplicationStageHistory from '@/models/ApplicationStageHistory'
 import CandidateJobMatch from '@/models/CandidateJobMatch'
 import CandidateTagAssignment from '@/models/CandidateTagAssignment'
+import CandidateTag from '@/models/CandidateTag'
 import JobPipelineStage from '@/models/JobPipelineStage'
 import Offer from '@/models/Offer'
 import SelectionDecision from '@/models/SelectionDecision'
@@ -70,8 +71,11 @@ export const GET = withApi(async (req) => {
   // rather than letting the second overwrite the first.
   const candidateIdConstraints = []
   if (tag) {
-    const tagged = await CandidateTagAssignment.find({ tenantId }).populate({ path: 'tagId', match: { name: { $regex: `^${tag}$`, $options: 'i' } } }).select('candidateId tagId')
-    candidateIdConstraints.push(tagged.filter((t) => t.tagId).map((t) => String(t.candidateId)))
+    const matchingTag = await CandidateTag.findOne({ tenantId, name: { $regex: `^${tag}$`, $options: 'i' } }).select('_id').lean()
+    const tagged = matchingTag
+      ? await CandidateTagAssignment.find({ tenantId, tagId: matchingTag._id }).select('candidateId').lean()
+      : []
+    candidateIdConstraints.push(tagged.map((t) => String(t.candidateId)))
   }
   if (search) {
     const matchingCandidates = await Candidate.find({
@@ -170,7 +174,7 @@ export const GET = withApi(async (req) => {
 
   const pageApplicationIds = pageApplications.map((a) => a._id)
   const pageCandidateIds = pageApplications.map((application) => application.candidateId._id)
-  const [offers, interviews, stageHistory, selectionDecisions, resumes] = await Promise.all([
+  const [offers, interviews, stageHistoryGroups, selectionDecisions, resumes] = await Promise.all([
     Offer.find({
       tenantId,
       applicationId: { $in: pageApplicationIds },
@@ -185,20 +189,39 @@ export const GET = withApi(async (req) => {
       .select('_id applicationId roundName type date startTime endTime timezone mode status meetingUrl location')
       .sort({ date: -1, startTime: -1 })
       .lean(),
-    ApplicationStageHistory.find({
-      tenantId,
-      applicationId: { $in: pageApplicationIds },
-    }).sort({ createdAt: 1 }).select('applicationId action toStageName createdAt').lean(),
+    ApplicationStageHistory.aggregate([
+      { $match: { tenantId, applicationId: { $in: pageApplicationIds } } },
+      { $sort: { createdAt: 1 } },
+      {
+        $group: {
+          _id: '$applicationId',
+          rows: {
+            $push: {
+              action: '$action',
+              toStageName: '$toStageName',
+              createdAt: '$createdAt',
+            },
+          },
+        },
+      },
+      { $project: { _id: 0, applicationId: '$_id', rows: { $slice: ['$rows', 30] } } },
+    ]),
     SelectionDecision.find({
       tenantId,
       applicationId: { $in: pageApplicationIds },
       decision: 'SELECT',
     }).sort({ decidedAt: 1 }).select('applicationId decidedAt approvalStatus').lean(),
-    CandidateResume.find({
-      tenantId,
-      candidateId: { $in: pageCandidateIds },
-    }).sort({ isPrimary: -1, version: -1, createdAt: -1 }).select('candidateId fileUrl originalFileName fileName isPrimary version').lean(),
+    CandidateResume.aggregate([
+      { $match: { tenantId, candidateId: { $in: pageCandidateIds } } },
+      { $sort: { isPrimary: -1, version: -1, createdAt: -1 } },
+      { $group: { _id: '$candidateId', resume: { $first: '$$ROOT' } } },
+      { $replaceRoot: { newRoot: '$resume' } },
+      { $project: { candidateId: 1, fileUrl: 1, originalFileName: 1, fileName: 1, isPrimary: 1, version: 1 } },
+    ]),
   ])
+  const stageHistory = stageHistoryGroups.flatMap((group) => (
+    group.rows || []).map((row) => ({ applicationId: group.applicationId, ...row }))
+  )
   const offerByApplication = new Map(offers.map((offer) => [String(offer.applicationId), offer]))
   const latestInterviewByApplication = new Map()
   for (const interview of interviews) {
