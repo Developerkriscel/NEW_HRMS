@@ -66,7 +66,6 @@ export default function InterviewReviewPage() {
           <div>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-indigo-600">Recruitment</p>
             <h1 className="mt-1 text-3xl font-black text-slate-900 dark:text-white">Interview</h1>
-            <p className="mt-1 text-sm text-slate-500">Manage interview requests, interviewer recommendations, and final HR/Admin decisions.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={() => router.push('/hr/recruitment')} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-indigo-700">
