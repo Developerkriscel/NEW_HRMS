@@ -441,7 +441,10 @@ export default function RecruitmentDashboardPage() {
   
   const fetchPositions = async ({ force = false, append = false } = {}) => {
     const page = append ? positionsPage + 1 : 0
-    if (append ? positionsLoadingMore : positionsLoading) return
+    // `positionsLoading` starts true so the first render can show skeletons.
+    // Do not treat that initial state as an in-flight request, otherwise the
+    // first fetch exits immediately and the page stays stuck on skeletons.
+    if (append ? positionsLoadingMore : (positionsLoading && positionsList.length > 0)) return
     if (append && !positionsHasMore) return
     if (append) setPositionsLoadingMore(true)
     else setPositionsLoading(true)
