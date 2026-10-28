@@ -38,6 +38,7 @@ const SEARCH_NAV_BY_ROLE = {
     { title: 'Leave', description: 'Leave requests and approvals', path: '/hr/leave', type: 'Page', moduleKey: MODULE_ACCESS.LEAVE },
     { title: 'Payroll', description: 'Payroll runs', path: '/hr/payroll', type: 'Page', moduleKey: MODULE_ACCESS.PAYROLL },
     { title: 'Recruitment', description: 'Hiring pipeline and candidates', path: '/hr/recruitment', type: 'Page', moduleKey: MODULE_ACCESS.RECRUITMENT },
+    { title: 'Interview Reviews', description: 'Interviewer recommendations and final decisions', path: '/hr/recruitment/interviews', type: 'Page', moduleKey: MODULE_ACCESS.RECRUITMENT },
     { title: 'Onboarding', description: 'Employee onboarding', path: '/hr/onboarding', type: 'Page', moduleKey: MODULE_ACCESS.ONBOARDING },
     { title: 'Offboarding', description: 'Employee exits and resignations', path: '/hr/offboarding', type: 'Page', moduleKey: MODULE_ACCESS.OFFBOARDING },
     { title: 'Assets', description: 'Asset requests and allocations', path: '/hr/assets', type: 'Page', moduleKey: MODULE_ACCESS.ASSETS },
@@ -55,6 +56,7 @@ const SEARCH_NAV_BY_ROLE = {
     { title: 'Leave', description: 'Leave requests', path: '/hr/leave', type: 'Page', moduleKey: MODULE_ACCESS.LEAVE },
     { title: 'Payroll', description: 'Payroll runs', path: '/hr/payroll', type: 'Page', moduleKey: MODULE_ACCESS.PAYROLL },
     { title: 'Recruitment', description: 'Hiring pipeline and candidates', path: '/hr/recruitment', type: 'Page', moduleKey: MODULE_ACCESS.RECRUITMENT },
+    { title: 'Interview Reviews', description: 'Interviewer recommendations and final decisions', path: '/hr/recruitment/interviews', type: 'Page', moduleKey: MODULE_ACCESS.RECRUITMENT },
     { title: 'Onboarding', description: 'Employee onboarding', path: '/hr/onboarding', type: 'Page', moduleKey: MODULE_ACCESS.ONBOARDING },
     { title: 'Profile', description: 'My profile', path: '/hr/profile', type: 'Page' },
   ],
@@ -216,6 +218,25 @@ export function Navbar({ onMobileMenuToggle }) {
           message: message || 'Could not save your response. Please try again.',
         })
       }
+    } finally {
+      setNotificationActionLoading(null)
+    }
+  }
+
+  const handleInterviewOutcome = async (notification, decision, event) => {
+    event?.stopPropagation()
+    const metadata = notification?.metadata
+    if (!metadata?.interviewId || notificationActionLoading) return
+    setNotificationActionLoading(`${notification.id}:${decision}`)
+    setNotificationActionError(null)
+    try {
+      await interviewApi.recordDecision(metadata.interviewId, { decision, notificationId: notification.id })
+      setPanelNotifications((previous) => previous.map((item) => item.id === notification.id
+        ? { ...item, read: true, metadata: { ...item.metadata, decision } }
+        : item))
+      await fetchNotifications()
+    } catch (error) {
+      setNotificationActionError({ id: notification.id, message: error.response?.data?.message || 'Could not save interview outcome.' })
     } finally {
       setNotificationActionLoading(null)
     }
@@ -486,6 +507,12 @@ export function Navbar({ onMobileMenuToggle }) {
                                   <div className="mt-2 flex gap-2" onClick={(event) => event.stopPropagation()}>
                                     <button type="button" disabled={!!notificationActionLoading} onClick={(event) => handleInterviewAssignmentResponse(n, 'ACCEPTED', event)} className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white disabled:opacity-50">{notificationActionLoading === `${n.id}:ACCEPTED` ? 'Accepting...' : 'Accept'}</button>
                                     <button type="button" disabled={!!notificationActionLoading} onClick={(event) => handleInterviewAssignmentResponse(n, 'REJECTED', event)} className="rounded-lg bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700 disabled:opacity-50 dark:bg-rose-950/40 dark:text-rose-300">{notificationActionLoading === `${n.id}:REJECTED` ? 'Rejecting...' : 'Reject'}</button>
+                                  </div>
+                                )}
+                                {n.metadata?.kind === 'INTERVIEW_OUTCOME_REQUEST' && n.metadata?.decision === 'PENDING' && (
+                                  <div className="mt-2 flex gap-2" onClick={(event) => event.stopPropagation()}>
+                                    <button type="button" disabled={!!notificationActionLoading} onClick={(event) => handleInterviewOutcome(n, 'SELECTED', event)} className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white disabled:opacity-50">{notificationActionLoading === `${n.id}:SELECTED` ? 'Saving...' : 'Recommend Select'}</button>
+                                    <button type="button" disabled={!!notificationActionLoading} onClick={(event) => handleInterviewOutcome(n, 'REJECTED', event)} className="rounded-lg bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700 disabled:opacity-50 dark:bg-rose-950/40 dark:text-rose-300">{notificationActionLoading === `${n.id}:REJECTED` ? 'Saving...' : 'Recommend Reject'}</button>
                                   </div>
                                 )}
                                 {notificationActionError?.id === n.id && <p className="mt-2 text-[11px] font-medium text-rose-600 dark:text-rose-300">{notificationActionError.message}</p>}

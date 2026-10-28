@@ -16,6 +16,7 @@ export const interviewApi = {
   submitFeedback: (id, data) => api.post(`/recruitment/interviews/${id}/feedback`, data),
   getPanelFeedback: (id) => api.get(`/recruitment/interviews/${id}/panel-feedback`),
   respondToAssignment: (id, data) => api.post(`/recruitment/interviews/${id}/panel-response`, data),
+  recordDecision: (id, data) => api.post(`/recruitment/interviews/${id}/decision`, data),
 
   listScorecardTemplates: () => api.get('/recruitment/interview-scorecard-templates'),
   createScorecardTemplate: (data) => api.post('/recruitment/interview-scorecard-templates', data),

@@ -224,7 +224,7 @@ export const GET = withApi(async (req) => {
     ? await InterviewPanelMember.find({
       tenantId,
       interviewId: { $in: interviews.map((interview) => interview._id) },
-    }).select('interviewId employeeId employeeName role assignmentStatus respondedAt').lean()
+    }).select('interviewId employeeId employeeName role assignmentStatus respondedAt interviewDecision decisionComment decisionAt').lean()
     : []
   const panelByInterview = new Map()
   for (const member of panelMembers) {
@@ -236,6 +236,9 @@ export const GET = withApi(async (req) => {
       role: member.role,
       assignmentStatus: member.assignmentStatus,
       respondedAt: member.respondedAt,
+      interviewDecision: member.interviewDecision || 'PENDING',
+      decisionComment: member.decisionComment || null,
+      decisionAt: member.decisionAt || null,
     })
   }
   const stageHistory = stageHistoryGroups.flatMap((group) => (

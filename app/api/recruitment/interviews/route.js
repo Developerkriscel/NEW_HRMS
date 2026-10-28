@@ -119,8 +119,12 @@ export const GET = withApi(async (req) => {
       name: p.employeeName,
       role: p.role,
       assignmentStatus: p.assignmentStatus,
+      interviewDecision: p.interviewDecision || 'PENDING',
+      decisionComment: p.decisionComment || null,
+      decisionAt: p.decisionAt || null,
       feedbackStatus: p.feedbackStatus,
     })),
+    applicationId: i.applicationId,
   }))
 
   return ok(paged(rows, page, size, totalElements))

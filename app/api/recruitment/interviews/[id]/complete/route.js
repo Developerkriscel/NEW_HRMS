@@ -7,7 +7,9 @@ import { logAction } from '@/lib/audit'
 import { INTERVIEW_MANAGE_ROLES, INTERVIEW_STATUS } from '@/lib/interviewConstants'
 import { ACTIVITY_ENTRY_TYPE } from '@/lib/candidateConstants'
 import { getActorName } from '@/lib/candidateHelpers'
+import { createNotification } from '@/lib/notifications'
 import Interview from '@/models/Interview'
+import InterviewPanelMember from '@/models/InterviewPanelMember'
 import Application from '@/models/Application'
 
 // POST — "Interview Completed -> Feedback Pending" (the flow diagram).
@@ -34,6 +36,22 @@ export const POST = withApi(async (req, { params }) => {
     application.activityLog.push({ type: ACTIVITY_ENTRY_TYPE.UPDATED, message: `Interview completed: ${interview.roundName} — feedback pending`, actorName })
     await application.save()
   }
+
+  const acceptedPanel = await InterviewPanelMember.find({
+    tenantId,
+    interviewId: interview._id,
+    assignmentStatus: 'ACCEPTED',
+  }).select('_id employeeId').lean()
+  await Promise.all(acceptedPanel.map((member) => createNotification({
+    userId: member.employeeId,
+    tenant: tenantId,
+    title: 'Interview outcome required',
+    message: `Record your Select or Reject recommendation for the completed ${interview.roundName}.`,
+    type: 'warning',
+    category: 'interview',
+    link: '/notifications',
+    metadata: { kind: 'INTERVIEW_OUTCOME_REQUEST', decision: 'PENDING', interviewId: String(interview._id), panelMemberId: String(member._id) },
+  })))
 
   await logAction(session, { action: 'INTERVIEW_COMPLETED', entityType: 'Interview', entityId: interview._id, description: `${interview.roundName} marked complete`, req })
 

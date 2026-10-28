@@ -902,15 +902,19 @@ export default function RecruitmentDashboardPage() {
                     {cand.latestInterview.panel.map((member) => (
                       <span
                         key={`${member.employeeId}-${member.assignmentStatus}`}
-                        className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ${member.assignmentStatus === 'ACCEPTED'
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ${member.interviewDecision === 'SELECTED'
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+                          : member.interviewDecision === 'REJECTED'
+                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
+                            : member.assignmentStatus === 'ACCEPTED'
                           ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
                           : member.assignmentStatus === 'REJECTED'
                             ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
                             : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
                         }`}
-                        title={`${member.name || 'Interviewer'}: ${member.assignmentStatus || 'PENDING'}`}
+                        title={`${member.name || 'Interviewer'}: ${member.interviewDecision && member.interviewDecision !== 'PENDING' ? member.interviewDecision : member.assignmentStatus || 'PENDING'}`}
                       >
-                        {member.name || 'Interviewer'} · {member.assignmentStatus === 'ACCEPTED' ? 'Available' : member.assignmentStatus === 'REJECTED' ? 'Unavailable' : 'Awaiting response'}
+                        {member.name || 'Interviewer'} · {member.interviewDecision === 'SELECTED' ? 'Recommends Select' : member.interviewDecision === 'REJECTED' ? 'Recommends Reject' : member.assignmentStatus === 'ACCEPTED' ? 'Available' : member.assignmentStatus === 'REJECTED' ? 'Unavailable' : 'Awaiting response'}
                       </span>
                     ))}
                   </div>

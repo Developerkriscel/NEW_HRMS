@@ -63,6 +63,7 @@ const COMPANY_ADMIN_NAV = [
   { label: 'Leave', icon: 'CalendarOff', path: '/hr/leave', moduleKey: MODULE_ACCESS.LEAVE },
   { label: 'Payroll', icon: 'Banknote', path: '/hr/payroll', moduleKey: MODULE_ACCESS.PAYROLL },
   { label: 'Recruitment', icon: 'UserPlus', path: '/hr/recruitment', moduleKey: MODULE_ACCESS.RECRUITMENT },
+  { label: 'Interview Reviews', icon: 'CalendarCheck', path: '/hr/recruitment/interviews', moduleKey: MODULE_ACCESS.RECRUITMENT },
   { label: 'Onboarding', icon: 'UserCheck', path: '/hr/onboarding', moduleKey: MODULE_ACCESS.ONBOARDING },
   { label: 'Offboarding', icon: 'UserMinus', path: '/hr/offboarding', moduleKey: MODULE_ACCESS.OFFBOARDING },
   { label: 'Assets', icon: 'Monitor', path: '/hr/assets', moduleKey: MODULE_ACCESS.ASSETS },
@@ -82,6 +83,7 @@ const HR_NAV = [
   { label: 'Leave & Approvals', icon: 'CalendarOff', path: '/hr/leave', moduleKey: MODULE_ACCESS.LEAVE },
   { label: 'Payroll', icon: 'Banknote', path: '/hr/payroll', moduleKey: MODULE_ACCESS.PAYROLL },
   { label: 'Recruitment', icon: 'UserPlus', path: '/hr/recruitment', moduleKey: MODULE_ACCESS.RECRUITMENT },
+  { label: 'Interview Reviews', icon: 'CalendarCheck', path: '/hr/recruitment/interviews', moduleKey: MODULE_ACCESS.RECRUITMENT },
   { label: 'Onboarding', icon: 'UserCheck', path: '/hr/onboarding', moduleKey: MODULE_ACCESS.ONBOARDING },
   { label: 'Offboarding', icon: 'UserMinus', path: '/hr/offboarding', moduleKey: MODULE_ACCESS.OFFBOARDING },
 

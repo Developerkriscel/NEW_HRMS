@@ -176,6 +176,23 @@ export default function NotificationsPage() {
     }
   }
 
+  const handleInterviewOutcome = async (notification, decision, e) => {
+    e?.stopPropagation()
+    const metadata = notification?.metadata
+    if (!metadata?.interviewId || assignmentActionLoading) return
+    setAssignmentActionLoading(`${notification.id}:${decision}`)
+    try {
+      await interviewApi.recordDecision(metadata.interviewId, { decision, notificationId: notification.id })
+      setServerNotifications((previous) => previous.map((item) => item.id === notification.id
+        ? { ...item, read: true, metadata: { ...item.metadata, decision } }
+        : item))
+    } catch (error) {
+      console.error('Failed to record interview outcome:', error)
+    } finally {
+      setAssignmentActionLoading(null)
+    }
+  }
+
   const handleItemClick = (n) => {
     if (!n.read) {
       handleMarkAsRead(n.id)
@@ -430,6 +447,13 @@ export default function NotificationsPage() {
                       <div className="mt-3 flex gap-2" onClick={(e) => e.stopPropagation()}>
                         <button type="button" disabled={!!assignmentActionLoading} onClick={(e) => handleAssignmentResponse(n, 'ACCEPTED', e)} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">{assignmentActionLoading === `${n.id}:ACCEPTED` ? 'Approving...' : 'Approve assignment'}</button>
                         <button type="button" disabled={!!assignmentActionLoading} onClick={(e) => handleAssignmentResponse(n, 'REJECTED', e)} className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 disabled:opacity-50 dark:bg-rose-950/40 dark:text-rose-300">{assignmentActionLoading === `${n.id}:REJECTED` ? 'Rejecting...' : 'Reject assignment'}</button>
+                      </div>
+                    )}
+
+                    {n.metadata?.kind === 'INTERVIEW_OUTCOME_REQUEST' && n.metadata?.decision === 'PENDING' && (
+                      <div className="mt-3 flex gap-2" onClick={(e) => e.stopPropagation()}>
+                        <button type="button" disabled={!!assignmentActionLoading} onClick={(e) => handleInterviewOutcome(n, 'SELECTED', e)} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">{assignmentActionLoading === `${n.id}:SELECTED` ? 'Saving...' : 'Recommend Select'}</button>
+                        <button type="button" disabled={!!assignmentActionLoading} onClick={(e) => handleInterviewOutcome(n, 'REJECTED', e)} className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 disabled:opacity-50 dark:bg-rose-950/40 dark:text-rose-300">{assignmentActionLoading === `${n.id}:REJECTED` ? 'Saving...' : 'Recommend Reject'}</button>
                       </div>
                     )}
 
