@@ -123,11 +123,13 @@ export const useRecruitmentStore = create((set, get) => ({
       // Transform backend shape (application) into the UI candidate card shape
       const mappedCandidates = rows.map(a => ({
         id: a.applicationId,
+        applicationId: a.applicationId,
         candidateId: a.candidateId,
         jobId: a.jobId,
         name: a.candidateName,
         email: a.email,
         phone: a.phone,
+        resumeUrl: a.resumeUrl || null,
         role: a.jobTitle,
         stage: a.stage || 'Applied',
         stageId: a.stageId || null,
@@ -389,6 +391,11 @@ export const useRecruitmentStore = create((set, get) => ({
         subject: candidate.offerEmail.subject,
         body: candidate.offerEmail.body,
         candidateEmail: candidate.email || undefined,
+        departmentId: candidate.offerEmail.departmentId || undefined,
+        designationId: candidate.offerEmail.designationId || undefined,
+        employmentType: candidate.offerEmail.employmentType || undefined,
+        joiningDate: candidate.offerEmail.joiningDate || undefined,
+        probationPeriod: candidate.offerEmail.probationPeriod || undefined,
       } : { candidateEmail: candidate?.email || undefined }
       let requestBody = payload
       const attachments = candidate?.offerEmail?.attachments || []
@@ -399,6 +406,9 @@ export const useRecruitmentStore = create((set, get) => ({
         if (candidate?.email) {
           requestBody.append('candidateEmail', candidate.email)
         }
+        Object.entries(payload).forEach(([key, value]) => {
+          if (key !== 'subject' && key !== 'body' && key !== 'candidateEmail' && value) requestBody.append(key, value)
+        })
         attachments.forEach((file) => requestBody.append('attachments', file))
       }
       const res = await candidateApi.quickOffer(candidateId, requestBody)

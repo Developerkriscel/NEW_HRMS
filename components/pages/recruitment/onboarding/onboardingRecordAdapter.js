@@ -99,6 +99,7 @@ export function adaptPreboardingRecord(source) {
     rawStatus: preboarding.status,
     conversionStatus: preboarding.conversionStatus,
     convertedEmployeeId: preboarding.convertedEmployeeId,
+    employeeCode: preboarding.employeeCode || '',
     loginEmail: preboarding.employeeLoginEmail || '',
     canConvert: !converted && (
       preboarding.conversionStatus === 'READY' ||

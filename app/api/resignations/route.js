@@ -44,6 +44,7 @@ export const GET = withApi(async (req) => {
     .sort({ createdAt: -1 })
     .skip(page * size)
     .limit(size)
+    .lean()
 
   return ok(paged(content, page, size, totalElements))
 })

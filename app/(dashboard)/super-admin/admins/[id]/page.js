@@ -159,7 +159,7 @@ export default function EditPlatformAdminPage() {
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">Work Email <span className="text-red-500">*</span> (Read Only)</label>
-              <input readOnly disabled placeholder="admin@nexahr.com" className="input-field bg-slate-50 dark:bg-slate-800/50 rounded-2xl w-full px-4 py-3 border-slate-200/60 cursor-not-allowed opacity-70" value={form.email} />
+              <input readOnly disabled type="email" autoComplete="username" placeholder="admin@nexahr.com" className="input-field bg-slate-50 dark:bg-slate-800/50 rounded-2xl w-full px-4 py-3 border-slate-200/60 cursor-not-allowed opacity-70" value={form.email} />
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">Mobile Number</label>
@@ -214,7 +214,7 @@ export default function EditPlatformAdminPage() {
 
           <div className="max-w-md">
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">New Password (Leave blank to keep current)</label>
-            <input type="password" placeholder="Enter a new secure password" minLength={8} className="input-field bg-slate-50 dark:bg-slate-800/50 rounded-2xl w-full px-4 py-3 border-slate-200/60 focus:bg-white" value={form.password || ''} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+            <input type="password" autoComplete="new-password" placeholder="Enter a new secure password" minLength={8} className="input-field bg-slate-50 dark:bg-slate-800/50 rounded-2xl w-full px-4 py-3 border-slate-200/60 focus:bg-white" value={form.password || ''} onChange={(e) => setForm({ ...form, password: e.target.value })} />
             <p className="text-[10px] text-slate-400 mt-1.5 ml-1 font-medium">Only fill this if you want to change their password</p>
           </div>
         </div>

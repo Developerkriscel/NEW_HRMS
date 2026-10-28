@@ -29,6 +29,7 @@ export function CandidateOfferPortal({ token }) {
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState('')
   const [result, setResult] = useState(null) // 'accepted' | 'declined' | 'discussed'
+  const [employeeDetailsUrl, setEmployeeDetailsUrl] = useState('')
 
   function load() {
     setLoading(true)
@@ -59,6 +60,11 @@ export function CandidateOfferPortal({ token }) {
           <div className="w-14 h-14 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center mx-auto mb-4"><CheckCircle2 className="w-7 h-7 text-emerald-500" /></div>
           <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full mb-2">Offer Accepted!</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm">Welcome to {data.companyName}. Our HR team will be in touch shortly with next steps.</p>
+          {(employeeDetailsUrl || data.hasEmployeeDetailsForm) && (
+            <a href={employeeDetailsUrl || `/candidate/preboarding/${token}`} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-indigo-700">
+              <FileText className="h-4 w-4" /> Complete Employee Details
+            </a>
+          )}
         </Card>
       </Centered>
     )
@@ -102,7 +108,14 @@ export function CandidateOfferPortal({ token }) {
     )
   }
 
-  if (view === 'accept') return <AcceptView token={token} onBack={() => setView('summary')} onDone={() => setResult('accepted')} />
+  if (view === 'accept') return <AcceptView token={token} onBack={() => setView('summary')} onDone={(response) => {
+    if (response?.employeeDetailsUrl) {
+      window.location.assign(response.employeeDetailsUrl)
+      return
+    }
+    setEmployeeDetailsUrl('')
+    setResult('accepted')
+  }} />
   if (view === 'decline') return <DeclineView token={token} onBack={() => setView('summary')} onDone={() => setResult('declined')} />
   if (view === 'discuss') return <DiscussView token={token} onBack={() => setView('summary')} onDone={() => setResult('discussed')} />
 
@@ -173,7 +186,10 @@ function AcceptView({ token, onBack, onDone }) {
     if (!fullName.trim()) return setError('Please enter your full name')
     if (!accepted) return setError('Please confirm you accept the offer terms')
     setSaving(true); setError('')
-    try { await publicOfferApi.accept(token, { fullName: fullName.trim(), accepted: true }); onDone() }
+    try {
+      const response = await publicOfferApi.accept(token, { fullName: fullName.trim(), accepted: true })
+      onDone(response.data?.data)
+    }
     catch (err) { setError(err.response?.data?.message || 'Could not accept the offer'); setSaving(false) }
   }
 

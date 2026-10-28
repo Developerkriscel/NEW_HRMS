@@ -1,20 +1,24 @@
 'use client'
 
-import { useState } from 'react'
-import { X, Mail, FileText, CheckCircle2, Paperclip, Trash2, UploadCloud } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { X, Mail, FileText, Paperclip, Trash2, UploadCloud } from 'lucide-react'
 import { Avatar } from '@/components/common/Avatar'
 import { Portal } from '@/components/common/Portal'
 
-export function SendOfferModal({ candidate, onClose, onSend }) {
-  const defaultSubject = `Job Offer from NexaHR - ${candidate?.role || ''}`;
-  const defaultBody = `Dear ${candidate?.name || ''},
+export function SendOfferModal({ candidate, companyName = '', onClose, onSend }) {
+  const candidateName = candidate?.name || candidate?.candidateName ||
+    [candidate?.firstName, candidate?.lastName].filter(Boolean).join(' ') || 'Candidate'
+  const roleTitle = candidate?.role || candidate?.jobTitle || candidate?.positionTitle || 'the offered position'
+  const company = String(companyName || candidate?.companyName || '').trim() || 'the company'
+  const defaultSubject = `Job Offer from ${company} - ${roleTitle}`
+  const defaultBody = `Dear ${candidateName},
 
-We are thrilled to offer you the position of ${candidate?.role || ''} at NexaHR. Your skills and experience, particularly your ${candidate?.score || candidate?.matchScore || 0}% AI match score for this role, make you an ideal fit for our team.
+We are pleased to offer you the position of ${roleTitle} at ${company}. We were impressed by your experience and look forward to welcoming you to the team.
 
-Please find the detailed offer letter attached to this email. We look forward to welcoming you aboard!
+Please review the attached offer letter and use the secure link in this email to accept or decline the offer. After accepting, use the Employee Details link in this email to complete your information.
 
 Best regards,
-The NexaHR Recruitment Team`;
+The ${company} Recruitment Team`;
 
   const [recipientEmail, setRecipientEmail] = useState(candidate?.email || '')
   const [subject, setSubject] = useState(defaultSubject)
@@ -22,6 +26,52 @@ The NexaHR Recruitment Team`;
   const [attachments, setAttachments] = useState([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [isRunningOnLocalhost, setIsRunningOnLocalhost] = useState(false)
+  const [jobDetails, setJobDetails] = useState(null)
+  const [employmentDetails, setEmploymentDetails] = useState({ departmentId: '', designationId: '', employmentType: '', joiningDate: '', probationPeriod: '6 months' })
+
+  const departmentOptions = useMemo(() => (jobDetails?.departments || []).filter(Boolean), [jobDetails])
+  const designationOptions = useMemo(() => (jobDetails?.designations || []).filter(Boolean), [jobDetails])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const hostname = window.location.hostname
+    setIsRunningOnLocalhost(hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1')
+  }, [])
+
+  useEffect(() => {
+    if (!candidate) return
+    setRecipientEmail(candidate.email || '')
+    setSubject(defaultSubject)
+    setEmailBody(defaultBody)
+    setAttachments([])
+    setError(null)
+  // The defaults intentionally refresh when a different candidate is selected.
+  }, [candidate, candidateName, company, defaultBody, defaultSubject])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!candidate?.jobId) return undefined
+    Promise.all([
+      fetch(`/api/recruitment/jobs/${candidate.jobId}`).then((response) => response.ok ? response.json() : null),
+      fetch('/api/departments').then((response) => response.ok ? response.json() : null),
+      fetch('/api/designations').then((response) => response.ok ? response.json() : null),
+    ])
+      .then(([payload, departmentsPayload, designationsPayload]) => {
+        if (cancelled) return
+        const job = payload?.data || null
+        setJobDetails({ ...job, departments: departmentsPayload?.data || [], designations: designationsPayload?.data || [] })
+        setEmploymentDetails({
+          departmentId: job?.department?._id || job?.department || '',
+          designationId: job?.designation?._id || job?.designation || '',
+          employmentType: job?.employmentType || '',
+          joiningDate: job?.expectedJoiningDate ? new Date(job.expectedJoiningDate).toISOString().slice(0, 10) : '',
+          probationPeriod: '6 months',
+        })
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [candidate?.jobId])
 
   const handleAttachmentChange = (e) => {
     const files = Array.from(e.target.files || [])
@@ -53,7 +103,7 @@ The NexaHR Recruitment Team`;
     setSaving(true)
     setError(null)
     try {
-      await onSend({ ...candidate, email: recipientEmail, offerEmail: { subject, body: emailBody, attachments } })
+      await onSend({ ...candidate, email: recipientEmail, offerEmail: { subject, body: emailBody, attachments, ...employmentDetails } })
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to send offer')
     } finally {
@@ -87,20 +137,25 @@ The NexaHR Recruitment Team`;
         <div className="p-6 sm:p-8 overflow-y-auto flex-1 relative z-10 custom-scrollbar space-y-6">
           
           <div className="bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-500/10 dark:to-blue-500/10 rounded-2xl p-6 border border-indigo-100 dark:border-indigo-500/20 flex items-center gap-5">
-            <Avatar name={candidate.name} size="lg" />
+            <Avatar name={candidateName} size="lg" />
             <div className="flex-1 min-w-0">
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white">{candidate.name}</h3>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">{candidateName}</h3>
               <p className="text-sm font-medium text-slate-600 dark:text-slate-400 mt-0.5">{candidate.email}</p>
             </div>
-            <div className="text-right">
-              <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">AI Match Score</p>
-              <div className="inline-flex items-center gap-1.5 bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400 px-3 py-1 rounded-lg font-black text-lg">
-                <CheckCircle2 className="w-4 h-4" /> {candidate.score || candidate.matchScore || 0}%
-              </div>
+            <div className="max-w-[40%] text-right">
+              <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Position</p>
+              <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{roleTitle}</p>
             </div>
           </div>
 
           <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <FieldSelect label="Department" value={employmentDetails.departmentId} options={departmentOptions} onChange={(value) => setEmploymentDetails((state) => ({ ...state, departmentId: value }))} placeholder="Select department" />
+              <FieldSelect label="Designation" value={employmentDetails.designationId} options={designationOptions} onChange={(value) => setEmploymentDetails((state) => ({ ...state, designationId: value }))} placeholder="Select designation" />
+              <FieldSelect label="Employment Type" value={employmentDetails.employmentType} options={[{ _id: 'FULL_TIME', name: 'Full Time' }, { _id: 'PART_TIME', name: 'Part Time' }, { _id: 'CONTRACT', name: 'Contract' }, { _id: 'INTERNSHIP', name: 'Internship' }]} onChange={(value) => setEmploymentDetails((state) => ({ ...state, employmentType: value }))} placeholder="Select employment type" />
+              <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Joining Date<input type="date" required value={employmentDetails.joiningDate} onChange={(event) => setEmploymentDetails((state) => ({ ...state, joiningDate: event.target.value }))} className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium dark:border-slate-700 dark:bg-slate-800/50" /></label>
+              <label className="text-sm font-bold text-slate-700 dark:text-slate-300 sm:col-span-2">Probation Period<input type="text" required value={employmentDetails.probationPeriod} onChange={(event) => setEmploymentDetails((state) => ({ ...state, probationPeriod: event.target.value }))} placeholder="e.g. 6 months" className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium dark:border-slate-700 dark:bg-slate-800/50" /></label>
+            </div>
             <div>
               <label className="text-sm font-bold text-slate-700 dark:text-slate-300 block mb-2">To (Candidate Email)</label>
               <input 
@@ -129,6 +184,12 @@ The NexaHR Recruitment Team`;
               />
             </div>
           </div>
+
+          {isRunningOnLocalhost && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+              This app is running on localhost. Offer and employee-details links will only open on this computer. To let a candidate open them from another device, set <code className="rounded bg-amber-100 px-1 dark:bg-amber-900/60">FRONTEND_URL</code> to your public HTTPS domain or development tunnel, then restart the app.
+            </div>
+          )}
 
           <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl text-amber-700 dark:text-amber-400 text-sm font-medium">
             <FileText className="w-5 h-5 flex-shrink-0" />
@@ -221,4 +282,8 @@ The NexaHR Recruitment Team`;
       </div>
     </Portal>
   )
+}
+
+function FieldSelect({ label, value, options, onChange, placeholder }) {
+  return <label className="text-sm font-bold text-slate-700 dark:text-slate-300">{label}<select required value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium dark:border-slate-700 dark:bg-slate-800/50"><option value="">{options.length ? placeholder : 'Loading...'}</option>{options.map((option) => <option key={option._id} value={option._id}>{option.name}</option>)}</select></label>
 }

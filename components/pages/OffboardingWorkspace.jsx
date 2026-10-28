@@ -104,7 +104,7 @@ function OffboardingDetailDrawer({ row, onClose, onDecision, onUpdate, saving })
                 <UserMinus className="h-5 w-5" />
               </div>
               <div>
-                <h2 className="text-lg font-extrabold text-slate-900 dark:text-white">Offboarding Details</h2>
+                <h2 className="text-lg font-extrabold text-slate-900 dark:text-white">Review Offboarding Request</h2>
                 <p className="text-xs font-semibold text-slate-500">{employee.employeeCode || 'Employee'} resignation workflow</p>
               </div>
             </div>
@@ -250,6 +250,7 @@ function OffboardingDetailDrawer({ row, onClose, onDecision, onUpdate, saving })
 
           {canDecide && (
             <div className="sticky bottom-0 border-t border-slate-100 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
+              <p className="mb-3 text-center text-xs font-semibold text-slate-500">Review the resignation, handover, and clearance details before making the final HR decision.</p>
               <div className="grid grid-cols-2 gap-3">
                 <button disabled={saving} onClick={() => onDecision(row, 'REJECTED')} className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-extrabold text-rose-700 transition hover:bg-rose-100 disabled:opacity-60">
                   Reject
@@ -380,14 +381,11 @@ export function OffboardingWorkspace() {
       sortable: false,
       render: (_, row) => (
         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-          <button className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-900" onClick={() => setSelected(row)} title="View offboarding details">
-            <Eye className="h-4 w-4" />
+          <button className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-extrabold text-blue-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300" onClick={() => setSelected(row)} title="Review offboarding request">
+            <Eye className="h-4 w-4" /> Review
           </button>
           {!FINAL_STATUSES.includes(row.status) && (
-            <>
-              <button disabled={saving} className="btn-secondary py-1.5 text-emerald-700" onClick={() => decide(row, 'APPROVED')}>Approve</button>
-              <button disabled={saving} className="btn-secondary py-1.5 text-red-600" onClick={() => decide(row, 'REJECTED')}>Reject</button>
-            </>
+            <span className="text-[11px] font-bold text-slate-400">Review to decide</span>
           )}
         </div>
       ),

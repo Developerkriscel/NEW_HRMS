@@ -52,6 +52,7 @@ export const POST = withApi(async (req, { params }) => {
       version,
       offer,
       portalUrl,
+      employeeDetailsUrl: `/candidate/preboarding/${token}`,
       subject: body?.subject || null,
       body: body?.body || null,
       candidateEmail: body?.candidateEmail || null,

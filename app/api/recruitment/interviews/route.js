@@ -246,7 +246,7 @@ export const POST = withApi(async (req) => {
         employeeName: `${employeeById.get(String(employeeId)).firstName} ${employeeById.get(String(employeeId)).lastName}`.trim(),
         role: requestedInterviewers.find((item) => String(item.employeeId) === String(employeeId))?.role === PANEL_ROLE.PRIMARY || index === 0 ? PANEL_ROLE.PRIMARY : PANEL_ROLE.PANELIST,
         assignmentStatus: 'PENDING',
-        notifiedAt: new Date(),
+        notifiedAt: null,
       })), sessionOptions)
 
       if (interviewStage) {
@@ -333,25 +333,33 @@ export const POST = withApi(async (req) => {
     await interview.save().catch((error) => console.warn('Could not save interview invite delivery status:', error.message))
   }
 
-  await Promise.allSettled(panelMembers.map((member) => {
-    const employee = employeeById.get(String(member.employeeId))
-    return createNotification({
+  const notificationResults = await Promise.all(panelMembers.map(async (member) => {
+    const notification = await createNotification({
       userId: member.employeeId,
-      targetRole: employee.role || 'EMPLOYEE',
+      // Target this employee directly; a legacy role enum must not block delivery.
+      targetRole: 'ALL',
       tenant: tenantId,
       title: 'Interview assignment requires your response',
-      message: `You have been assigned to interview ${application.candidateId.firstName || ''} ${application.candidateId.lastName || ''} for ${application.jobId.publicTitle || application.jobId.jobTitle || 'an open position'} on ${new Date(body.date).toLocaleDateString('en-IN')} at ${body.startTime}.`,
+      message: `Please confirm availability for ${body.roundName}: ${application.candidateId.firstName || ''} ${application.candidateId.lastName || ''} — ${application.jobId.publicTitle || application.jobId.jobTitle || 'an open position'}, ${body.date}, ${body.startTime}–${body.endTime} (${interviewTimezone}). Accept if you can attend; reject if unavailable.`,
       type: 'warning',
       category: 'interview',
       link: '/notifications',
       metadata: { kind: 'INTERVIEW_ASSIGNMENT', decision: 'PENDING', interviewId: String(interview._id), panelMemberId: String(member._id) },
     })
+    if (!notification) return false
+    member.notifiedAt = new Date()
+    await member.save().catch((error) => console.warn('Could not save interviewer notification timestamp:', error.message))
+    return true
   }))
+  const notificationFailureCount = notificationResults.filter((sent) => !sent).length
 
   await logAction(session, { action: 'INTERVIEW_SCHEDULED', entityType: 'Interview', entityId: interview._id, description: `Scheduled ${body.roundName} for application ${application.applicationCode}`, req })
 
   const emailWarning = interview.candidateInviteStatus === 'FAILED'
     ? ` Interview invite email was not sent: ${interview.candidateInviteError || 'mail service is not available'}.`
+    : ''
+  const notificationWarning = notificationFailureCount
+    ? ` In-app notification could not be delivered to ${notificationFailureCount} interviewer(s). Please retry or contact an administrator.`
     : ''
   const message = conflictCount > 0
     ? `Interview scheduled - ${conflictCount} interviewer(s) have scheduling conflicts`
@@ -362,5 +370,6 @@ export const POST = withApi(async (req) => {
     availability,
     conflictCount,
     emailWarning: emailWarning.trim() || null,
-  }, `${message}${emailWarning}`, 201)
+    notificationWarning: notificationWarning.trim() || null,
+  }, `${message}${emailWarning}${notificationWarning}`, 201)
 })

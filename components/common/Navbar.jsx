@@ -123,6 +123,7 @@ export function Navbar({ onMobileMenuToggle }) {
   const [panelNotifications, setPanelNotifications] = useState([])
   const [notificationsLoading, setNotificationsLoading] = useState(false)
   const [notificationActionLoading, setNotificationActionLoading] = useState(null)
+  const [notificationActionError, setNotificationActionError] = useState(null)
   const searchRef = useRef(null)
   const searchBoxRef = useRef(null)
   const notificationsBoxRef = useRef(null)
@@ -196,12 +197,17 @@ export function Navbar({ onMobileMenuToggle }) {
     const metadata = notification?.metadata
     if (!metadata?.interviewId || notificationActionLoading) return
     setNotificationActionLoading(`${notification.id}:${decision}`)
+    setNotificationActionError(null)
     try {
       await interviewApi.respondToAssignment(metadata.interviewId, { decision, notificationId: notification.id })
       setPanelNotifications((previous) => previous.map((item) => item.id === notification.id ? { ...item, read: true, metadata: { ...item.metadata, decision } } : item))
       await fetchNotifications()
     } catch (error) {
       console.error('Failed to respond to interview assignment:', error)
+      setNotificationActionError({
+        id: notification.id,
+        message: error.response?.data?.message || 'Could not save your response. Please try again.',
+      })
     } finally {
       setNotificationActionLoading(null)
     }
@@ -378,7 +384,13 @@ export function Navbar({ onMobileMenuToggle }) {
             {/* Notification */}
             <div className="relative" ref={notificationsBoxRef}>
               <button
-                onClick={() => { setShowNotifications(!showNotifications); setShowProfile(false); setShowSearch(false) }}
+                onClick={() => {
+                  const opening = !showNotifications
+                  setShowNotifications(opening)
+                  setShowProfile(false)
+                  setShowSearch(false)
+                  if (opening) void fetchNotifications()
+                }}
                 className="relative flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-slate-800 shadow-[4px_4px_10px_rgba(0,0,0,0.05),-4px_-4px_10px_rgba(255,255,255,0.8)] dark:shadow-[4px_4px_10px_rgba(0,0,0,0.3),-4px_-4px_10px_rgba(255,255,255,0.02)] transition-all hover:-translate-y-0.5 text-slate-700 dark:text-slate-300"
                 aria-label="Open notifications"
               >
@@ -464,10 +476,11 @@ export function Navbar({ onMobileMenuToggle }) {
                                 </p>
                                 {n.metadata?.kind === 'INTERVIEW_ASSIGNMENT' && n.metadata?.decision === 'PENDING' && (
                                   <div className="mt-2 flex gap-2" onClick={(event) => event.stopPropagation()}>
-                                    <button type="button" disabled={!!notificationActionLoading} onClick={(event) => handleInterviewAssignmentResponse(n, 'ACCEPTED', event)} className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white disabled:opacity-50">{notificationActionLoading === `${n.id}:ACCEPTED` ? 'Approving...' : 'Approve'}</button>
+                                    <button type="button" disabled={!!notificationActionLoading} onClick={(event) => handleInterviewAssignmentResponse(n, 'ACCEPTED', event)} className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white disabled:opacity-50">{notificationActionLoading === `${n.id}:ACCEPTED` ? 'Accepting...' : 'Accept'}</button>
                                     <button type="button" disabled={!!notificationActionLoading} onClick={(event) => handleInterviewAssignmentResponse(n, 'REJECTED', event)} className="rounded-lg bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700 disabled:opacity-50 dark:bg-rose-950/40 dark:text-rose-300">{notificationActionLoading === `${n.id}:REJECTED` ? 'Rejecting...' : 'Reject'}</button>
                                   </div>
                                 )}
+                                {notificationActionError?.id === n.id && <p className="mt-2 text-[11px] font-medium text-rose-600 dark:text-rose-300">{notificationActionError.message}</p>}
                               </div>
                             </div>
                           </div>

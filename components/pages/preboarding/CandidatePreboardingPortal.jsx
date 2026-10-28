@@ -26,6 +26,7 @@ export function CandidatePreboardingPortal({ token }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [offerUrl, setOfferUrl] = useState('')
   const [view, setView] = useState('form') // form | documents
   const [submitted, setSubmitted] = useState(false)
 
@@ -33,13 +34,16 @@ export function CandidatePreboardingPortal({ token }) {
     setLoading(true)
     publicPreboardingApi.get(token)
       .then((res) => { setData(res.data.data); setView(res.data.data.formStatus === 'APPROVED' ? 'documents' : 'form') })
-      .catch((err) => setError(err.response?.data?.message || 'This form link is invalid'))
+      .catch((err) => {
+        setError(err.response?.data?.message || 'This form link is invalid')
+        setOfferUrl(err.response?.data?.data?.offerUrl || '')
+      })
       .finally(() => setLoading(false))
   }
   useEffect(() => { load() }, [token])
 
   if (loading) return <Centered><p className="text-slate-400">Loading...</p></Centered>
-  if (error) return <Centered><Card className="text-center"><XCircle className="w-10 h-10 text-slate-300 mx-auto mb-3" /><p className="text-slate-500 dark:text-slate-400">{error}</p></Card></Centered>
+  if (error) return <Centered><Card className="text-center"><XCircle className="w-10 h-10 text-slate-300 mx-auto mb-3" /><p className="text-slate-500 dark:text-slate-400">{error}</p>{offerUrl && <a href={offerUrl} className="mt-4 inline-flex rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700">Review and accept offer</a>}</Card></Centered>
   if (!data) return null
   if (data.isCancelled) return <Centered><Card className="text-center"><XCircle className="w-10 h-10 text-slate-300 mx-auto mb-3" /><h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full">This preboarding process is no longer active</h1></Card></Centered>
 
@@ -96,6 +100,18 @@ function InformationForm({ token, data, onSubmitted, onSaved }) {
   const [statutory, setStatutory] = useState({
     panNumber: data.statutory?.panNumber || '', uanNumber: data.statutory?.uanNumber || '',
     previousPfMember: data.statutory?.previousPfMember ?? null,
+    customFields: {
+      fatherName: data.statutory?.customFields?.fatherName || '',
+      motherName: data.statutory?.customFields?.motherName || '',
+      spouseName: data.statutory?.customFields?.spouseName || '',
+      bloodGroup: data.statutory?.customFields?.bloodGroup || '',
+      gender: data.statutory?.customFields?.gender || '',
+      maritalStatus: data.statutory?.customFields?.maritalStatus || '',
+      anniversaryDate: data.statutory?.customFields?.anniversaryDate?.slice?.(0, 10) || '',
+      aadhaarNumber: data.statutory?.customFields?.aadhaarNumber || '',
+      pfNumber: data.statutory?.customFields?.pfNumber || '',
+      esiNumber: data.statutory?.customFields?.esiNumber || '',
+    },
   })
   const [joining, setJoining] = useState({
     availableToJoin: data.joining.availableToJoin, relocationRequired: data.joining.relocationRequired,
@@ -150,9 +166,10 @@ function InformationForm({ token, data, onSubmitted, onSaved }) {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 py-8 px-4">
       <div className="max-w-2xl mx-auto space-y-5">
         <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm p-8">
-          <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">Welcome, {data.candidateName}</p>
-          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full mt-1">Candidate Information Form</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Please complete every section below. You can save your progress and come back later.</p>
+          <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">{data.companyName || 'Company'} · Employee onboarding</p>
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400 dark:from-indigo-400 dark:to-indigo-300 hover:scale-[1.02] transition-transform duration-300 relative w-fit pb-2 after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-1/3 after:h-1 after:bg-gradient-to-r after:from-indigo-500 after:to-transparent after:rounded-full mt-1">Employee Details Form</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Welcome, {data.candidateName || 'Candidate'}. Complete your details for pre-joining setup. You can save your progress and return using the same email link.</p>
+          {data.autoFill?.employeeId && <div className="mt-4 inline-flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200"><span className="font-semibold">Employee ID:</span><code className="font-bold">{data.autoFill.employeeId}</code><span className="text-xs opacity-75">Use this ID to sign in after your account is activated.</span></div>}
         </div>
 
         {data.correctionRequest && (
@@ -173,6 +190,18 @@ function InformationForm({ token, data, onSubmitted, onSaved }) {
             <Field label="Mobile Number" required><input className={inputClass} value={personal.mobileNumber} onChange={(e) => setPersonal((p) => ({ ...p, mobileNumber: e.target.value }))} /></Field>
             <Field label="Current Address" required className="col-span-2"><textarea className={cn(inputClass, 'min-h-16')} value={personal.currentAddress} onChange={(e) => setPersonal((p) => ({ ...p, currentAddress: e.target.value }))} /></Field>
             <Field label="Permanent Address" className="col-span-2"><textarea className={cn(inputClass, 'min-h-16')} value={personal.permanentAddress} onChange={(e) => setPersonal((p) => ({ ...p, permanentAddress: e.target.value }))} /></Field>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Personal & Family Details" description="Optional details used to complete your employee profile.">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Father Name"><input className={inputClass} value={statutory.customFields.fatherName} onChange={(e) => setStatutory((p) => ({ ...p, customFields: { ...p.customFields, fatherName: e.target.value } }))} /></Field>
+            <Field label="Mother Name"><input className={inputClass} value={statutory.customFields.motherName} onChange={(e) => setStatutory((p) => ({ ...p, customFields: { ...p.customFields, motherName: e.target.value } }))} /></Field>
+            <Field label="Spouse Name"><input className={inputClass} value={statutory.customFields.spouseName} onChange={(e) => setStatutory((p) => ({ ...p, customFields: { ...p.customFields, spouseName: e.target.value } }))} /></Field>
+            <Field label="Blood Group"><input className={inputClass} value={statutory.customFields.bloodGroup} onChange={(e) => setStatutory((p) => ({ ...p, customFields: { ...p.customFields, bloodGroup: e.target.value } }))} placeholder="e.g. O+" /></Field>
+            <Field label="Gender"><select className={inputClass} value={statutory.customFields.gender} onChange={(e) => setStatutory((p) => ({ ...p, customFields: { ...p.customFields, gender: e.target.value } }))}><option value="">Select</option><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="OTHER">Other</option><option value="PREFER_NOT_TO_SAY">Prefer not to say</option></select></Field>
+            <Field label="Marital Status"><select className={inputClass} value={statutory.customFields.maritalStatus} onChange={(e) => setStatutory((p) => ({ ...p, customFields: { ...p.customFields, maritalStatus: e.target.value } }))}><option value="">Select</option><option value="SINGLE">Single</option><option value="MARRIED">Married</option><option value="DIVORCED">Divorced</option><option value="WIDOWED">Widowed</option></select></Field>
+            <Field label="Anniversary Date"><input type="date" className={inputClass} value={statutory.customFields.anniversaryDate} onChange={(e) => setStatutory((p) => ({ ...p, customFields: { ...p.customFields, anniversaryDate: e.target.value } }))} /></Field>
           </div>
         </SectionCard>
 
@@ -253,6 +282,9 @@ function InformationForm({ token, data, onSubmitted, onSaved }) {
           <div className="grid grid-cols-2 gap-3">
             <Field label="PAN"><input className={inputClass} value={statutory.panNumber} onChange={(e) => setStatutory((p) => ({ ...p, panNumber: e.target.value }))} /></Field>
             <Field label="UAN (if applicable)"><input className={inputClass} value={statutory.uanNumber} onChange={(e) => setStatutory((p) => ({ ...p, uanNumber: e.target.value }))} /></Field>
+            <Field label="Aadhaar Number"><input className={inputClass} value={statutory.customFields.aadhaarNumber} onChange={(e) => setStatutory((p) => ({ ...p, customFields: { ...p.customFields, aadhaarNumber: e.target.value } }))} /></Field>
+            <Field label="PF Number"><input className={inputClass} value={statutory.customFields.pfNumber} onChange={(e) => setStatutory((p) => ({ ...p, customFields: { ...p.customFields, pfNumber: e.target.value } }))} /></Field>
+            <Field label="ESI Number"><input className={inputClass} value={statutory.customFields.esiNumber} onChange={(e) => setStatutory((p) => ({ ...p, customFields: { ...p.customFields, esiNumber: e.target.value } }))} /></Field>
           </div>
           <Field label="Previous PF Member?">
             <div className="flex gap-4 mt-1">

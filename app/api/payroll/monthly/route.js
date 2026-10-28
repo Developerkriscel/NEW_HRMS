@@ -30,7 +30,11 @@ export const GET = withApi(async (req) => {
   if (status && status !== 'ALL') query.status = status
 
   const empQuery = { tenantId, deleted: false }
-  if (departmentId && departmentId !== 'ALL') empQuery.department = departmentId
+  if (departmentId === 'UNASSIGNED') {
+    empQuery.$or = [{ department: null }, { department: { $exists: false } }]
+  } else if (departmentId && departmentId !== 'ALL') {
+    empQuery.department = departmentId
+  }
   if (search) {
     empQuery.$or = [
       { firstName: { $regex: search, $options: 'i' } },

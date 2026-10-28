@@ -1,7 +1,8 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Check, Plus, Trash2, X } from 'lucide-react'
+import { Check, Plus, Sparkles, Trash2, UploadCloud, X } from 'lucide-react'
+import { candidateApi } from '@/services/candidateApi'
 
 const DEFAULT_COLUMNS = [
   { key: 'firstName', label: 'First Name', required: true },
@@ -20,12 +21,13 @@ function emptyRow(columns) {
   return Object.fromEntries(columns.map((column) => [column.key, '']))
 }
 
-export default function CandidateSpreadsheetEditor({ position, onClose, onSave }) {
+export default function CandidateSpreadsheetEditor({ position, onClose, onSave, onAnalyze }) {
   const [columns, setColumns] = useState(DEFAULT_COLUMNS)
   const [rows, setRows] = useState(() => [emptyRow(DEFAULT_COLUMNS)])
   const [newColumnName, setNewColumnName] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [uploadingRow, setUploadingRow] = useState(null)
 
   const filledRows = useMemo(() => rows.filter((row) => Object.values(row).some((value) => String(value || '').trim())), [rows])
 
@@ -51,33 +53,82 @@ export default function CandidateSpreadsheetEditor({ position, onClose, onSave }
     }))
   }
 
-  const handleSave = async () => {
+  const handleResumeUpload = async (rowIndex, event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    const allowed = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+    const extension = String(file.name || '').toLowerCase().split('.').pop()
+    if (!allowed.includes(file.type) && !['pdf', 'doc', 'docx'].includes(extension)) {
+      setError('Resume must be a PDF, DOC, or DOCX file.')
+      return
+    }
+    setError('')
+    setUploadingRow(rowIndex)
+    try {
+      const formData = new FormData()
+      formData.append('resume', file)
+      const response = await candidateApi.uploadDraftResume(formData)
+      const resume = response.data?.data || response.data || {}
+      if (!resume.resumeId) throw new Error('The resume could not be uploaded. Please try again.')
+      setRows((current) => current.map((row, index) => index === rowIndex
+        ? { ...row, draftResumeId: resume.resumeId, resumeFileName: file.name }
+        : row
+      ))
+    } catch (uploadError) {
+      setError(uploadError.response?.data?.message || uploadError.message || 'Failed to upload resume.')
+    } finally {
+      setUploadingRow(null)
+    }
+  }
+
+  const getPayload = () => {
+    const knownKeys = new Set([...DEFAULT_COLUMNS.map((column) => column.key), 'draftResumeId', 'resumeFileName'])
+    return filledRows.map((row) => ({
+      ...row,
+      name: [row.firstName, row.lastName].filter(Boolean).join(' '),
+      skills: String(row.skills || '').split(/[,;|/]+/).map((skill) => skill.trim()).filter(Boolean),
+      customFields: Object.fromEntries(
+        Object.entries(row).filter(([key, value]) => !knownKeys.has(key) && String(value || '').trim())
+      ),
+      source: 'EXCEL',
+    }))
+  }
+
+  const validateRows = () => {
     setError('')
     if (!filledRows.length) {
       setError('Add at least one candidate row before saving.')
-      return
+      return false
     }
     const invalidIndex = filledRows.findIndex((row) => !String(row.firstName || '').trim() || !String(row.email || '').trim())
     if (invalidIndex >= 0) {
       setError(`Row ${invalidIndex + 1} needs both First Name and Email.`)
-      return
+      return false
     }
+    return true
+  }
 
+  const handleSave = async () => {
+    if (!validateRows()) return
     setSaving(true)
     try {
-      const knownKeys = new Set(DEFAULT_COLUMNS.map((column) => column.key))
-      const payload = filledRows.map((row) => ({
-        ...row,
-        name: [row.firstName, row.lastName].filter(Boolean).join(' '),
-        skills: String(row.skills || '').split(/[,;|/]+/).map((skill) => skill.trim()).filter(Boolean),
-        customFields: Object.fromEntries(
-          Object.entries(row).filter(([key, value]) => !knownKeys.has(key) && String(value || '').trim())
-        ),
-        source: 'EXCEL',
-      }))
-      await onSave(payload)
+      await onSave(getPayload())
     } catch (saveError) {
       setError(saveError.message || 'Failed to save candidates.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleAnalyze = async () => {
+    if (!validateRows()) return
+    if (!onAnalyze) return
+    setSaving(true)
+    try {
+      await onAnalyze(getPayload())
+    } catch (analyzeError) {
+      setError(analyzeError.message || 'Failed to analyze candidates.')
     } finally {
       setSaving(false)
     }
@@ -122,6 +173,7 @@ export default function CandidateSpreadsheetEditor({ position, onClose, onSave }
                     </div>
                   </th>
                 ))}
+                <th className="border border-slate-200 bg-slate-100 px-3 py-3 text-center font-black text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">Resume</th>
                 <th className="border border-slate-200 bg-slate-100 px-3 py-3 text-center font-black text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">Action</th>
               </tr>
             </thead>
@@ -135,6 +187,13 @@ export default function CandidateSpreadsheetEditor({ position, onClose, onSave }
                     </td>
                   ))}
                   <td className="border border-slate-200 p-1 text-center dark:border-slate-700">
+                    <input id={`spreadsheet-resume-${rowIndex}`} type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => handleResumeUpload(rowIndex, event)} className="hidden" />
+                    <label htmlFor={`spreadsheet-resume-${rowIndex}`} className="inline-flex max-w-[150px] cursor-pointer items-center justify-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-2 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">
+                      <UploadCloud className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{uploadingRow === rowIndex ? 'Uploading...' : row.resumeFileName || 'Upload'}</span>
+                    </label>
+                  </td>
+                  <td className="border border-slate-200 p-1 text-center dark:border-slate-700">
                     <button type="button" onClick={() => setRows((current) => current.filter((_, index) => index !== rowIndex))} disabled={rows.length === 1} className="rounded-md p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30" title="Delete row"><Trash2 className="h-4 w-4" /></button>
                   </td>
                 </tr>
@@ -146,6 +205,9 @@ export default function CandidateSpreadsheetEditor({ position, onClose, onSave }
         {error && <div className="mx-6 mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</div>}
         <div className="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4 dark:border-slate-800 dark:bg-slate-950/40">
           <button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-800">Cancel</button>
+          {onAnalyze && <button type="button" onClick={handleAnalyze} disabled={saving} className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-5 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">
+            <Sparkles className="h-4 w-4" /> {saving ? 'Processing...' : 'Analyze with AI'}
+          </button>}
           <button type="button" onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60">
             <Check className="h-4 w-4" /> {saving ? 'Saving...' : 'Save to Applied'}
           </button>

@@ -10,6 +10,7 @@ import { loadOfferByToken, createPreboardingRecord } from '@/lib/offerHelpers'
 import { OFFER_STATUS, OFFER_CANDIDATE_ACTION } from '@/lib/offerConstants'
 import { ACTIVITY_ENTRY_TYPE, APPLICATION_STATUS } from '@/lib/candidateConstants'
 import { PIPELINE_STAGE_CATEGORY } from '@/lib/jobConstants'
+import { FORM_STATUS } from '@/lib/preboardingConstants'
 import { STAGE_HISTORY_ACTION } from '@/lib/pipelineConstants'
 import { applyStageMove, recordStageHistory } from '@/lib/pipelineHelpers'
 import OfferCandidateAction from '@/models/OfferCandidateAction'
@@ -46,13 +47,14 @@ export const POST = withApi(async (req, { params }) => {
     offer.signatureReference = signatureReference
     offer.acceptedIp = requestIp(req)
     offer.acceptedUserAgent = requestUserAgent(req)
+    offer.activityLog = offer.activityLog || []
     offer.activityLog.push({ type: ACTIVITY_ENTRY_TYPE.STATUS_CHANGED, message: `Offer accepted by ${body.fullName.trim()}` })
     await offer.save()
 
     await OfferCandidateAction.create({
       tenantId: claims.tenant._id, offerId: offer._id, action: OFFER_CANDIDATE_ACTION.ACCEPT,
       ipAddress: requestIp(req), userAgent: requestUserAgent(req),
-    })
+    }).catch((error) => console.warn('[offer accept] candidate action audit skipped:', error.message))
 
     const application = await Application.findOne({ _id: offer.applicationId, tenantId: claims.tenant._id, deleted: false })
     let preboarding = null
@@ -66,6 +68,7 @@ export const POST = withApi(async (req, { params }) => {
         applyStageMove(application, hiredStage, { comment: `Offer accepted by ${body.fullName.trim()} — candidate hired`, actorName: body.fullName.trim() })
       }
       application.status = APPLICATION_STATUS.HIRED
+      application.activityLog = application.activityLog || []
       application.activityLog.push({ type: ACTIVITY_ENTRY_TYPE.STATUS_CHANGED, message: `Offer accepted by ${body.fullName.trim()} — moved to preboarding` })
       await application.save()
 
@@ -80,12 +83,21 @@ export const POST = withApi(async (req, { params }) => {
           action: STAGE_HISTORY_ACTION.MOVED,
           comment: `Offer accepted by ${body.fullName.trim()} — candidate hired`,
           session: null,
-        })
+        }).catch((error) => console.warn('[offer accept] stage history skipped:', error.message))
       }
 
       preboarding = await createPreboardingRecord(claims.tenant._id, { application, offer, version })
+      if (preboarding.formStatus === FORM_STATUS.NOT_SENT) {
+        preboarding.formStatus = FORM_STATUS.SENT
+        preboarding.formSentAt = new Date()
+        await preboarding.save()
+      }
     }
 
-    return ok({ status: offer.status, preboardingCreated: !!preboarding }, 'Offer accepted')
+    return ok({
+      status: offer.status,
+      preboardingCreated: !!preboarding,
+      employeeDetailsUrl: preboarding ? `/candidate/preboarding/${params.token}` : null,
+    }, 'Offer accepted')
   })
 })

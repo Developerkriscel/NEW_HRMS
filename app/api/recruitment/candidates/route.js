@@ -9,6 +9,7 @@ import { STAGE_HISTORY_ACTION } from '@/lib/pipelineConstants'
 import { generateCandidateCode, findExistingCandidate } from '@/lib/candidateHelpers'
 import { claimDraftResume } from '@/lib/candidateProfileHelpers'
 import Candidate from '@/models/Candidate'
+import CandidateResume from '@/models/CandidateResume'
 import Application from '@/models/Application'
 import ApplicationStageHistory from '@/models/ApplicationStageHistory'
 import CandidateJobMatch from '@/models/CandidateJobMatch'
@@ -147,7 +148,7 @@ export const GET = withApi(async (req) => {
     Application.countDocuments(query),
     Application.find(query)
       .select('applicationCode candidateId jobId source appliedAt stageEnteredAt currentStage currentStageName status selectionStatus readyForOffer assignedRecruiterId')
-      .populate('candidateId', 'candidateCode firstName lastName email phone totalExperience expectedCtc noticePeriod')
+    .populate('candidateId', 'candidateCode firstName lastName email phone totalExperience expectedCtc noticePeriod resumeUrl')
       .populate('jobId', 'jobCode jobTitle publicTitle department location workMode')
       .sort({ appliedAt: -1, _id: -1 })
       .skip(page * size)
@@ -168,7 +169,8 @@ export const GET = withApi(async (req) => {
   const stageCategoryById = new Map(stages.map((stage) => [String(stage._id), stage.category]))
 
   const pageApplicationIds = pageApplications.map((a) => a._id)
-  const [offers, interviews, stageHistory, selectionDecisions] = await Promise.all([
+  const pageCandidateIds = pageApplications.map((application) => application.candidateId._id)
+  const [offers, interviews, stageHistory, selectionDecisions, resumes] = await Promise.all([
     Offer.find({
       tenantId,
       applicationId: { $in: pageApplicationIds },
@@ -192,6 +194,10 @@ export const GET = withApi(async (req) => {
       applicationId: { $in: pageApplicationIds },
       decision: 'SELECT',
     }).sort({ decidedAt: 1 }).select('applicationId decidedAt approvalStatus').lean(),
+    CandidateResume.find({
+      tenantId,
+      candidateId: { $in: pageCandidateIds },
+    }).sort({ isPrimary: -1, version: -1, createdAt: -1 }).select('candidateId fileUrl originalFileName fileName isPrimary version').lean(),
   ])
   const offerByApplication = new Map(offers.map((offer) => [String(offer.applicationId), offer]))
   const latestInterviewByApplication = new Map()
@@ -220,6 +226,11 @@ export const GET = withApi(async (req) => {
       selectedAtByApplication.set(key, decision.decidedAt)
     }
   }
+  const resumeByCandidate = new Map()
+  for (const resume of resumes) {
+    const key = String(resume.candidateId)
+    if (!resumeByCandidate.has(key)) resumeByCandidate.set(key, resume)
+  }
 
   const rows = pageApplications
     .map((a) => {
@@ -246,6 +257,7 @@ export const GET = withApi(async (req) => {
         candidateName: [a.candidateId.firstName, a.candidateId.lastName].filter(Boolean).join(' ').trim(),
         email: a.candidateId.email,
         phone: a.candidateId.phone,
+        resumeUrl: resumeByCandidate.get(String(a.candidateId._id))?.fileUrl || a.candidateId.resumeUrl || null,
         jobId: a.jobId._id,
         jobCode: a.jobId.jobCode,
         jobTitle: a.jobId.publicTitle || a.jobId.jobTitle,

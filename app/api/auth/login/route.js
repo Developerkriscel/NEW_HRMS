@@ -6,7 +6,7 @@ import { ok, fail } from '@/lib/apiResponse'
 import { comparePassword, generateAccessToken, generateRefreshToken, setAuthCookies, createPlatformSession, ACCESS_TOKEN_EXPIRY_MS } from '@/lib/auth'
 import { connectDB } from '@/lib/db'
 import { buildDevUserForEmail, isDevQuickCredential } from '@/lib/devLogin'
-import { findUserByEmail, isAccountUsable, toAuthUser } from '@/lib/userLookup'
+import { findUserByIdentifier, isAccountUsable, toAuthUser } from '@/lib/userLookup'
 import PlatformOperator from '@/models/PlatformOperator'
 import { createAccountSession } from '@/lib/accountSessions'
 
@@ -84,23 +84,24 @@ export const POST = withApi(async (req) => {
     phaseStartedAt = now
   }
 
-  const { email, password } = await req.json()
+  const { email, identifier, password } = await req.json()
+  const loginIdentifier = String(identifier || email || '').trim()
   mark('parse')
-  if (!email || !password) return fail('Email and password are required', 400)
+  if (!loginIdentifier || !password) return fail('Email/Employee ID and password are required', 400)
 
-  if (isDevQuickCredential(email, password, req) && process.env.NEXAHR_QUICK_LOGIN_USES_DB !== 'true') {
-    return issueDevLogin(email)
+  if (isDevQuickCredential(loginIdentifier, password, req) && process.env.NEXAHR_QUICK_LOGIN_USES_DB !== 'true') {
+    return issueDevLogin(loginIdentifier)
   }
 
   let found
   try {
     await connectDB()
     mark('db')
-    found = await findUserByEmail(email)
+    found = await findUserByIdentifier(loginIdentifier)
     mark('lookup')
   } catch (err) {
-    if (isDevQuickCredential(email, password, req) && isDatabaseConnectivityError(err)) {
-      return issueDevLogin(email)
+    if (isDevQuickCredential(loginIdentifier, password, req) && isDatabaseConnectivityError(err)) {
+      return issueDevLogin(loginIdentifier)
     }
     throw err
   }
@@ -139,7 +140,7 @@ export const POST = withApi(async (req) => {
   const elapsedMs = Date.now() - startedAt
   timings.push(`total:${elapsedMs}ms`)
   if (elapsedMs >= LOGIN_SLOW_LOG_MS) {
-    console.warn(`[auth:login:slow] ${String(email).toLowerCase()} ${elapsedMs}ms ${timings.join(' ')}`)
+    console.warn(`[auth:login:slow] ${loginIdentifier.toLowerCase()} ${elapsedMs}ms ${timings.join(' ')}`)
   }
   const userInfo = buildLoginUserInfo(authUser, found)
   const response = ok({ user: userInfo, expiresIn: Math.floor(ACCESS_TOKEN_EXPIRY_MS / 1000) }, 'Login successful')

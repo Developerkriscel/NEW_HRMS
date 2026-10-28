@@ -22,9 +22,15 @@ import Offer from '@/models/Offer'
 import OfferVersion from '@/models/OfferVersion'
 import '@/models/Candidate'
 import '@/models/Job'
+import Department from '@/models/Department'
+import Designation from '@/models/Designation'
 
 function addDays(days) {
   return new Date(Date.now() + days * 86400000)
+}
+
+function employmentTypeLabel(value) {
+  return ({ FULL_TIME: 'Full Time', PART_TIME: 'Part Time', CONTRACT: 'Contract', INTERNSHIP: 'Internship' }[value] || value || 'Not specified')
 }
 
 function pickOfferStage(stages) {
@@ -51,6 +57,10 @@ export const POST = withApi(async (req, { params }) => {
       joiningDate: formData.get('joiningDate') || undefined,
       offerValidUntil: formData.get('offerValidUntil') || undefined,
       ctc: formData.get('ctc') || undefined,
+      departmentId: formData.get('departmentId') || undefined,
+      designationId: formData.get('designationId') || undefined,
+      employmentType: formData.get('employmentType') || undefined,
+      probationPeriod: formData.get('probationPeriod') || undefined,
     }
     attachmentFiles = formData.getAll('attachments').filter((file) => file && typeof file !== 'string' && file.size > 0)
   } else {
@@ -82,6 +92,14 @@ export const POST = withApi(async (req, { params }) => {
   const joiningDate = body.joiningDate ? new Date(body.joiningDate) : addDays(30)
   const offerValidUntil = body.offerValidUntil ? new Date(body.offerValidUntil) : addDays(7)
   const ctc = Number(body.ctc || candidate?.expectedCtc || candidate?.currentCtc || job?.publicMinCtc || job?.internalMinCtc || 1)
+  const departmentId = body.departmentId || job.department || null
+  const designationId = body.designationId || job.designation || null
+  const employmentType = body.employmentType || job.employmentType || null
+  const probationPeriod = String(body.probationPeriod || '6 months').trim()
+  const [department, designation] = await Promise.all([
+    departmentId ? Department.findOne({ _id: departmentId, tenantId, deleted: false }).select('name').lean() : null,
+    designationId ? Designation.findOne({ _id: designationId, tenantId, deleted: false }).select('name').lean() : null,
+  ])
   const actorName = await getActorName(session)
 
   let offer = await Offer.findOne({ tenantId, applicationId: application._id, deleted: false })
@@ -112,20 +130,27 @@ export const POST = withApi(async (req, { params }) => {
     candidateId: candidate._id,
     jobId: job._id,
     version: nextVersion,
-    designationId: job.designation || null,
-    departmentId: job.department || null,
+    designationId,
+    departmentId,
     managerId: job.hiringManager || null,
     joiningDate,
     locationId: job.location || null,
-    employmentType: job.employmentType || null,
+    employmentType,
     workMode: job.workMode || null,
     ctc,
     salaryStructureId: null,
-    probationPeriod: '6 months',
+    probationPeriod,
     noticePeriod: candidate.noticePeriod || '30 days',
     offerValidUntil,
     templateId: null,
-    renderedContent: body.body || `Offer for ${candidate.getFullName?.() || candidate.firstName} - ${job.publicTitle || job.jobTitle}`,
+    renderedContent: `${body.body || `Offer for ${candidate.getFullName?.() || candidate.firstName} - ${job.publicTitle || job.jobTitle}`}
+
+## Employment Details
+- Department: ${department?.name || 'Not specified'}
+- Designation: ${designation?.name || job.publicTitle || job.jobTitle}
+- Employment Type: ${employmentTypeLabel(employmentType)}
+- Joining Date: ${joiningDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+- Probation Period: ${probationPeriod}`,
     attachments,
     status: OFFER_VERSION_STATUS.APPROVED,
     createdBy: session.userId,
@@ -155,6 +180,7 @@ export const POST = withApi(async (req, { params }) => {
       version,
       offer,
       portalUrl,
+      employeeDetailsUrl: `/candidate/preboarding/${token}`,
       subject: body.subject,
       body: body.body,
       candidateEmail: body.candidateEmail,

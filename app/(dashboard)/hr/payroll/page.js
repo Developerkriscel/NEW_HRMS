@@ -255,6 +255,9 @@ export default function HRPayrollPage() {
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [year, setYear] = useState(now.getFullYear())
   const [statusFilter, setStatusFilter] = useState('ALL')
+  const [departmentTab, setDepartmentTab] = useState('ALL')
+  const [departmentStats, setDepartmentStats] = useState([])
+  const [departmentLoading, setDepartmentLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [salarySearch, setSalarySearch] = useState('')
   const [salaryStatusFilter, setSalaryStatusFilter] = useState('ALL')
@@ -280,8 +283,9 @@ export default function HRPayrollPage() {
     const nextPage = overrides.page ?? page
     const nextStatus = overrides.status ?? statusFilter
     const nextSearch = overrides.search ?? search
+    const nextDepartment = overrides.department ?? departmentTab
     setLoading(true)
-    payrollApi.getMonthly({ month: nextMonth, year: nextYear, page: nextPage, size: 20, status: nextStatus, search: nextSearch })
+    payrollApi.getMonthly({ month: nextMonth, year: nextYear, page: nextPage, size: 20, status: nextStatus, search: nextSearch, department: nextDepartment })
       .then((res) => {
         setPayslips(res.data.data.content)
         setTotalElements(res.data.data.totalElements)
@@ -292,11 +296,44 @@ export default function HRPayrollPage() {
         })
       })
       .finally(() => setLoading(false))
-  }, [month, year, page, statusFilter, search])
+  }, [month, year, page, statusFilter, search, departmentTab])
 
   useEffect(() => {
     load()
   }, [load])
+
+  const loadDepartmentStats = useCallback(() => {
+    if (activeTab !== 'company' || companyView !== 'register') return
+    setDepartmentLoading(true)
+    payrollApi.getReports({ month, year })
+      .then((res) => setDepartmentStats(res.data?.data?.byDepartment || []))
+      .catch(() => setDepartmentStats([]))
+      .finally(() => setDepartmentLoading(false))
+  }, [activeTab, companyView, month, year])
+
+  useEffect(() => {
+    loadDepartmentStats()
+  }, [loadDepartmentStats])
+
+  const selectedDepartmentStats = departmentTab === 'ALL'
+    ? null
+    : departmentStats.find((item) => item.id === departmentTab) || null
+
+  const displayTotals = selectedDepartmentStats
+    ? {
+        employeeCount: selectedDepartmentStats.count,
+        gross: selectedDepartmentStats.totalGross,
+        deductions: selectedDepartmentStats.totalDeductions,
+        net: selectedDepartmentStats.totalNet,
+        paid: selectedDepartmentStats.paidNet,
+      }
+    : {
+        employeeCount: departmentStats.length ? departmentStats.reduce((sum, item) => sum + Number(item.count || 0), 0) : totalElements,
+        gross: totals.totalGross,
+        deductions: totals.totalDeductions,
+        net: totals.totalNet,
+        paid: departmentStats.reduce((sum, item) => sum + Number(item.paidNet || 0), 0),
+      }
 
   const loadSalarySetup = useCallback(() => {
     setSalaryLoading(true)
@@ -609,13 +646,30 @@ export default function HRPayrollPage() {
         ))}
       </div>
 
+      {companyView === 'register' && (
+        <div className="flex max-w-full items-center gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          {[{ id: 'ALL', name: 'All Departments' }, ...departmentStats.map((item) => ({ id: item.id, name: item.name }))].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => { setDepartmentTab(tab.id); setPage(0) }}
+              className={`whitespace-nowrap rounded-xl px-4 py-2 text-sm font-black transition-all ${departmentTab === tab.id
+                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20'
+                : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white'}`}
+            >
+              {tab.name}
+            </button>
+          ))}
+          {departmentLoading && <span className="px-3 text-xs font-bold text-slate-400">Loading departments…</span>}
+        </div>
+      )}
+
       {/* Premium KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Total Employees', value: totalElements, icon: Users, color: 'blue' },
-          { label: 'Gross Payroll', value: formatCurrency(totals.totalGross), icon: Banknote, color: 'indigo' },
-          { label: 'Total Deductions', value: formatCurrency(totals.totalDeductions), icon: TrendingUp, color: 'red' },
-          { label: 'Net Payroll', value: formatCurrency(totals.totalNet), icon: CheckCircle2, color: 'emerald' },
+          { label: selectedDepartmentStats ? `${selectedDepartmentStats.name} Employees` : 'Total Employees', value: displayTotals.employeeCount, icon: Users, color: 'blue' },
+          { label: 'Salary Paid', value: formatCurrency(displayTotals.paid), icon: CheckCircle2, color: 'emerald' },
+          { label: 'Gross Payroll', value: formatCurrency(displayTotals.gross), icon: Banknote, color: 'indigo' },
+          { label: 'Total Deductions', value: formatCurrency(displayTotals.deductions), icon: TrendingUp, color: 'red' },
         ].map((kpi, i) => {
           const style = KPI_STYLES[kpi.color]
           return (

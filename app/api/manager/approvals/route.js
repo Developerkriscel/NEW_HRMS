@@ -53,6 +53,31 @@ export const GET = withApi(async (req) => {
 
   const items = []
 
+  // Offboarding has its own screen and only needs resignation records. Avoid
+  // running six unrelated approval queries and filtering them on the client.
+  if (typeFilter === 'RESIGNATION') {
+    const resignations = await Resignation.find({
+      employee: { $in: reportIds },
+      status: { $in: ['SUBMITTED', 'MANAGER_REVIEWED'] },
+      tenantId,
+    }).sort({ createdAt: -1 }).lean()
+    for (const resignation of resignations) {
+      items.push({
+        id: resignation._id,
+        type: 'RESIGNATION',
+        employee: employeeSummary(resignation.employee),
+        status: resignation.status,
+        createdAt: resignation.createdAt,
+        summary: `Last working date: ${resignation.lastWorkingDate ? new Date(resignation.lastWorkingDate).toDateString() : 'TBD'}`,
+        resignationDate: resignation.resignationDate,
+        lastWorkingDate: resignation.lastWorkingDate,
+        reason: resignation.reason || '',
+        managerRecommendation: resignation.managerRecommendation || '',
+      })
+    }
+    return ok(items)
+  }
+
   const leavesQuery = { tenantId }
   if (isCompanyScope) {
     leavesQuery.employee = { $in: reportIds }

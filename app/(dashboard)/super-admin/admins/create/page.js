@@ -160,11 +160,11 @@ export default function CreatePlatformAdminPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">Login Email <span className="text-red-500">*</span></label>
-              <input required type="email" placeholder="admin@nexahr.com" className="input-field bg-slate-50 dark:bg-slate-800/50 rounded-2xl w-full px-4 py-3 border-slate-200/60 focus:bg-white" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+              <input required type="email" autoComplete="username" placeholder="admin@nexahr.com" className="input-field bg-slate-50 dark:bg-slate-800/50 rounded-2xl w-full px-4 py-3 border-slate-200/60 focus:bg-white" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">Initial Password <span className="text-red-500">*</span></label>
-              <input required type="password" placeholder="Enter a secure password" minLength={8} className="input-field bg-slate-50 dark:bg-slate-800/50 rounded-2xl w-full px-4 py-3 border-slate-200/60 focus:bg-white" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+              <input required type="password" autoComplete="new-password" placeholder="Enter a secure password" minLength={8} className="input-field bg-slate-50 dark:bg-slate-800/50 rounded-2xl w-full px-4 py-3 border-slate-200/60 focus:bg-white" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
               <p className="text-[10px] text-slate-400 mt-1.5 ml-1 font-medium">Must be at least 8 characters long</p>
             </div>
           </div>

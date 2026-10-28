@@ -10,14 +10,37 @@ import { HR_RESTRICTABLE_ROLES, MODULE_ACCESS_OPTIONS } from '@/lib/moduleAccess
 import { Portal } from '@/components/common/Portal'
 
 const emptyForm = {
-  firstName: '', lastName: '', email: '', phone: '', role: 'EMPLOYEE',
+  firstName: '', lastName: '', employeeCode: '', preferredName: '', email: '', phone: '', alternatePhone: '', role: 'EMPLOYEE',
   departmentId: '', designationId: '', joiningDate: '', employmentType: 'Full-time', ctc: '',
   password: '', moduleAccess: [],
   reportingManager: '', status: 'ACTIVE',
   companyCode: '', companyName: '', workingHours: '', inTiming: '', weekOff: '', probationPeriod: '', dateOfExit: '', officialEmail: '',
   personalEmail: '', gender: '', maritalStatus: '', dateOfBirth: '', bloodGroup: '', fatherName: '', motherName: '', spouseName: '', anniversaryDate: '',
-  currentAddress: '', permanentAddress: '', emergencyContactNumber: '', emergencyPersonName: '',
-  bankName: '', bankAccountNumber: '', bankIfscCode: '', salaryTakeHome: '', panNumber: '', aadhaarNumber: '', pfNumber: '', esiNumber: ''
+  currentAddress: '', permanentAddress: '', emergencyContactNumber: '', emergencyPersonName: '', emergencyRelationship: '',
+  bankName: '', bankAccountNumber: '', accountHolderName: '', bankBranch: '', bankIfscCode: '', salaryTakeHome: '', panNumber: '', aadhaarNumber: '', pfNumber: '', uanNumber: '', esiNumber: '',
+  previousEmployment: [], education: [], joiningPreferences: { availableToJoin: null, relocationRequired: null, accommodationRequired: null, requestedJoiningDate: '', requestedJoiningReason: '' },
+  declarations: { accurate: false, willNotify: false }
+}
+
+function normalizeEmployeeForm(employee) {
+  if (!employee) return emptyForm
+  return {
+    ...emptyForm,
+    ...employee,
+    departmentId: employee.departmentId || employee.department?._id || employee.department || '',
+    designationId: employee.designationId || employee.designation?._id || employee.designation || '',
+    branchId: employee.branchId || employee.branch?._id || employee.branch || '',
+    shiftId: employee.shiftId || employee.shift?._id || employee.shift || '',
+    reportingManager: employee.reportingManagerId || employee.reportingManager?._id || employee.reportingManager || '',
+    joiningDate: employee.joiningDate ? String(employee.joiningDate).slice(0, 10) : '',
+    dateOfBirth: employee.dateOfBirth ? String(employee.dateOfBirth).slice(0, 10) : '',
+    anniversaryDate: employee.anniversaryDate ? String(employee.anniversaryDate).slice(0, 10) : '',
+    dateOfExit: employee.dateOfExit ? String(employee.dateOfExit).slice(0, 10) : '',
+    previousEmployment: Array.isArray(employee.previousEmployment) ? employee.previousEmployment : [],
+    education: Array.isArray(employee.education) ? employee.education : [],
+    joiningPreferences: { ...emptyForm.joiningPreferences, ...(employee.joiningPreferences || {}) },
+    declarations: { ...emptyForm.declarations, ...(employee.declarations || {}) },
+  }
 }
 
 export function AddEmployeePage({ basePath, onClose, initialData }) {
@@ -26,7 +49,7 @@ export function AddEmployeePage({ basePath, onClose, initialData }) {
   const [departments, setDepartments] = useState([])
   const [designations, setDesignations] = useState([])
   const [employees, setEmployees] = useState([])
-  const [form, setForm] = useState(initialData || emptyForm)
+  const [form, setForm] = useState(normalizeEmployeeForm(initialData))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [tempPassword, setTempPassword] = useState(null)
@@ -40,7 +63,7 @@ export function AddEmployeePage({ basePath, onClose, initialData }) {
   }, [])
 
   useEffect(() => {
-    if (initialData) setForm(initialData)
+    if (initialData) setForm(normalizeEmployeeForm(initialData))
   }, [initialData])
 
   async function handleSubmit(e) {
@@ -136,25 +159,29 @@ export function AddEmployeePage({ basePath, onClose, initialData }) {
   }
 
   return (
-    <Portal><div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm sm:p-6 lg:p-8">
-      <div className="animate-scale-in relative w-full max-w-4xl bg-slate-50 dark:bg-slate-900 rounded-2xl shadow-xl flex flex-col max-h-[90vh]">
+    <Portal><div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-3 backdrop-blur-md sm:p-6 lg:p-8">
+      <div className="animate-scale-in relative flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[28px] border border-white/70 bg-gradient-to-br from-slate-50 via-white to-indigo-50/60 shadow-2xl shadow-indigo-950/20 dark:border-slate-700 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950/30">
         {/* Header */}
-        <div className="flex-shrink-0 sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800 px-6 py-4 flex items-center justify-between rounded-t-2xl">
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white">{initialData ? 'Edit Employee' : 'Add Employee'}</h2>
+        <div className="flex-shrink-0 sticky top-0 z-10 flex items-center justify-between border-b border-indigo-100/80 bg-gradient-to-r from-white via-indigo-50/80 to-purple-50/80 px-6 py-5 backdrop-blur dark:border-slate-800 dark:from-slate-900 dark:via-indigo-950/30 dark:to-purple-950/20">
+          <div><p className="mb-1 text-[11px] font-extrabold uppercase tracking-[0.2em] text-indigo-500">Employee workspace</p><h2 className="text-2xl font-black text-slate-900 dark:text-white">{initialData ? 'Edit Employee' : 'Add Employee'}</h2></div>
           <button onClick={handleClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 p-1.5 rounded-full">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 space-y-6 overflow-y-auto bg-gradient-to-b from-white/70 to-indigo-50/30 p-5 sm:p-7 dark:from-slate-900/80 dark:to-indigo-950/20">
           <form id="add-employee-form" onSubmit={handleSubmit} className="space-y-6">
         
         {/* Core & Login (Existing) */}
-        <div className="stat-card space-y-4">
+        <div className="stat-card space-y-4 rounded-3xl border border-indigo-100/80 bg-gradient-to-br from-white via-indigo-50/40 to-blue-50/70 p-6 shadow-sm shadow-indigo-100/50 dark:border-indigo-900/50 dark:from-slate-900 dark:via-indigo-950/20 dark:to-blue-950/20">
           <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 border-b border-slate-100 dark:border-slate-800 pb-2">Core Details & Login</h3>
           {error && <div className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 rounded-lg p-2">{error}</div>}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Employee ID</span>
+              <input className="input-field" value={form.employeeCode} onChange={(e) => setForm({ ...form, employeeCode: e.target.value.toUpperCase() })} placeholder="EMP00001" />
+            </label>
             <label className="block">
               <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">First Name *</span>
               <input required className="input-field" value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} />
@@ -174,7 +201,7 @@ export function AddEmployeePage({ basePath, onClose, initialData }) {
           </div>
           <div className="rounded-xl border border-slate-100 dark:border-slate-800 p-4">
             <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Login Access</p>
-            <p className="text-xs text-slate-400 mt-0.5 mb-3">Employee ID is generated automatically. The employee logs in with email and password.</p>
+            <p className="text-xs text-slate-400 mt-0.5 mb-3">Employee ID is used as an alternative login username. Leave blank to generate one automatically.</p>
             <input
               type="text"
               placeholder="Initial password (optional)"
@@ -258,11 +285,17 @@ export function AddEmployeePage({ basePath, onClose, initialData }) {
               <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Annual CTC</span>
               <input type="number" className="input-field" value={form.ctc} onChange={(e) => setForm({ ...form, ctc: e.target.value })} />
             </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Employment Type</span>
+              <select className="input-field" value={form.employmentType} onChange={(e) => setForm({ ...form, employmentType: e.target.value })}>
+                {['Full-time', 'Part-time', 'Contract', 'Intern'].map((type) => <option key={type} value={type}>{type}</option>)}
+              </select>
+            </label>
           </div>
         </div>
 
         {/* Access & Workflow */}
-        <div className="stat-card space-y-4">
+        <div className="stat-card space-y-4 rounded-3xl border border-rose-100/80 bg-gradient-to-br from-white via-rose-50/30 to-orange-50/60 p-6 shadow-sm shadow-rose-100/50 dark:border-rose-900/50 dark:from-slate-900 dark:via-rose-950/20 dark:to-orange-950/20">
           <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 border-b border-slate-100 dark:border-slate-800 pb-2">Access & Workflow</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <label className="block">
@@ -282,7 +315,7 @@ export function AddEmployeePage({ basePath, onClose, initialData }) {
         </div>
 
         {/* Official Details */}
-        <div className="stat-card space-y-4">
+        <div className="stat-card space-y-4 rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-sky-50/30 to-cyan-50/60 p-6 shadow-sm shadow-sky-100/50 dark:border-sky-900/50 dark:from-slate-900 dark:via-sky-950/20 dark:to-cyan-950/20">
           <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 border-b border-slate-100 dark:border-slate-800 pb-2">Official Details</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[
@@ -291,6 +324,8 @@ export function AddEmployeePage({ basePath, onClose, initialData }) {
               { key: 'workingHours', label: 'Working Hours' },
               { key: 'inTiming', label: 'In Timing (HH:MM)' },
               { key: 'weekOff', label: 'Week Off' },
+              { key: 'workLocation', label: 'Work Location' },
+              { key: 'officialPhoneNumber', label: 'Official Phone' },
               { key: 'probationPeriod', label: 'Probation Period' },
               { key: 'officialEmail', label: 'Official Email' },
             ].map(({ key, label }) => (
@@ -307,11 +342,12 @@ export function AddEmployeePage({ basePath, onClose, initialData }) {
         </div>
 
         {/* Personal & Family */}
-        <div className="stat-card space-y-4">
+        <div className="stat-card space-y-4 rounded-3xl border border-amber-100/80 bg-gradient-to-br from-white via-amber-50/30 to-yellow-50/60 p-6 shadow-sm shadow-amber-100/50 dark:border-amber-900/50 dark:from-slate-900 dark:via-amber-950/20 dark:to-yellow-950/20">
           <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 border-b border-slate-100 dark:border-slate-800 pb-2">Personal & Family</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[
               { key: 'personalEmail', label: 'Personal Email' },
+              { key: 'preferredName', label: 'Preferred Name' },
               { key: 'fatherName', label: 'Father Name' },
               { key: 'motherName', label: 'Mother Name' },
               { key: 'spouseName', label: 'Spouse Name' },
@@ -354,7 +390,7 @@ export function AddEmployeePage({ basePath, onClose, initialData }) {
         </div>
 
         {/* Address & Emergency */}
-        <div className="stat-card space-y-4">
+        <div className="stat-card space-y-4 rounded-3xl border border-emerald-100/80 bg-gradient-to-br from-white via-emerald-50/30 to-teal-50/60 p-6 shadow-sm shadow-emerald-100/50 dark:border-emerald-900/50 dark:from-slate-900 dark:via-emerald-950/20 dark:to-teal-950/20">
           <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 border-b border-slate-100 dark:border-slate-800 pb-2">Address & Emergency</h3>
           <div className="grid grid-cols-1 gap-4">
             <label className="block">
@@ -375,20 +411,59 @@ export function AddEmployeePage({ basePath, onClose, initialData }) {
               <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Emergency Person Name</span>
               <input className="input-field" value={form.emergencyPersonName} onChange={(e) => setForm({ ...form, emergencyPersonName: e.target.value })} />
             </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Emergency Relationship</span>
+              <input className="input-field" value={form.emergencyRelationship} onChange={(e) => setForm({ ...form, emergencyRelationship: e.target.value })} />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Alternate Phone</span>
+              <input className="input-field" value={form.alternatePhone} onChange={(e) => setForm({ ...form, alternatePhone: e.target.value })} />
+            </label>
           </div>
         </div>
 
+        {/* Onboarding History */}
+        <div className="stat-card space-y-4 rounded-3xl border border-violet-100/80 bg-gradient-to-br from-white via-violet-50/30 to-fuchsia-50/60 p-6 shadow-sm shadow-violet-100/50 dark:border-violet-900/50 dark:from-slate-900 dark:via-violet-950/20 dark:to-fuchsia-950/20">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2 dark:border-slate-800"><h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Previous Employment</h3><button type="button" className="btn-secondary !text-xs !py-1.5" onClick={() => setForm((f) => ({ ...f, previousEmployment: [...(f.previousEmployment || []), { employerName: '', designation: '', startDate: '', endDate: '', employeeId: '', reasonForLeaving: '' }] }))}>+ Add</button></div>
+          {(form.previousEmployment || []).map((row, index) => <div key={index} className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 p-3 sm:grid-cols-2 dark:border-slate-800">
+            {['employerName', 'designation', 'startDate', 'endDate', 'employeeId', 'reasonForLeaving'].map((key) => <label key={key} className="block"><span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{key.replace(/([A-Z])/g, ' $1')}</span><input type={key.includes('Date') ? 'date' : 'text'} className="input-field" value={row[key] || ''} onChange={(e) => setForm((f) => ({ ...f, previousEmployment: f.previousEmployment.map((item, i) => i === index ? { ...item, [key]: e.target.value } : item) }))} /></label>)}
+            <button type="button" className="text-left text-xs font-bold text-red-600" onClick={() => setForm((f) => ({ ...f, previousEmployment: f.previousEmployment.filter((_, i) => i !== index) }))}>Remove record</button>
+          </div>)}
+          {!form.previousEmployment?.length && <p className="text-sm text-slate-400">No previous employment records.</p>}
+        </div>
+
+        <div className="stat-card space-y-4 rounded-3xl border border-blue-100/80 bg-gradient-to-br from-white via-blue-50/30 to-indigo-50/60 p-6 shadow-sm shadow-blue-100/50 dark:border-blue-900/50 dark:from-slate-900 dark:via-blue-950/20 dark:to-indigo-950/20">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2 dark:border-slate-800"><h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Education</h3><button type="button" className="btn-secondary !text-xs !py-1.5" onClick={() => setForm((f) => ({ ...f, education: [...(f.education || []), { degree: '', specialization: '', institution: '', university: '', startYear: '', completionYear: '', score: '' }] }))}>+ Add</button></div>
+          {(form.education || []).map((row, index) => <div key={index} className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 p-3 sm:grid-cols-2 dark:border-slate-800">
+            {['degree', 'specialization', 'institution', 'university', 'startYear', 'completionYear', 'score'].map((key) => <label key={key} className="block"><span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{key.replace(/([A-Z])/g, ' $1')}</span><input className="input-field" value={row[key] || ''} onChange={(e) => setForm((f) => ({ ...f, education: f.education.map((item, i) => i === index ? { ...item, [key]: e.target.value } : item) }))} /></label>)}
+            <button type="button" className="text-left text-xs font-bold text-red-600" onClick={() => setForm((f) => ({ ...f, education: f.education.filter((_, i) => i !== index) }))}>Remove record</button>
+          </div>)}
+          {!form.education?.length && <p className="text-sm text-slate-400">No education records.</p>}
+        </div>
+
+        <div className="stat-card space-y-4 rounded-3xl border border-cyan-100/80 bg-gradient-to-br from-white via-cyan-50/30 to-blue-50/60 p-6 shadow-sm shadow-cyan-100/50 dark:border-cyan-900/50 dark:from-slate-900 dark:via-cyan-950/20 dark:to-blue-950/20">
+          <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 border-b border-slate-100 pb-2 dark:border-slate-800">Joining Information &amp; Declaration</h3>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {['availableToJoin', 'relocationRequired', 'accommodationRequired'].map((key) => <label key={key} className="block"><span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{key.replace(/([A-Z])/g, ' $1')}</span><select className="input-field" value={form.joiningPreferences?.[key] == null ? '' : String(form.joiningPreferences[key])} onChange={(e) => setForm((f) => ({ ...f, joiningPreferences: { ...f.joiningPreferences, [key]: e.target.value === '' ? null : e.target.value === 'true' } }))}><option value="">Not specified</option><option value="true">Yes</option><option value="false">No</option></select></label>)}
+          </div>
+          <label className="block"><span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">Requested Joining Reason</span><textarea className="input-field min-h-[70px]" value={form.joiningPreferences?.requestedJoiningReason || ''} onChange={(e) => setForm((f) => ({ ...f, joiningPreferences: { ...f.joiningPreferences, requestedJoiningReason: e.target.value } }))} /></label>
+          <div className="space-y-2 text-sm"><label className="flex items-center gap-2"><input type="checkbox" checked={!!form.declarations?.accurate} onChange={(e) => setForm((f) => ({ ...f, declarations: { ...f.declarations, accurate: e.target.checked } }))} /> Information is accurate</label><label className="flex items-center gap-2"><input type="checkbox" checked={!!form.declarations?.willNotify} onChange={(e) => setForm((f) => ({ ...f, declarations: { ...f.declarations, willNotify: e.target.checked } }))} /> Employee will notify changes</label></div>
+        </div>
+
         {/* Financial & Legal */}
-        <div className="stat-card space-y-4">
+        <div className="stat-card space-y-4 rounded-3xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-indigo-50/50 p-6 shadow-sm dark:border-slate-700 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/20">
           <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 border-b border-slate-100 dark:border-slate-800 pb-2">Financial & Legal</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[
               { key: 'bankName', label: 'Bank Name' },
               { key: 'bankAccountNumber', label: 'Bank Account No' },
               { key: 'bankIfscCode', label: 'Bank IFSC Code' },
+              { key: 'accountHolderName', label: 'Account Holder Name' },
+              { key: 'bankBranch', label: 'Bank Branch' },
               { key: 'panNumber', label: 'PAN Card No' },
               { key: 'aadhaarNumber', label: 'Aadhar No' },
               { key: 'pfNumber', label: 'PF No' },
+              { key: 'uanNumber', label: 'UAN No' },
               { key: 'esiNumber', label: 'ESIC No' },
             ].map(({ key, label }) => (
               <label key={key} className="block">

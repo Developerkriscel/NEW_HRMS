@@ -67,8 +67,14 @@ export const GET = withApi(async (req) => {
   const departmentMap = new Map()
   payslips.forEach((p) => {
     const name = p.employee?.department?.name || 'Unassigned'
-    const current = departmentMap.get(name) || { name, count: 0, totalGross: 0, totalNet: 0, totalDeductions: 0 }
+    const departmentId = p.employee?.department?._id ? String(p.employee.department._id) : 'UNASSIGNED'
+    const key = departmentId
+    const current = departmentMap.get(key) || { id: departmentId, name, count: 0, paidCount: 0, totalGross: 0, totalNet: 0, paidNet: 0, totalDeductions: 0 }
     current.count += 1
+    if (p.status === 'PAID') {
+      current.paidCount += 1
+      current.paidNet += p.netSalary || 0
+    }
     current.totalGross += p.grossSalary || 0
     current.totalNet += p.netSalary || 0
     current.totalDeductions += p.totalDeductions || 0
@@ -80,7 +86,7 @@ export const GET = withApi(async (req) => {
     totalGross: totals.grossSalary,
     totalNet: totals.netSalary,
     totalDeductions: totals.totalDeductions,
-    byDepartment: Array.from(departmentMap.values()),
+    byDepartment: Array.from(departmentMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
     records: payslips.map((payslip) => ({
       _id: payslip._id,
       employeeId: payslip.employee?._id || payslip.employee,

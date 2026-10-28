@@ -36,5 +36,7 @@ const ResignationSchema = new mongoose.Schema(
 
 ResignationSchema.index({ tenantId: 1, employee: 1 })
 ResignationSchema.index({ tenantId: 1, status: 1 })
+ResignationSchema.index({ tenantId: 1, status: 1, createdAt: -1 })
+ResignationSchema.index({ tenantId: 1, employee: 1, status: 1 })
 
 export default model('Resignation', ResignationSchema)

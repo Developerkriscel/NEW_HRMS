@@ -92,13 +92,13 @@ function LeaveApprovalDrawer({ item, onClose, onDecide, saving }) {
             )}
           </div>
 
-          {item.status === 'PENDING' && (
+          {((item.type === 'RESIGNATION' && ['SUBMITTED', 'MANAGER_REVIEWED'].includes(item.status)) || item.status === 'PENDING') && (
             <div className="sticky bottom-0 grid grid-cols-2 gap-3 border-t border-slate-100 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
               <button disabled={saving === item.id} onClick={() => onDecide(item, false)} className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-extrabold text-rose-700 transition hover:bg-rose-100 disabled:opacity-60">
-                Reject
+                {item.type === 'RESIGNATION' ? 'Not Recommend' : 'Reject'}
               </button>
               <button disabled={saving === item.id} onClick={() => onDecide(item, true)} className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-extrabold text-white shadow-lg shadow-emerald-500/25 transition hover:bg-emerald-700 disabled:opacity-60">
-                Accept
+                {item.type === 'RESIGNATION' ? 'Forward to HR' : 'Accept'}
               </button>
             </div>
           )}
@@ -117,10 +117,10 @@ function DetailBox({ label, value }) {
   )
 }
 
-export function ManagerApprovalsWorkspace({ headerAction, title = 'Approvals', subtitle = 'All pending requests from your direct reports', scope = 'team' }) {
+export function ManagerApprovalsWorkspace({ headerAction, title = 'Approvals', subtitle = 'All pending requests from your direct reports', scope = 'team', initialType = '', initialCategory = 'LEAVE' }) {
   const [items, setItems] = useState([])
-  const [type, setType] = useState('')
-  const [requestCategory, setRequestCategory] = useState('LEAVE') // 'LEAVE' or 'OTHER'
+  const [type, setType] = useState(initialType)
+  const [requestCategory, setRequestCategory] = useState(initialCategory) // 'LEAVE' or 'OTHER'
   const [statusFilter, setStatusFilter] = useState('ALL')
     const [employeeFilter, setEmployeeFilter] = useState('ALL')
     const [dateRangeFilter, setDateRangeFilter] = useState('ALL')
@@ -246,13 +246,13 @@ export function ManagerApprovalsWorkspace({ headerAction, title = 'Approvals', s
           <button className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900" onClick={() => setSelectedLeave(row)}>
             <Eye className="mr-1 inline h-3.5 w-3.5" /> View
           </button>
-          {row.status === 'PENDING' ? (
+          {((row.type === 'RESIGNATION' && ['SUBMITTED', 'MANAGER_REVIEWED'].includes(row.status)) || row.status === 'PENDING') ? (
             <>
               <button disabled={savingId === row.id} className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:shadow-sm font-semibold text-xs transition-all duration-300" onClick={() => decide(row, true)}>
-                {row.type === 'RESIGNATION' ? 'Forward' : 'Accept'}
+                {row.type === 'RESIGNATION' ? 'Forward to HR' : 'Accept'}
               </button>
               <button disabled={savingId === row.id} className="px-3 py-1.5 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 hover:shadow-sm font-semibold text-xs transition-all duration-300" onClick={() => decide(row, false)}>
-                Reject
+                {row.type === 'RESIGNATION' ? 'Not Recommend' : 'Reject'}
               </button>
             </>
           ) : statusBadge}

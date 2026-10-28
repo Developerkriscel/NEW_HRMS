@@ -49,6 +49,8 @@ export function OnboardingEmployeeDetails({ record, onRefresh }) {
   const [formData, setFormData] = useState({
     firstName: personal.fullLegalName?.split(' ')?.[0] || initialFirstName,
     lastName: personal.fullLegalName?.split(' ')?.slice(1).join(' ') || initialLastName,
+    employeeCode: record.employeeCode || '',
+    preferredName: personal.preferredName || '',
     officialEmail: customFields.officialEmail || record.candidate.email || '',
     phone: personal.mobileNumber || record.candidate.phone || '',
     personalEmail: personal.personalEmail || record.candidate.email || '',
@@ -65,8 +67,10 @@ export function OnboardingEmployeeDetails({ record, onRefresh }) {
     emergencyContactNumber: emergencyContact.phone || '',
     emergencyPersonName: emergencyContact.contactName || '',
     emergencyRelationship: emergencyContact.relationship || '',
+    emergencyAlternatePhone: emergencyContact.alternatePhone || '',
     bankName: bank.bankName || '',
     bankAccountNumber: bank.bankAccountNumber || '',
+    confirmBankAccountNumber: bank.bankAccountNumber || '',
     bankIfscCode: bank.bankIfscCode || '',
     bankBranch: bank.bankBranch || '',
     accountHolderName: bank.accountHolderName || '',
@@ -74,8 +78,18 @@ export function OnboardingEmployeeDetails({ record, onRefresh }) {
     aadhaarNumber: customFields.aadhaarNumber || '',
     pfNumber: customFields.pfNumber || '',
     uanNumber: statutory.uanNumber || '',
-    esiNumber: customFields.esiNumber || ''
+    esiNumber: customFields.esiNumber || '',
+    previousPfMember: statutory.previousPfMember ?? '',
+    declarationAccurate: personal.declarationAccurate || false,
+    declarationWillNotify: personal.declarationWillNotify || false,
+    requestedJoiningDate: record.raw?.requestedJoiningDate?.slice?.(0, 10) || '',
+    requestedJoiningReason: record.raw?.requestedJoiningReason || '',
+    availableToJoin: record.raw?.availableToJoin ?? null,
+    relocationRequired: record.raw?.relocationRequired ?? null,
+    accommodationRequired: record.raw?.accommodationRequired ?? null,
   })
+  const [employmentHistory, setEmploymentHistory] = useState(record.raw?.employmentHistory || [])
+  const [education, setEducation] = useState(record.raw?.education || [])
 
   const handleChange = (key, value) => {
     setFormData(prev => ({ ...prev, [key]: value }))
@@ -95,12 +109,16 @@ export function OnboardingEmployeeDetails({ record, onRefresh }) {
         return
       }
     }
+    if (formData.bankAccountNumber && formData.bankAccountNumber !== formData.confirmBankAccountNumber) {
+      setSaveError('Bank account numbers do not match')
+      return
+    }
 
     setSaving(true)
     setSaveError('')
     setSaveMessage('')
     try {
-      await preboardingApi.updateEmployeeDetails(record.id, formData)
+      await preboardingApi.updateEmployeeDetails(record.id, { ...formData, employmentHistory, education })
       setIsEditing(false)
       setSaveMessage('Employee details saved and onboarding progress updated')
       await onRefresh?.()
@@ -139,6 +157,28 @@ export function OnboardingEmployeeDetails({ record, onRefresh }) {
     )
   }
 
+  const renderArrayField = (row, index, key, items, setItems) => {
+    const labels = { employerName: 'Employer', designation: 'Designation', startDate: 'Start Date', endDate: 'End Date', employeeId: 'Employee ID', reasonForLeaving: 'Reason for Leaving', degree: 'Degree', specialization: 'Specialization', institution: 'Institution', university: 'University', startYear: 'Start Year', completionYear: 'Completion Year', score: 'Score' }
+    const value = row?.[key] || ''
+    return (
+      <label key={key} className="text-xs font-bold text-slate-500">
+        {labels[key] || key}
+        <input type={key.toLowerCase().includes('date') ? 'date' : 'text'} className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-white" value={value} onChange={(e) => setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: e.target.value } : item))} />
+      </label>
+    )
+  }
+
+  const renderReadonlyChoice = (label, value) => (
+    <div className="rounded-2xl border border-slate-200/70 bg-white/85 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/40">
+      <p className="mb-2 text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      {isEditing ? (
+        <select className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold" value={value == null ? '' : String(value)} onChange={(e) => handleChange(label === 'Available to Join' ? 'availableToJoin' : label === 'Relocation Required' ? 'relocationRequired' : 'accommodationRequired', e.target.value === '' ? null : e.target.value === 'true')}>
+          <option value="">Not specified</option><option value="true">Yes</option><option value="false">No</option>
+        </select>
+      ) : <p className="text-sm font-bold">{value == null ? '-' : value ? 'Yes' : 'No'}</p>}
+    </div>
+  )
+
   return (
     <div className="animate-in fade-in p-5 pb-24 duration-300 md:p-8">
       <div className="mb-8 overflow-hidden rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-slate-50 p-6 shadow-sm dark:border-slate-800 dark:from-blue-950/20 dark:via-slate-900 dark:to-slate-950">
@@ -174,11 +214,15 @@ export function OnboardingEmployeeDetails({ record, onRefresh }) {
         
         {/* Core Details */}
         <SectionCard icon={User} title="Core Details" description="Identity and primary contact details used for employee creation." tone="blue">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
             {renderField('First Name *', 'firstName')}
             {renderField('Last Name *', 'lastName')}
             {renderField('Official Email *', 'officialEmail', 'email')}
             {renderField('Phone', 'phone', 'tel')}
+            <div>
+              {renderField('Employee ID (login username)', 'employeeCode')}
+              {!record.employeeCode && <p className="mt-1 px-1 text-[11px] text-slate-500">Set a unique ID before conversion. The employee can use it with their password to sign in.</p>}
+            </div>
           </div>
         </SectionCard>
 
@@ -186,6 +230,7 @@ export function OnboardingEmployeeDetails({ record, onRefresh }) {
         <SectionCard icon={HeartPulse} title="Personal & Family" description="Optional demographic and family information for HR records." tone="rose">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {renderField('Personal Email', 'personalEmail', 'email')}
+            {renderField('Preferred Name', 'preferredName')}
             {renderField('Father Name', 'fatherName')}
             {renderField('Mother Name', 'motherName')}
             {renderField('Spouse Name', 'spouseName')}
@@ -217,8 +262,37 @@ export function OnboardingEmployeeDetails({ record, onRefresh }) {
             {renderField('Emergency Contact No.', 'emergencyContactNumber', 'tel')}
             {renderField('Emergency Person Name', 'emergencyPersonName')}
             {renderField('Relationship', 'emergencyRelationship')}
+            {renderField('Alternate Phone', 'emergencyAlternatePhone', 'tel')}
             </div>
           </div>
+        </SectionCard>
+
+        <SectionCard icon={User} title="Previous Employment" description="Employment history supplied in the email form.">
+          {isEditing ? (
+            <div className="space-y-3">
+              {employmentHistory.map((row, index) => (
+                <div key={index} className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 p-3 sm:grid-cols-2 dark:border-slate-800">
+                  {['employerName', 'designation', 'startDate', 'endDate', 'employeeId', 'reasonForLeaving'].map((key) => renderArrayField(row, index, key, employmentHistory, setEmploymentHistory))}
+                  <button type="button" onClick={() => setEmploymentHistory((items) => items.filter((_, i) => i !== index))} className="text-left text-xs font-bold text-rose-600">Remove employment</button>
+                </div>
+              ))}
+              <button type="button" onClick={() => setEmploymentHistory((items) => [...items, { employerName: '', designation: '', startDate: '', endDate: '', employeeId: '', reasonForLeaving: '' }])} className="text-xs font-bold text-blue-600">+ Add Previous Employment</button>
+            </div>
+          ) : <p className="text-sm text-slate-500">{employmentHistory.length ? `${employmentHistory.length} previous employment record(s)` : 'No previous employment added'}</p>}
+        </SectionCard>
+
+        <SectionCard icon={User} title="Education" description="Education history supplied in the email form.">
+          {isEditing ? (
+            <div className="space-y-3">
+              {education.map((row, index) => (
+                <div key={index} className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 p-3 sm:grid-cols-2 dark:border-slate-800">
+                  {['degree', 'specialization', 'institution', 'university', 'startYear', 'completionYear', 'score'].map((key) => renderArrayField(row, index, key, education, setEducation))}
+                  <button type="button" onClick={() => setEducation((items) => items.filter((_, i) => i !== index))} className="text-left text-xs font-bold text-rose-600">Remove education</button>
+                </div>
+              ))}
+              <button type="button" onClick={() => setEducation((items) => [...items, { degree: '', specialization: '', institution: '', university: '', startYear: '', completionYear: '', score: '' }])} className="text-xs font-bold text-blue-600">+ Add Education</button>
+            </div>
+          ) : <p className="text-sm text-slate-500">{education.length ? `${education.length} education record(s)` : 'No education added'}</p>}
         </SectionCard>
 
         {/* Financial & Legal */}
@@ -227,6 +301,7 @@ export function OnboardingEmployeeDetails({ record, onRefresh }) {
             {renderField('Bank Name', 'bankName')}
             {renderField('Account Holder Name', 'accountHolderName')}
             {renderField('Bank Account No', 'bankAccountNumber')}
+            {renderField('Confirm Bank Account No', 'confirmBankAccountNumber')}
             {renderField('Bank IFSC Code', 'bankIfscCode')}
             {renderField('Bank Branch', 'bankBranch')}
             {renderField('PAN Card No', 'panNumber')}
@@ -234,6 +309,24 @@ export function OnboardingEmployeeDetails({ record, onRefresh }) {
             {renderField('UAN No', 'uanNumber')}
             {renderField('PF No', 'pfNumber')}
             {renderField('ESIC No', 'esiNumber')}
+            {renderField('Previous PF Member', 'previousPfMember', 'text', [{ value: true, label: 'Yes' }, { value: false, label: 'No' }])}
+          </div>
+        </SectionCard>
+
+        <SectionCard icon={MapPin} title="Joining Information" description="Candidate responses from the email form.">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {renderReadonlyChoice('Available to Join', formData.availableToJoin)}
+            {renderReadonlyChoice('Relocation Required', formData.relocationRequired)}
+            {renderReadonlyChoice('Accommodation Required', formData.accommodationRequired)}
+            {renderField('Requested Joining Date', 'requestedJoiningDate', 'date')}
+            {renderField('Requested Joining Reason', 'requestedJoiningReason', 'textarea')}
+          </div>
+        </SectionCard>
+
+        <SectionCard icon={ShieldCheck} title="Declaration" description="Confirmation submitted by the candidate.">
+          <div className="space-y-2 text-sm text-slate-700 dark:text-slate-200">
+            <label className="flex items-center gap-2"><input type="checkbox" checked={formData.declarationAccurate} onChange={(e) => handleChange('declarationAccurate', e.target.checked)} disabled={!isEditing} /> Information is accurate.</label>
+            <label className="flex items-center gap-2"><input type="checkbox" checked={formData.declarationWillNotify} onChange={(e) => handleChange('declarationWillNotify', e.target.checked)} disabled={!isEditing} /> I will notify the company if information changes.</label>
           </div>
         </SectionCard>
 

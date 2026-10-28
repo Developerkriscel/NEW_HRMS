@@ -24,12 +24,20 @@ export const GET = withApi(async (req, { params }) => {
 
     let buffer = null
     const filename = version.pdfUrl?.split('/').pop()
-    if (filename) buffer = await readOfferPdf(claims.tenant._id, filename)
+    if (filename && version.pdfFormatVersion === 2) buffer = await readOfferPdf(claims.tenant._id, filename)
 
     if (!buffer) {
-      buffer = await generateOfferPdfBuffer({ companyName: claims.tenant.companyName, offerCode: `${offer.offerCode} · V${version.version}`, bodyText: version.renderedContent })
+      buffer = await generateOfferPdfBuffer({
+        companyName: claims.tenant.companyName,
+        offerCode: `${offer.offerCode} - V${version.version}`,
+        bodyText: version.renderedContent,
+        candidateName: offer.candidateId?.getFullName
+          ? offer.candidateId.getFullName()
+          : [offer.candidateId?.firstName, offer.candidateId?.lastName].filter(Boolean).join(' '),
+      })
       const saved = await saveOfferPdf(buffer, claims.tenant._id, offer.offerCode, version.version)
       version.pdfUrl = saved.url
+      version.pdfFormatVersion = 2
       await version.save()
     }
 

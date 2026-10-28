@@ -90,7 +90,7 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      const data = await postAuth('login', { email: credentials.email, password: credentials.password })
+      const data = await postAuth('login', { identifier: credentials.email, password: credentials.password })
       const user = data.data.user
       useAuthStore.getState().setAuth(user)
       router.replace(ROLE_DASHBOARDS[user.role] || '/login')
@@ -172,7 +172,7 @@ export default function LoginPage() {
             <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Email Address
+                  Email or Employee ID
                 </label>
                 <div className="relative rounded-xl shadow-sm">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -180,12 +180,13 @@ export default function LoginPage() {
                   </div>
                   <input
                     name="email"
-                    type="email"
+                    type="text"
+                    autoComplete="username"
                     required
                     value={form.email}
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
                     className="block w-full pl-10 pr-4 py-2.5 bg-slate-50/70 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all font-medium"
-                    placeholder="name@company.com"
+                    placeholder="name@company.com or EMP00001"
                   />
                 </div>
               </div>
@@ -201,6 +202,7 @@ export default function LoginPage() {
                   <input
                     name="password"
                     type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
                     required
                     value={form.password}
                     onChange={(e) => setForm({ ...form, password: e.target.value })}

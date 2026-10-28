@@ -30,11 +30,14 @@ export const POST = withApi(async (req, { params }) => {
   const expiryDate = formData.get('expiryDate')
 
   return runForTenant(claims.tenant, async () => {
-    const tokenDoc = await resolvePreboardingAccessToken(claims.tenant._id, claims.preboardingId, claims.jti)
+    const tokenDoc = await resolvePreboardingAccessToken(claims.tenant._id, claims.preboardingId, claims.jti, claims.offerId)
     if (!tokenDoc) return fail('This form link is invalid', 404, 'INVALID_TOKEN')
+    if (!tokenDoc.offerAccepted) {
+      return fail('Please accept your offer before completing employee details.', 403, 'OFFER_ACCEPTANCE_REQUIRED', { offerUrl: `/candidate/offer/${params.token}` })
+    }
 
     const tenantId = claims.tenant._id
-    const preboarding = await Preboarding.findOne({ _id: claims.preboardingId, tenantId, deleted: false })
+    const preboarding = await Preboarding.findOne({ _id: tokenDoc.preboardingId || claims.preboardingId, tenantId, deleted: false })
     if (!preboarding) return fail('This form link is invalid', 404, 'INVALID_TOKEN')
     if (preboarding.status === PREBOARDING_STATUS.CANCELLED) return fail('This preboarding is no longer active', 400, 'INVALID_STATE')
 

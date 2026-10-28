@@ -135,6 +135,7 @@ export function MailSettingsSection() {
           <div className="relative">
             <input
               type={showPassword ? 'text' : 'password'}
+              autoComplete="new-password"
               className="input-field pr-12"
               disabled={!canEdit}
               value={form.smtpPassword}

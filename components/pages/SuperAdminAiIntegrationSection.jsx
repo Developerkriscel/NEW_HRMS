@@ -412,6 +412,7 @@ export function SuperAdminAiIntegrationSection() {
                 <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <input
                   type={showApiKey ? 'text' : 'password'}
+                  autoComplete="off"
                   placeholder={apiKeyPreview ? '•••••••••••••••••••••••• (Leave blank to keep current)' : 'Enter API secret key...'}
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}

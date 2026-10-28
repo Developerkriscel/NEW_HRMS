@@ -1,9 +1,10 @@
 import React, { useState } from 'react'
-import { X, User, Mail, Phone, Briefcase, MapPin, DollarSign, FileText } from 'lucide-react'
+import { X, User, Mail, Phone, Briefcase, MapPin, DollarSign, FileText, Sparkles } from 'lucide-react'
 
-export default function ManualCandidateModal({ position, onClose, onSave }) {
+export default function ManualCandidateModal({ position, onClose, onSave, onAnalyze, onOpenExisting }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [existingApplication, setExistingApplication] = useState(null)
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -27,6 +28,7 @@ export default function ManualCandidateModal({ position, onClose, onSave }) {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setExistingApplication(null)
     try {
       await onSave({
         ...formData,
@@ -34,6 +36,20 @@ export default function ManualCandidateModal({ position, onClose, onSave }) {
       })
     } catch (err) {
       setError(err.message || 'Failed to add candidate')
+      setExistingApplication(err.existingApplication || null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleAnalyze = async () => {
+    setLoading(true)
+    setError('')
+    setExistingApplication(null)
+    try {
+      await onAnalyze({ ...formData, name: [formData.firstName, formData.lastName].filter(Boolean).join(' '), source: 'MANUAL' })
+    } catch (err) {
+      setError(err.message || 'Failed to analyze candidate')
     } finally {
       setLoading(false)
     }
@@ -132,19 +148,35 @@ export default function ManualCandidateModal({ position, onClose, onSave }) {
 
           </form>
           {error ? (
-            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
-              {error}
+            <div className={`mt-4 rounded-xl border px-4 py-3 text-sm ${existingApplication ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200' : 'border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300'}`}>
+              {existingApplication && <span className="mb-1 block text-xs uppercase tracking-wider">Existing application found</span>}
+              <span className="block font-bold">{error}</span>
             </div>
           ) : null}
         </div>
 
         <div className="p-6 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3 bg-slate-50/50 dark:bg-slate-900/50 rounded-b-2xl">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 rounded-xl transition-colors">
-            Cancel
+            {existingApplication ? 'Close' : 'Cancel'}
           </button>
-          <button type="submit" form="manual-candidate-form" disabled={loading} className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl shadow-md shadow-indigo-500/20 transition-all disabled:opacity-50 flex items-center gap-2">
-            {loading ? 'Adding...' : 'Add Candidate'}
-          </button>
+          {existingApplication && onOpenExisting ? (
+            <button
+              type="button"
+              onClick={() => onOpenExisting(existingApplication)}
+              className="px-6 py-2 bg-amber-700 hover:bg-amber-800 text-white text-sm font-bold rounded-xl shadow-md shadow-amber-500/20 transition-all"
+            >
+              Open Existing Application
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              {onAnalyze && <button type="button" onClick={handleAnalyze} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-2 text-sm font-bold text-indigo-700 transition-all hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">
+                <Sparkles className="h-4 w-4" /> {loading ? 'Analyzing...' : 'Analyze with AI'}
+              </button>}
+              <button type="submit" form="manual-candidate-form" disabled={loading} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-2 text-sm font-bold text-white shadow-md shadow-indigo-500/20 transition-all hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">
+                {loading ? 'Adding...' : 'Add Candidate'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

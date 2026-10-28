@@ -134,6 +134,7 @@ export const POST = withApi(async (req) => {
   }
 
   const results = []
+  const alreadyPresent = []
 
   try {
     if (!activeJobId) {
@@ -239,6 +240,41 @@ export const POST = withApi(async (req) => {
 
       // Check if an application already exists for this candidate and job
       let applicationDoc = await Application.findOne({ candidateId: candidateDoc._id, jobId: activeJobId, tenantId })
+
+      if (applicationDoc && !applicationDoc.deleted && applicationDoc.status !== APPLICATION_STATUS.REJECTED) {
+        alreadyPresent.push({
+          candidateId: String(candidateDoc._id),
+          candidateName: [candidateDoc.firstName, candidateDoc.lastName].filter(Boolean).join(' ').trim(),
+          applicationId: String(applicationDoc._id),
+          status: applicationDoc.status,
+          stage: applicationDoc.currentStageName || 'Applied',
+        })
+        continue
+      }
+
+      if (applicationDoc && !applicationDoc.deleted && applicationDoc.status === APPLICATION_STATUS.REJECTED) {
+        // Re-applying an analysed candidate should reopen the rejected
+        // application instead of sending the UI through a restore call with
+        // a stale resume/import id. Keep the same application for history.
+        applicationDoc.status = APPLICATION_STATUS.ACTIVE
+        applicationDoc.currentStage = appliedStage?._id || null
+        applicationDoc.currentStageName = appliedStage?.name || 'Applied'
+        applicationDoc.stageEnteredAt = new Date()
+        applicationDoc.rejectionReason = null
+        applicationDoc.rejectionComment = null
+        applicationDoc.selectionStatus = null
+        applicationDoc.readyForOffer = false
+        applicationDoc.activityLog.push({ type: 'APPLIED', message: 'Application reopened after candidate was added to the pipeline', actorName })
+        applicationDoc.updatedBy = session.sub
+        await applicationDoc.save()
+        await logAction(session, {
+          action: 'APPLICATION_REOPENED',
+          entityType: 'Application',
+          entityId: applicationDoc._id,
+          description: `Application ${applicationDoc.applicationCode} reopened via pipeline import`,
+          req,
+        })
+      }
 
       if (applicationDoc?.deleted) {
         // A deleted rejected application is intentionally reusable. Keep its
@@ -360,10 +396,21 @@ export const POST = withApi(async (req) => {
         }
       }
 
-      results.push(applicationDoc)
+      results.push({
+        candidateId: String(candidateDoc._id),
+        candidateName: [candidateDoc.firstName, candidateDoc.lastName].filter(Boolean).join(' ').trim(),
+        applicationId: String(applicationDoc._id),
+        status: applicationDoc.status,
+        stage: applicationDoc.currentStageName || 'Applied',
+      })
     }
 
-    return ok(results, `Successfully imported ${results.length} candidates.`, 201)
+    const message = results.length
+      ? `Added ${results.length} candidate${results.length === 1 ? '' : 's'} to the pipeline${alreadyPresent.length ? `. ${alreadyPresent.length} already had an application for this position.` : '.'}`
+      : alreadyPresent.length
+        ? 'No candidates were added because they already have applications for this position.'
+        : 'No valid candidates were found to add.'
+    return ok({ results, alreadyPresent, addedCount: results.length }, message, results.length ? 201 : 200)
   } catch (error) {
     return fail(`Bulk apply failed: ${error.message}`, 400, 'VALIDATION_ERROR')
   }

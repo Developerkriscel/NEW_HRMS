@@ -4,6 +4,7 @@ import { withApi } from '@/lib/handler'
 import { ok, fail } from '@/lib/apiResponse'
 import { runForTenant } from '@/lib/tenantDb'
 import { resolvePreboardingTokenClaims, resolvePreboardingAccessToken } from '@/lib/preboardingTokenHelpers'
+import { recomputePreboardingStatus } from '@/lib/preboardingHelpers'
 import { FORM_STATUS, PREBOARDING_STATUS } from '@/lib/preboardingConstants'
 import Preboarding from '@/models/Preboarding'
 import PreboardingPersonalDetails from '@/models/PreboardingPersonalDetails'
@@ -20,11 +21,14 @@ export const POST = withApi(async (req, { params }) => {
   if (!claims) return fail('This form link is invalid', 404, 'INVALID_TOKEN')
 
   return runForTenant(claims.tenant, async () => {
-    const tokenDoc = await resolvePreboardingAccessToken(claims.tenant._id, claims.preboardingId, claims.jti)
+    const tokenDoc = await resolvePreboardingAccessToken(claims.tenant._id, claims.preboardingId, claims.jti, claims.offerId)
     if (!tokenDoc) return fail('This form link is invalid', 404, 'INVALID_TOKEN')
+    if (!tokenDoc.offerAccepted) {
+      return fail('Please accept your offer before completing employee details.', 403, 'OFFER_ACCEPTANCE_REQUIRED', { offerUrl: `/candidate/offer/${params.token}` })
+    }
 
     const tenantId = claims.tenant._id
-    const preboarding = await Preboarding.findOne({ _id: claims.preboardingId, tenantId, deleted: false })
+    const preboarding = await Preboarding.findOne({ _id: tokenDoc.preboardingId || claims.preboardingId, tenantId, deleted: false })
     if (!preboarding) return fail('This form link is invalid', 404, 'INVALID_TOKEN')
     if (preboarding.status === PREBOARDING_STATUS.CANCELLED) return fail('This preboarding is no longer active', 400, 'INVALID_STATE')
     if (!EDITABLE_FORM_STATUSES.includes(preboarding.formStatus)) return fail('This form has already been submitted', 400, 'INVALID_STATE')
@@ -53,6 +57,7 @@ export const POST = withApi(async (req, { params }) => {
     preboarding.formSubmittedAt = new Date()
     preboarding.correctionRequest = null
     preboarding.activityLog.push({ type: 'STATUS_CHANGED', message: 'Candidate submitted the information form' })
+    await recomputePreboardingStatus(tenantId, preboarding)
     await preboarding.save()
 
     return ok(null, 'Information submitted')

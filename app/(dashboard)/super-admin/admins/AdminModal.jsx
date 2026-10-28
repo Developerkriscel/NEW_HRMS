@@ -202,7 +202,7 @@ export function AdminModal({ open, onClose, adminId, tenantId, onSuccess, mode =
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">Work Email <span className="text-red-500">*</span> {isEdit && '(Read Only)'}</label>
-                      <input required={!isEdit} readOnly={isEdit} disabled={isEdit || isView} type="email" placeholder="admin@acme.com" className={cn("input-field bg-slate-50 dark:bg-slate-800/50 rounded-xl w-full px-4 py-2.5 border-slate-200/60 focus:bg-white", isEdit && "cursor-not-allowed opacity-70")} value={form.email} onChange={(e) => !isEdit && setForm({ ...form, email: e.target.value })} />
+                      <input required={!isEdit} readOnly={isEdit} disabled={isEdit || isView} type="email" autoComplete="username" placeholder="admin@acme.com" className={cn("input-field bg-slate-50 dark:bg-slate-800/50 rounded-xl w-full px-4 py-2.5 border-slate-200/60 focus:bg-white", isEdit && "cursor-not-allowed opacity-70")} value={form.email} onChange={(e) => !isEdit && setForm({ ...form, email: e.target.value })} />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">Mobile Number</label>
@@ -258,7 +258,7 @@ export function AdminModal({ open, onClose, adminId, tenantId, onSuccess, mode =
                   <div className="max-w-md">
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">{isEdit ? 'New Password (Leave blank to keep current)' : 'Password'} {(!isEdit) && <span className="text-red-500">*</span>}</label>
                     <div className="relative">
-                      <input disabled={isView} type={showPassword ? 'text' : 'password'} required={!isEdit} placeholder="Enter a secure password" minLength={8} className="input-field bg-slate-50 dark:bg-slate-800/50 rounded-xl w-full px-4 py-2.5 pr-10 border-slate-200/60 focus:bg-white" value={form.password || ''} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+                      <input disabled={isView} type={showPassword ? 'text' : 'password'} autoComplete="new-password" required={!isEdit} placeholder="Enter a secure password" minLength={8} className="input-field bg-slate-50 dark:bg-slate-800/50 rounded-xl w-full px-4 py-2.5 pr-10 border-slate-200/60 focus:bg-white" value={form.password || ''} onChange={(e) => setForm({ ...form, password: e.target.value })} />
                       <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors focus:outline-none z-10 cursor-pointer">
                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>

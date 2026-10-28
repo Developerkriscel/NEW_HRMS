@@ -10,6 +10,9 @@ import PreboardingPersonalDetails from '@/models/PreboardingPersonalDetails'
 import PreboardingEmergencyContact from '@/models/PreboardingEmergencyContact'
 import PreboardingBankDetails from '@/models/PreboardingBankDetails'
 import PreboardingStatutoryDetails from '@/models/PreboardingStatutoryDetails'
+import PreboardingEmploymentHistory from '@/models/PreboardingEmploymentHistory'
+import PreboardingEducation from '@/models/PreboardingEducation'
+import Employee from '@/models/Employee'
 
 const hasValue = (value) => value !== undefined && value !== null && String(value).trim() !== ''
 
@@ -43,21 +46,40 @@ export const PUT = withApi(async (req, { params }) => {
   const preboarding = await Preboarding.findOne({ _id: params.id, tenantId, deleted: false })
   if (!preboarding) throw new ApiError(404, 'Preboarding profile not found', 'NOT_FOUND')
 
+  const employeeCode = String(body.employeeCode || '').trim().toUpperCase()
+  if (preboarding.convertedEmployeeId && employeeCode !== String(preboarding.employeeCode || '').toUpperCase()) {
+    return fail('This employee has already been created. Update the Employee ID from the employee profile instead.', 409, 'EMPLOYEE_ALREADY_CONVERTED')
+  }
+  if (employeeCode) {
+    const [existingEmployee, existingPreboarding] = await Promise.all([
+      Employee.findOne({ tenantId, employeeCode, deleted: false, _id: { $ne: preboarding.convertedEmployeeId || null } }).select('_id').lean(),
+      Preboarding.findOne({ tenantId, employeeCode, _id: { $ne: preboarding._id }, deleted: false }).select('_id').lean(),
+    ])
+    if (existingEmployee || existingPreboarding) return fail('This Employee ID is already in use. Choose a unique ID.', 409, 'EMPLOYEE_ID_IN_USE')
+    preboarding.employeeCode = employeeCode
+  } else if (!preboarding.convertedEmployeeId) {
+    preboarding.employeeCode = null
+  }
+
   const fullLegalName = [body.firstName, body.lastName].filter(Boolean).join(' ').trim()
   const personalPatch = compactPatch({
     fullLegalName: fullLegalName || body.fullLegalName,
+    preferredName: body.preferredName,
     personalEmail: body.personalEmail || body.officialEmail,
     mobileNumber: body.phone || body.mobileNumber,
     dateOfBirth: body.dateOfBirth,
     currentAddress: body.currentAddress,
     permanentAddress: body.permanentAddress,
-  }, ['fullLegalName', 'personalEmail', 'mobileNumber', 'dateOfBirth', 'currentAddress', 'permanentAddress'])
+    declarationAccurate: body.declarationAccurate,
+    declarationWillNotify: body.declarationWillNotify,
+  }, ['fullLegalName', 'preferredName', 'personalEmail', 'mobileNumber', 'dateOfBirth', 'currentAddress', 'permanentAddress', 'declarationAccurate', 'declarationWillNotify'])
 
   const emergencyPatch = compactPatch({
     contactName: body.emergencyPersonName,
     relationship: body.emergencyRelationship || 'Emergency Contact',
     phone: body.emergencyContactNumber,
-  }, ['contactName', 'relationship', 'phone'])
+    alternatePhone: body.emergencyAlternatePhone,
+  }, ['contactName', 'relationship', 'phone', 'alternatePhone'])
 
   const bankPatch = compactPatch(body, ['accountHolderName', 'bankName', 'bankAccountNumber', 'bankIfscCode', 'bankBranch'])
   const customFields = compactPatch({
@@ -73,8 +95,9 @@ export const PUT = withApi(async (req, { params }) => {
     aadhaarNumber: body.aadhaarNumber,
     pfNumber: body.pfNumber,
     esiNumber: body.esiNumber,
+    previousPfMember: body.previousPfMember,
   }, ['officialEmail', 'officialPhoneNumber', 'fatherName', 'motherName', 'spouseName', 'bloodGroup', 'gender', 'maritalStatus', 'anniversaryDate', 'aadhaarNumber', 'pfNumber', 'esiNumber'])
-  const statutoryPatch = compactPatch(body, ['panNumber', 'uanNumber'])
+  const statutoryPatch = compactPatch(body, ['panNumber', 'uanNumber', 'previousPfMember'])
 
   const [personal, emergencyContact, bank, statutory] = await Promise.all([
     PreboardingPersonalDetails.findOneAndUpdate(
@@ -98,6 +121,28 @@ export const PUT = withApi(async (req, { params }) => {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     ),
   ])
+
+  if (Array.isArray(body.employmentHistory)) {
+    await PreboardingEmploymentHistory.deleteMany({ tenantId, preboardingId: preboarding._id })
+    const rows = body.employmentHistory.filter((row) => row?.employerName).map((row, order) => ({
+      tenantId, preboardingId: preboarding._id, order,
+      employerName: row.employerName, designation: row.designation, startDate: row.startDate || null,
+      endDate: row.endDate || null, employeeId: row.employeeId, reasonForLeaving: row.reasonForLeaving,
+    }))
+    if (rows.length) await PreboardingEmploymentHistory.insertMany(rows)
+  }
+  if (Array.isArray(body.education)) {
+    await PreboardingEducation.deleteMany({ tenantId, preboardingId: preboarding._id })
+    const rows = body.education.filter((row) => row?.degree).map((row, order) => ({
+      tenantId, preboardingId: preboarding._id, order,
+      degree: row.degree, specialization: row.specialization, institution: row.institution,
+      university: row.university, startYear: row.startYear || null, completionYear: row.completionYear || null, score: row.score,
+    }))
+    if (rows.length) await PreboardingEducation.insertMany(rows)
+  }
+
+  const joiningPatch = compactPatch(body, ['availableToJoin', 'relocationRequired', 'accommodationRequired', 'requestedJoiningDate', 'requestedJoiningReason'])
+  if (Object.keys(joiningPatch).length) Object.assign(preboarding, joiningPatch)
 
   if (employeeDetailsComplete(personal, emergencyContact)) {
     preboarding.formStatus = FORM_STATUS.APPROVED

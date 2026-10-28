@@ -87,6 +87,10 @@ const PreboardingSchema = new mongoose.Schema(
     conversionFailedAt: { type: Date, default: null },
     conversionError: { type: String, default: null },
     convertedEmployeeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', default: null },
+    // Optional HR-provided employee identifier. When blank, conversion uses
+    // the tenant sequence generator; when supplied, it is validated for
+    // uniqueness before the employee is created.
+    employeeCode: { type: String, trim: true, uppercase: true, default: null },
     employeeLoginEmail: { type: String, default: null },
     employeePasswordHash: { type: String, default: null, select: false },
     employeePasswordConfiguredAt: { type: Date, default: null },

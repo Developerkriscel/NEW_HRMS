@@ -19,7 +19,7 @@ export const POST = withApi(async (req, { params }) => {
 
   if (!canManageOffers(session)) return fail('You do not have permission to generate this PDF', 403, 'FORBIDDEN')
 
-  const offer = await Offer.findOne({ _id: params.id, tenantId, deleted: false })
+  const offer = await Offer.findOne({ _id: params.id, tenantId, deleted: false }).populate('candidateId', 'firstName lastName')
   if (!offer) throw new ApiError(404, 'Offer not found', 'NOT_FOUND')
   const version = await OfferVersion.findOne({ _id: offer.currentVersionId, tenantId })
   if (!version) throw new ApiError(404, 'Offer version not found', 'NOT_FOUND')
@@ -28,10 +28,18 @@ export const POST = withApi(async (req, { params }) => {
   }
 
   const tenant = await Tenant.findById(tenantId).select('companyName').lean()
-  const buffer = await generateOfferPdfBuffer({ companyName: tenant?.companyName, offerCode: `${offer.offerCode} · V${version.version}`, bodyText: version.renderedContent })
+  const buffer = await generateOfferPdfBuffer({
+    companyName: tenant?.companyName,
+    offerCode: `${offer.offerCode} - V${version.version}`,
+    bodyText: version.renderedContent,
+    candidateName: offer.candidateId?.getFullName
+      ? offer.candidateId.getFullName()
+      : [offer.candidateId?.firstName, offer.candidateId?.lastName].filter(Boolean).join(' '),
+  })
   const { url } = await saveOfferPdf(buffer, tenantId, offer.offerCode, version.version)
 
   version.pdfUrl = url
+  version.pdfFormatVersion = 2
   await version.save()
 
   await logAction(session, { action: 'OFFER_PDF_GENERATED', entityType: 'Offer', entityId: offer._id, description: `PDF generated for offer V${version.version}`, req })

@@ -146,7 +146,10 @@ export const POST = withApi(async (req) => {
   }, 0)
   const tenant = await Tenant.findById(tenantId).lean()
   const employeeIdPrefix = tenant?.hrSettings?.employeeIdPrefix || 'EMP'
-  const employeeCode = `${employeeIdPrefix}${String(maxCodeNumber + 1).padStart(5, '0')}`
+  const requestedEmployeeCode = String(body.employeeCode || '').trim().toUpperCase()
+  if (requestedEmployeeCode && !/^[A-Z0-9][A-Z0-9_-]{2,30}$/.test(requestedEmployeeCode)) return fail('Employee ID must be 3–31 characters and use only letters, numbers, hyphens, or underscores', 400, 'INVALID_EMPLOYEE_ID')
+  if (requestedEmployeeCode && await Employee.exists({ tenantId, employeeCode: requestedEmployeeCode })) return fail('This Employee ID is already in use', 409, 'EMPLOYEE_ID_IN_USE')
+  const employeeCode = requestedEmployeeCode || `${employeeIdPrefix}${String(maxCodeNumber + 1).padStart(5, '0')}`
   const requestedPassword = typeof body.password === 'string' ? body.password : ''
   if (requestedPassword) {
     const passwordCheck = validatePasswordStrength(requestedPassword)
@@ -159,13 +162,21 @@ export const POST = withApi(async (req) => {
     employeeCode,
     firstName: body.firstName,
     lastName: body.lastName,
+    preferredName: body.preferredName || null,
     email: body.email,
     password: hashedPassword,
     phone: body.phone,
+    alternatePhone: body.alternatePhone || null,
     role: body.role || 'EMPLOYEE',
     moduleAccess: ['COMPANY_ADMIN', 'SUPER_ADMIN'].includes(session.role) ? sanitizeModuleAccess(body.moduleAccess) : [],
     status: 'PROBATION', // new employees always start on probation, regardless of request body
     dateOfBirth: body.dateOfBirth || null,
+    maritalStatus: body.maritalStatus || null,
+    anniversaryDate: body.anniversaryDate || null,
+    bloodGroup: body.bloodGroup || null,
+    fatherName: body.fatherName || null,
+    motherName: body.motherName || null,
+    spouseName: body.spouseName || null,
     gender: body.gender || undefined,
     department: body.departmentId || null,
     designation: body.designationId || null,
@@ -173,6 +184,7 @@ export const POST = withApi(async (req) => {
     reportingManager: body.reportingManagerId || null,
     joiningDate: body.joiningDate || null,
     workLocation: body.workLocation,
+    officialPhoneNumber: body.officialPhoneNumber || null,
     employmentType: body.employmentType,
     ctc: body.ctc,
     basicSalary: body.basicSalary,
@@ -181,6 +193,25 @@ export const POST = withApi(async (req) => {
     state: body.state,
     country: body.country,
     pincode: body.pincode,
+    personalEmail: body.personalEmail || null,
+    officialEmail: body.officialEmail || null,
+    emergencyContactNumber: body.emergencyContactNumber || null,
+    emergencyPersonName: body.emergencyPersonName || null,
+    emergencyRelationship: body.emergencyRelationship || null,
+    previousEmployment: Array.isArray(body.previousEmployment) ? body.previousEmployment : [],
+    education: Array.isArray(body.education) ? body.education : [],
+    joiningPreferences: body.joiningPreferences || {},
+    declarations: body.declarations || {},
+    bankName: body.bankName || null,
+    bankAccountNumber: body.bankAccountNumber || null,
+    bankIfscCode: body.bankIfscCode || null,
+    accountHolderName: body.accountHolderName || null,
+    bankBranch: body.bankBranch || null,
+    panNumber: body.panNumber || null,
+    aadhaarNumber: body.aadhaarNumber || null,
+    pfNumber: body.pfNumber || null,
+    uanNumber: body.uanNumber || null,
+    esiNumber: body.esiNumber || null,
     tenantId,
     createdBy: session.sub,
   })

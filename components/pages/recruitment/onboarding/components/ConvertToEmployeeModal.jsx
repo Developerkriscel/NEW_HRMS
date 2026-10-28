@@ -12,18 +12,20 @@ export function ConvertToEmployeeModal({ isOpen, onClose, onCompleted, record, m
   const [duplicateReview, setDuplicateReview] = useState(null)
   const [conversionResult, setConversionResult] = useState(null)
   const [loginEmail, setLoginEmail] = useState(record?.loginEmail || record?.candidate?.email || '')
+  const [employeeCode, setEmployeeCode] = useState(record?.employeeCode || '')
   const [initialPassword, setInitialPassword] = useState('')
   const setupOnly = mode === 'access'
 
   useEffect(() => {
     if (!isOpen) return
     setLoginEmail(record?.loginEmail || record?.candidate?.email || '')
+    setEmployeeCode(record?.employeeCode || '')
     setInitialPassword('')
     setError('')
     setDuplicateReview(null)
     setConversionResult(null)
     setSuccess(false)
-  }, [isOpen, record?.id, record?.loginEmail, record?.candidate?.email])
+  }, [isOpen, record?.id, record?.loginEmail, record?.candidate?.email, record?.employeeCode])
 
   if (!isOpen || !record) return null
 
@@ -41,7 +43,7 @@ export function ConvertToEmployeeModal({ isOpen, onClose, onCompleted, record, m
       if (record.rawStatus === 'READY_TO_JOIN') {
         await preboardingApi.markJoined(record.id)
       }
-      const res = await preboardingApi.convertToEmployee(record.id, { loginEmail, initialPassword, overrideDuplicate })
+      const res = await preboardingApi.convertToEmployee(record.id, { loginEmail, initialPassword, employeeCode, overrideDuplicate })
       const result = res.data.data
       setConversionResult(result)
       setLoading(false)
@@ -49,7 +51,7 @@ export function ConvertToEmployeeModal({ isOpen, onClose, onCompleted, record, m
     } catch (err) {
       const responseData = err.response?.data?.data || {}
       const errorCode = err.response?.data?.errorCode
-      if (errorCode === 'DUPLICATE_EMPLOYEE' || errorCode === 'LOGIN_EMAIL_IN_USE') {
+      if (errorCode === 'DUPLICATE_EMPLOYEE' || errorCode === 'LOGIN_EMAIL_IN_USE' || errorCode === 'EMPLOYEE_ID_IN_USE') {
         setDuplicateReview({ code: errorCode, matches: responseData.duplicates || [], message: err.response?.data?.message || '' })
       }
       const validationFields = err.response?.data?.data?.fields
@@ -144,9 +146,11 @@ export function ConvertToEmployeeModal({ isOpen, onClose, onCompleted, record, m
                 )}
                 {duplicateReview && (
                   <div className={`mb-4 rounded-2xl border p-4 text-sm ${duplicateReview.code === 'DUPLICATE_EMPLOYEE' ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200' : 'border-red-200 bg-red-50 text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200'}`}>
-                    <p className="font-bold">{duplicateReview.code === 'DUPLICATE_EMPLOYEE' ? 'Review possible employee match' : 'Login email is already in use'}</p>
+                    <p className="font-bold">{duplicateReview.code === 'DUPLICATE_EMPLOYEE' ? 'Review possible employee match' : duplicateReview.code === 'EMPLOYEE_ID_IN_USE' ? 'Employee ID is already in use' : 'Login email is already in use'}</p>
                     <p className="mt-1">{duplicateReview.code === 'DUPLICATE_EMPLOYEE'
                       ? 'We found an employee with matching personal information. Check the match before continuing. If this is the same person, cancel and contact your HR administrator instead of creating a second employee.'
+                      : duplicateReview.code === 'EMPLOYEE_ID_IN_USE'
+                        ? 'Choose a unique Employee ID, or clear the field to let the system generate one automatically.'
                       : duplicateReview.message || 'Choose a different login email to continue.'}</p>
                     {duplicateReview.matches.map((match, index) => (
                       <div key={`${match.employee?.employeeCode || 'match'}-${index}`} className="mt-3 rounded-xl border border-current/10 bg-white/70 p-3 dark:bg-slate-950/30">
@@ -207,6 +211,21 @@ export function ConvertToEmployeeModal({ isOpen, onClose, onCompleted, record, m
                     </div>
                   </div>
                   <div className="space-y-3">
+                    <label className="block">
+                      <span className="mb-1.5 flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-slate-500">
+                        Employee ID <span className="font-medium normal-case tracking-normal text-slate-400">(optional)</span>
+                      </span>
+                      <input
+                        type="text"
+                        autoComplete="off"
+                        value={employeeCode}
+                        onChange={(event) => setEmployeeCode(event.target.value.toUpperCase())}
+                        className="input-field font-mono uppercase"
+                        placeholder="Auto-generated if blank"
+                        maxLength={31}
+                      />
+                      <span className="mt-1 block text-[11px] text-slate-500">Leave blank to use the company’s automatic employee ID sequence.</span>
+                    </label>
                     <label className="block">
                       <span className="mb-1.5 flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-slate-500">
                         <Mail className="h-3.5 w-3.5" /> Login Email

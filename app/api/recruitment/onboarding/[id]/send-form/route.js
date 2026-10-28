@@ -8,6 +8,7 @@ import { PREBOARDING_VIEW_ROLES, canManagePreboarding, FORM_STATUS } from '@/lib
 import { getActorName } from '@/lib/candidateHelpers'
 import { ensurePreboardingDetailRows } from '@/lib/preboardingHelpers'
 import { issuePreboardingToken, revokePreboardingTokens } from '@/lib/preboardingTokenHelpers'
+import { revokeOfferTokens } from '@/lib/offerTokenHelpers'
 import Preboarding from '@/models/Preboarding'
 
 // POST — "[Send Information Form]". Same "no email infra" honesty as
@@ -26,6 +27,7 @@ export const POST = withApi(async (req, { params }) => {
   await ensurePreboardingDetailRows(tenantId, preboarding._id)
 
   const actorName = await getActorName(session)
+  await revokeOfferTokens(tenantId, preboarding.offerId)
   await revokePreboardingTokens(tenantId, preboarding._id)
   const token = await issuePreboardingToken(tenantId, preboarding._id)
 

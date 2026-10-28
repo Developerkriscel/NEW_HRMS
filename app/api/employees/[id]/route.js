@@ -12,16 +12,20 @@ import '@/models/Branch'
 import '@/models/Department'
 import '@/models/Designation'
 import '@/models/Shift'
+import PreboardingEmploymentHistory from '@/models/PreboardingEmploymentHistory'
+import PreboardingEducation from '@/models/PreboardingEducation'
+import Preboarding from '@/models/Preboarding'
 
 const VALID_GENDERS = ['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY']
 
 const UPDATABLE_FIELDS = [
-  'firstName', 'lastName', 'phone', 'alternatePhone', 'dateOfBirth', 'gender',
+  'firstName', 'lastName', 'preferredName', 'employeeCode', 'phone', 'alternatePhone', 'dateOfBirth', 'gender',
   'maritalStatus', 'bloodGroup', 'nationality', 'religion', 'address', 'city',
   'state', 'country', 'pincode', 'status', 'workLocation', 'employmentType',
   'ctc', 'basicSalary', 'bankName', 'bankAccountNumber', 'bankIfscCode',
   'accountHolderName', 'bankBranch', 'aadhaarNumber', 'panNumber', 'pfNumber',
-  'uanNumber', 'esiNumber', 'confirmationDate', 'resignationDate', 'lastWorkingDate',
+  'uanNumber', 'esiNumber', 'officialPhoneNumber', 'emergencyContactNumber', 'emergencyPersonName', 'emergencyRelationship', 'confirmationDate', 'resignationDate', 'lastWorkingDate',
+  'previousEmployment', 'education', 'joiningPreferences', 'declarations',
   'moduleAccess',
 ]
 
@@ -47,6 +51,16 @@ export const GET = withApi(async (_req, { params }) => {
   // (Permission is force-registered as tenant-scoped despite having no
   // tenantId field — see models/_base.js) — fetch and attach separately.
   let responseEmployee = employee.toObject()
+  if (employee.sourcePreboardingId) {
+    const [preboarding, history, education] = await Promise.all([
+      Preboarding.findOne({ _id: employee.sourcePreboardingId, tenantId, deleted: false }).select('availableToJoin relocationRequired accommodationRequired requestedJoiningDate requestedJoiningReason').lean(),
+      PreboardingEmploymentHistory.find({ tenantId, preboardingId: employee.sourcePreboardingId, deleted: false }).sort({ order: 1 }).lean(),
+      PreboardingEducation.find({ tenantId, preboardingId: employee.sourcePreboardingId, deleted: false }).sort({ order: 1 }).lean(),
+    ])
+    if (!responseEmployee.previousEmployment?.length) responseEmployee.previousEmployment = history
+    if (!responseEmployee.education?.length) responseEmployee.education = education
+    if (!responseEmployee.joiningPreferences || !Object.keys(responseEmployee.joiningPreferences).length) responseEmployee.joiningPreferences = preboarding || {}
+  }
   if (employee.permissions?.length) {
     responseEmployee.permissions = await Permission.find({ _id: { $in: employee.permissions } })
   }
@@ -66,6 +80,13 @@ export const PUT = withApi(async (req, { params }) => {
     return fail('Only a Company Admin can update HR module access', 403, 'FORBIDDEN')
   }
   if (body.gender && !VALID_GENDERS.includes(body.gender)) return fail('Invalid gender', 400)
+  if (body.employeeCode !== undefined) {
+    const employeeCode = String(body.employeeCode || '').trim().toUpperCase()
+    if (!employeeCode || !/^[A-Z0-9][A-Z0-9_-]{2,30}$/.test(employeeCode)) return fail('Employee ID must be 3–31 characters and use only letters, numbers, hyphens, or underscores', 400, 'INVALID_EMPLOYEE_ID')
+    const duplicate = await Employee.findOne({ tenantId, employeeCode, deleted: false, _id: { $ne: employee._id } }).select('_id').lean()
+    if (duplicate) return fail('This Employee ID is already in use', 409, 'EMPLOYEE_ID_IN_USE')
+    body.employeeCode = employeeCode
+  }
 
   for (const field of UPDATABLE_FIELDS) {
     if (field === 'gender' && (body[field] === '' || body[field] === null)) {

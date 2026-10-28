@@ -108,11 +108,11 @@ export function ProfileWorkspace() {
               )}
               <div>
                 <label className="text-xs font-medium text-slate-500 ml-1 mb-1 block">Current Password</label>
-                <input required type="password" placeholder="••••••••" className="input-field" value={pwForm.currentPassword} onChange={(e) => setPwForm({ ...pwForm, currentPassword: e.target.value })} />
+                <input required type="password" autoComplete="current-password" placeholder="••••••••" className="input-field" value={pwForm.currentPassword} onChange={(e) => setPwForm({ ...pwForm, currentPassword: e.target.value })} />
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-500 ml-1 mb-1 block">New Password</label>
-                <input required type="password" placeholder="••••••••" className="input-field" value={pwForm.newPassword} onChange={(e) => setPwForm({ ...pwForm, newPassword: e.target.value })} />
+                <input required type="password" autoComplete="new-password" placeholder="••••••••" className="input-field" value={pwForm.newPassword} onChange={(e) => setPwForm({ ...pwForm, newPassword: e.target.value })} />
               </div>
               <button type="submit" disabled={pwSaving} className="w-full btn-primary py-2.5">
                 {pwSaving ? 'Saving...' : 'Update Password'}

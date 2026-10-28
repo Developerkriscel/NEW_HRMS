@@ -36,6 +36,7 @@ export const POST = withApi(async (req, { params }) => {
       overrideDuplicate: !!body.overrideDuplicate,
       loginEmail: body.loginEmail,
       initialPassword: body.initialPassword,
+      employeeCode: body.employeeCode,
     })
 
     await logAction(session, {
@@ -50,7 +51,7 @@ export const POST = withApi(async (req, { params }) => {
 
     return ok(result, result.alreadyCompleted ? 'Employee already created' : 'Employee created successfully', result.alreadyCompleted ? 200 : 201)
   } catch (err) {
-    if (err.errorCode === 'DUPLICATE_EMPLOYEE' || err.errorCode === 'LOGIN_EMAIL_IN_USE') {
+    if (err.errorCode === 'DUPLICATE_EMPLOYEE' || err.errorCode === 'LOGIN_EMAIL_IN_USE' || err.errorCode === 'EMPLOYEE_ID_IN_USE' || err.errorCode === 'INVALID_EMPLOYEE_ID') {
       return fail(err.message, 409, err.errorCode, { duplicates: err.duplicates })
     }
     if (err.errorCode === 'NOT_READY') {

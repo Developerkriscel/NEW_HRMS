@@ -1,12 +1,11 @@
 'use client'
 
-import { Plus, Briefcase, Users, UploadCloud, FileSpreadsheet, Download, UserPlus, Calendar, FileText, Sparkles, CheckCircle2, ChevronRight, ChevronDown, Check, Edit, Trash2, PowerOff, PlayCircle, PauseCircle, X, Eye, Globe, Clock, MapPin, DollarSign, Mail, Send, Phone, AlertCircle, Loader2, Undo2 } from 'lucide-react'
+import { Plus, Briefcase, Users, UploadCloud, FileSpreadsheet, Download, UserPlus, Calendar, FileText, Sparkles, CheckCircle2, ChevronRight, ChevronDown, ArrowLeft, Check, Edit, Trash2, PowerOff, PlayCircle, PauseCircle, X, Eye, Clock, MapPin, DollarSign, Mail, Send, Phone, AlertCircle, Loader2, Undo2 } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import { PositionDetailsModal } from '@/components/pages/recruitment/PositionDetailsModal'
 import { SendOfferModal } from '@/components/pages/recruitment/SendOfferModal'
 import { OpenPositionModal } from '@/components/pages/recruitment/OpenPositionModal'
-import { PublishJobModal } from '@/components/pages/recruitment/PublishJobModal'
 import ManualCandidateModal from '@/components/pages/recruitment/ManualCandidateModal'
 import CandidateSpreadsheetEditor from '@/components/pages/recruitment/CandidateSpreadsheetEditor'
 import { ConfirmDialog } from '@/components/common/ConfirmDialog'
@@ -317,7 +316,6 @@ export default function RecruitmentDashboardPage() {
   const [showOpenPositionModal, setShowOpenPositionModal] = useState(false)
   const [editingPositionForModal, setEditingPositionForModal] = useState(null)
   const [positionToDelete, setPositionToDelete] = useState(null)
-  const [publishingPosition, setPublishingPosition] = useState(null)
   const [selectedPositionForCandidates, setSelectedPositionForCandidates] = useState(null)
   const [positionPickerOpen, setPositionPickerOpen] = useState(false)
   const [showAllCandidatesModal, setShowAllCandidatesModal] = useState(false)
@@ -337,6 +335,8 @@ export default function RecruitmentDashboardPage() {
   const candidatesLoadedJobRef = useRef(null)
   const candidatesLoadingRef = useRef(null)
   const positionPickerRef = useRef(null)
+  const restoredPositionRef = useRef(false)
+  const [positionsList, setPositionsList] = useState([])
   
   // Workflow States
   const [candidatePhase, setCandidatePhase] = useState('idle') // idle, upload, processing, uploaded, analyzing, results
@@ -367,6 +367,40 @@ export default function RecruitmentDashboardPage() {
   const [interviewersLoading, setInterviewersLoading] = useState(false)
   const [selectedInterviewerIds, setSelectedInterviewerIds] = useState([])
   const [selectedCandidateInfo, setSelectedCandidateInfo] = useState(null)
+  const [selectedCandidateResume, setSelectedCandidateResume] = useState(null)
+  const [selectedCandidateResumeLoading, setSelectedCandidateResumeLoading] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    const candidate = selectedCandidateInfo
+    setSelectedCandidateResume(null)
+    setSelectedCandidateResumeLoading(false)
+
+    const existingUrl = candidate?.resumeUrl || candidate?.fileUrl || candidate?.resumeFileUrl
+    if (!candidate?.candidateId) {
+      if (existingUrl) setSelectedCandidateResume({ fileUrl: existingUrl })
+      return () => { cancelled = true }
+    }
+
+    setSelectedCandidateResumeLoading(true)
+    candidateApi.listResumes(candidate.candidateId)
+      .then((response) => {
+        if (cancelled) return
+        const resumes = response?.data?.data || response?.data || []
+        const primary = Array.isArray(resumes)
+          ? (resumes.find((resume) => resume.isPrimary) || resumes[0])
+          : null
+        setSelectedCandidateResume(primary || (existingUrl ? { fileUrl: existingUrl } : null))
+      })
+      .catch(() => {
+        if (!cancelled) setSelectedCandidateResume(existingUrl ? { fileUrl: existingUrl } : null)
+      })
+      .finally(() => {
+        if (!cancelled) setSelectedCandidateResumeLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [selectedCandidateInfo])
   const [positionsLoading, setPositionsLoading] = useState(true)
   const [positionsError, setPositionsError] = useState('')
   const [departments, setDepartments] = useState([])
@@ -487,6 +521,33 @@ export default function RecruitmentDashboardPage() {
     await loadAllCandidates()
   }
 
+  const exportAllCandidates = () => {
+    if (!allCandidatesRows.length) return
+    const rows = allCandidatesRows.map((candidate) => ({
+      Candidate: candidate.candidateName || 'Unnamed candidate',
+      'Candidate ID': candidate.candidateCode || '',
+      Position: candidate.jobTitle || 'Position unavailable',
+      'Job Code': candidate.jobCode || '',
+      Department: typeof candidate.jobDepartment === 'object' ? candidate.jobDepartment?.name || '' : candidate.jobDepartment || '',
+      Email: candidate.email || '',
+      Phone: candidate.phone || '',
+      Experience: candidate.experience ?? '',
+      'Expected CTC': candidate.expectedCtc || '',
+      Stage: candidate.stage || '',
+      Status: candidate.status || '',
+      'Applied On': candidate.appliedAt ? new Date(candidate.appliedAt).toLocaleString() : '',
+    }))
+    const worksheet = XLSX.utils.json_to_sheet(rows)
+    worksheet['!cols'] = [
+      { wch: 24 }, { wch: 16 }, { wch: 30 }, { wch: 16 }, { wch: 18 },
+      { wch: 30 }, { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 18 },
+      { wch: 14 }, { wch: 22 },
+    ]
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Candidates')
+    XLSX.writeFile(workbook, `nexahr-candidates-${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
+
   const openCandidatePosition = async (candidate) => {
     const position = positionsList.find((item) => String(item.id) === String(candidate.jobId))
     if (!position) return
@@ -529,6 +590,7 @@ export default function RecruitmentDashboardPage() {
 
     let nextPosition = position
     setSelectedPositionForCandidates(nextPosition)
+    if (typeof window !== 'undefined') window.localStorage.setItem('nexahr:selected-recruitment-position', String(position.id))
     setActiveTab('candidates')
     const detailsPromise = jobApi.get(position.id, { timeout: 30000 })
       .then((res) => {
@@ -705,6 +767,23 @@ export default function RecruitmentDashboardPage() {
       })
     return () => { cancelled = true }
   }, [])
+
+  // Keep the selected pipeline position across a browser refresh. The
+  // applications are persisted in MongoDB; without restoring this UI state,
+  // a refresh returned the user to the positions tab and made candidates look
+  // as if they had disappeared.
+  useEffect(() => {
+    if (restoredPositionRef.current || !positionsList.length || typeof window === 'undefined') return
+    restoredPositionRef.current = true
+    const savedPositionId = window.localStorage.getItem('nexahr:selected-recruitment-position')
+    const savedPosition = positionsList.find((position) => String(position.id) === String(savedPositionId))
+    if (savedPosition && !['Closed', 'Cancelled'].includes(savedPosition.status)) {
+      void handlePositionSelection(savedPosition.id)
+    }
+  // handlePositionSelection is intentionally the current page callback; this
+  // restoration runs once after the positions list has been loaded.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [positionsList])
 
   const formatInterviewSchedule = (cand) => {
     if (!cand?.interviewAt) return null
@@ -1005,10 +1084,6 @@ export default function RecruitmentDashboardPage() {
     );
   };
 
-  // Positions State
-  const [positionsList, setPositionsList] = useState([])
-
-
   // Handle file upload — detects file type and routes to proper handler
   const DELIMITED_SPREADSHEET_EXTENSIONS = ['csv', 'tsv', 'txt']
   const EXCEL_SPREADSHEET_EXTENSIONS = ['xlsx', 'xls', 'xlsm', 'xlsb', 'ods']
@@ -1099,6 +1174,32 @@ export default function RecruitmentDashboardPage() {
       throw error
     } finally {
       setDirectImportSaving(false)
+    }
+  }
+
+  const handleSpreadsheetAnalyze = async (rows) => {
+    setAnalysisError(null)
+    const selectedJobId = selectedPositionForCandidates?.id || selectedPositionForCandidates?._id
+    if (!selectedJobId) {
+      throw new Error('Open a position before analyzing candidates.')
+    }
+    setParsedCandidates(rows)
+    setUploadFileName('Spreadsheet candidates')
+    setCandidatePhase('analyzing')
+    try {
+      const response = await candidateApi.bulkAnalyze({
+        candidates: rows,
+        jobId: selectedJobId,
+      })
+      const analyzed = response.data?.candidates || response.data?.data?.candidates || []
+      if (!Array.isArray(analyzed) || analyzed.length === 0) {
+        throw new Error('AI analysis returned no candidate results. Check the candidate names and emails, then try again.')
+      }
+      setParsedCandidates(analyzed)
+      setCandidatePhase('results')
+    } catch (error) {
+      setCandidatePhase('uploaded')
+      throw new Error(error.response?.data?.message || error.message || 'AI analysis failed. Please try again.')
     }
   }
 
@@ -1462,8 +1563,13 @@ export default function RecruitmentDashboardPage() {
         // job before refreshing the pipeline. Existing board rows already have
         // an application id and should use the normal restore transition.
         const hasExistingApplication = candidatesData.some((item) => (
-          String(item.id || '') === String(cand.id || '')
-          || String(item.applicationId || '') === String(cand.applicationId || '')
+          // Only treat a row as an existing application when the candidate
+          // carries application metadata from the board.  Uploaded/analysed
+          // candidates use a resume or import id in `id`; comparing that id
+          // with board rows caused the restore endpoint to receive a resume
+          // id and return 404.
+          (cand.applicationId && String(item.id || '') === String(cand.applicationId))
+          || (cand.backendStatus && cand.jobId && String(item.id || '') === String(cand.id || ''))
         ))
         if (!hasExistingApplication) {
           const jobId = selectedPositionForCandidates?.id || selectedPositionForCandidates?._id
@@ -1474,15 +1580,16 @@ export default function RecruitmentDashboardPage() {
             jobTitle: selectedPositionForCandidates?.title,
           })
         } else {
-          if (!String(cand.id || '').match(/^[0-9a-fA-F]{24}$/)) {
+          const applicationId = cand.applicationId || cand.id
+          if (!String(applicationId || '').match(/^[0-9a-fA-F]{24}$/)) {
             throw new Error('This candidate is missing a valid application ID. Refresh the recruitment page and try again.')
           }
-          await updateCandidateStatus(cand, 'Pipeline')
+          await updateCandidateStatus({ ...cand, id: applicationId }, 'Pipeline')
         }
         setLocalCandidateStatuses(prev => ({ ...prev, [actionKey]: newStatus }))
         await ensureCandidatesLoaded({ force: true, position: selectedPositionForCandidates })
       } catch (err) {
-        setAnalysisError(err.response?.data?.message || err.message || 'Failed to restore candidate to pipeline.')
+        setAnalysisError(err.response?.data?.message || err.message || 'Failed to add candidate to the pipeline.')
       } finally {
         setCandidateActionLoading(prev => ({ ...prev, [actionKey]: false }))
       }
@@ -1895,13 +2002,12 @@ export default function RecruitmentDashboardPage() {
   }, [positionPickerOpen])
 
   return (
-    <div className="animate-fade-in space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
+    <div className="animate-fade-in space-y-4">
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <Briefcase className="w-6 h-6 text-indigo-500" /> Recruitment
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900 dark:text-white">
+            <Briefcase className="h-6 w-6 text-indigo-500" /> Recruitment
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Manage job openings and candidate pipeline</p>
         </div>
         <div className="flex items-center gap-3 self-stretch sm:self-auto">
           {activeTab === 'candidates' && selectedPositionForCandidates && (
@@ -2131,7 +2237,6 @@ export default function RecruitmentDashboardPage() {
                               {['Active', 'On Hold'].includes(pos.status) && (
                                 <button disabled={positionActionLoading} onClick={() => handleStatusChange(pos.id, 'Closed')} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-500/10 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50" title="Close Position"><PowerOff className="w-4 h-4" /></button>
                               )}
-                              <button onClick={() => setPublishingPosition(pos)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors" title="Publish Job"><Globe className="w-4 h-4" /></button>
                               <button onClick={() => handlePositionEditOpen(pos)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-lg transition-colors" title="Edit Position"><Edit className="w-4 h-4" /></button>
                               {!['Closed', 'Cancelled'].includes(pos.status) && (
                                 <button disabled={positionActionLoading} onClick={() => handleDeletePosition(pos.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50" title="Cancel Position"><Trash2 className="w-4 h-4" /></button>
@@ -2173,46 +2278,48 @@ export default function RecruitmentDashboardPage() {
                   Candidates for: {selectedPositionForCandidates.title}
                 </h2>
               </div>
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto pb-0.5">
                 {candidatePhase !== 'upload' && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2">
                     <button
                       type="button"
                       onClick={openAllCandidates}
                       disabled={allCandidatesLoading}
-                      className="bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex h-9 w-[180px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-indigo-200 bg-white px-2 text-[11px] font-bold text-indigo-700 transition-all hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-60"
                       title="Show candidates across all open positions"
                     >
-                      <Users className="w-4 h-4" /> Show All Candidates
+                      <Users className="h-3.5 w-3.5" /> Show All Candidates
                     </button>
                     <button
                       onClick={() => setShowCandidateSpreadsheetEditor(true)}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-md shadow-emerald-500/20"
+                      className="inline-flex h-9 w-[180px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-emerald-600 px-2 text-[11px] font-bold text-white shadow-md shadow-emerald-500/20 transition-all hover:bg-emerald-700"
                     >
-                      <FileSpreadsheet className="w-4 h-4" /> Import Excel
+                      <FileSpreadsheet className="h-3.5 w-3.5" /> Import Excel
                     </button>
                     <button 
                       onClick={() => { setCandidateImportMode('ai'); setCandidatePhase('upload') }}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-md shadow-indigo-500/20"
+                      className="inline-flex h-9 w-[180px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-indigo-600 px-2 text-[11px] font-bold text-white shadow-md shadow-indigo-500/20 transition-all hover:bg-indigo-700"
                     >
-                      <UploadCloud className="w-4 h-4" /> Upload Candidate Data
+                      <UploadCloud className="h-3.5 w-3.5" /> Upload Candidate Data
                     </button>
                     <button 
                       onClick={() => setShowManualCandidateModal(true)}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-md shadow-emerald-500/20"
+                      className="inline-flex h-9 w-[180px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-emerald-600 px-2 text-[11px] font-bold text-white shadow-md shadow-emerald-500/20 transition-all hover:bg-emerald-700"
                     >
-                      <UserPlus className="w-4 h-4" /> Add Candidate Manually
+                      <UserPlus className="h-3.5 w-3.5" /> Add Candidate Manually
                     </button>
                   </div>
                 )}
                 <button 
                   onClick={() => {
                     setSelectedPositionForCandidates(null)
+                    if (typeof window !== 'undefined') window.localStorage.removeItem('nexahr:selected-recruitment-position')
                     setActiveTab('positions')
                   }}
-                  className="bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:shadow-md transition-all border border-indigo-100 dark:border-slate-700"
+                  className="inline-flex h-9 w-[180px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-700 shadow-sm transition-all hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 hover:shadow-md dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-indigo-500 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-300"
                 >
-                  Back to Open Positions
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  <span>Back to Open Positions</span>
                 </button>
               </div>
             </div>
@@ -3204,9 +3311,14 @@ export default function RecruitmentDashboardPage() {
                 </h2>
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Candidates grouped by every currently open position.</p>
               </div>
-              <button type="button" onClick={() => setShowAllCandidatesModal(false)} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200" title="Close all candidates">
-                <X className="h-5 w-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={exportAllCandidates} disabled={!allCandidatesRows.length || allCandidatesLoading} className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300" title="Export the loaded candidate applications">
+                  <Download className="h-4 w-4" /> Export Excel
+                </button>
+                <button type="button" onClick={() => setShowAllCandidatesModal(false)} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200" title="Close all candidates">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
             {allCandidatesError && (
@@ -3237,7 +3349,29 @@ export default function RecruitmentDashboardPage() {
                     ))
                   ) : allCandidatesRows.length === 0 ? (
                     <tr><td colSpan="7" className="px-6 py-16 text-center text-slate-500">No candidates found for open positions.</td></tr>
-                  ) : allCandidatesRows.map((candidate) => {
+                  ) : (() => {
+                    const grouped = allCandidatesRows.reduce((groups, candidate) => {
+                      const key = String(candidate.jobId || candidate.jobTitle || 'unknown-position')
+                      if (!groups[key]) groups[key] = { title: candidate.jobTitle || 'Position unavailable', rows: [] }
+                      groups[key].rows.push(candidate)
+                      return groups
+                    }, {})
+                    const groupColors = [
+                      'border-l-indigo-400 bg-indigo-50/30 dark:border-l-indigo-500 dark:bg-indigo-500/5',
+                      'border-l-emerald-400 bg-emerald-50/30 dark:border-l-emerald-500 dark:bg-emerald-500/5',
+                      'border-l-amber-400 bg-amber-50/30 dark:border-l-amber-500 dark:bg-amber-500/5',
+                      'border-l-sky-400 bg-sky-50/30 dark:border-l-sky-500 dark:bg-sky-500/5',
+                    ]
+                    return Object.values(grouped).flatMap((group, groupIndex) => [
+                      <tr key={`position-group-${group.title}-${groupIndex}`} className={`${groupColors[groupIndex % groupColors.length]} border-l-4`}>
+                        <td colSpan="7" className="px-6 py-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="font-bold text-slate-800 dark:text-slate-100">{group.title}</div>
+                            <span className="rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-bold text-slate-600 shadow-sm dark:bg-slate-800/70 dark:text-slate-300">{group.rows.length} candidate{group.rows.length === 1 ? '' : 's'}</span>
+                          </div>
+                        </td>
+                      </tr>,
+                      ...group.rows.map((candidate) => {
                     const stageCategory = String(candidate.stageCategory || '').toUpperCase()
                     const lifecycleStatus = candidate.status === 'HIRED' || stageCategory === 'HIRED'
                       ? 'Hired'
@@ -3272,7 +3406,9 @@ export default function RecruitmentDashboardPage() {
                         <td className="px-6 py-4"><button type="button" onClick={() => openCandidatePosition(candidate)} className="rounded-lg bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-300">Open Pipeline</button></td>
                       </tr>
                     )
-                  })}
+                      })
+                    ])
+                  })()}
                 </tbody>
               </table>
             </div>
@@ -3292,6 +3428,7 @@ export default function RecruitmentDashboardPage() {
       
       <SendOfferModal 
         candidate={selectedOfferCandidate} 
+        companyName={user?.companyName}
         onClose={() => setSelectedOfferCandidate(null)}
         onSend={async (candidate) => {
           const originalCand = candidatesData.find(c => c.id === candidate.id)
@@ -3313,6 +3450,20 @@ export default function RecruitmentDashboardPage() {
         <ManualCandidateModal 
           position={selectedPositionForCandidates}
           onClose={() => setShowManualCandidateModal(false)}
+          onOpenExisting={(existing) => {
+            setShowManualCandidateModal(false)
+            const stage = selectedPositionForCandidates?.pipelineStages?.find((item) => (
+              String(item.name || '').trim().toLowerCase() === String(existing.stage || '').trim().toLowerCase()
+            ))
+            setActiveCandidateKpi(stage?.name || 'all')
+            void ensureCandidatesLoaded({ force: true, position: selectedPositionForCandidates }).catch((error) => {
+              setAnalysisError(error.response?.data?.message || error.message || 'Could not refresh the existing application.')
+            })
+          }}
+          onAnalyze={async (candidateData) => {
+            await handleSpreadsheetAnalyze([candidateData])
+            setShowManualCandidateModal(false)
+          }}
           onSave={async (candidateData) => {
             try {
               const res = await candidateApi.bulkApply({
@@ -3320,14 +3471,36 @@ export default function RecruitmentDashboardPage() {
                 candidates: [candidateData]
               });
               if (res.data?.success) {
+                const summary = res.data?.data
+                if (!summary?.addedCount) {
+                  const existing = summary?.alreadyPresent?.[0]
+                  const message = existing
+                    ? `${existing.candidateName} already has an application for this position in the ${existing.stage} stage (${String(existing.status || 'active').toLowerCase()}). Open that stage to find the existing application.`
+                    : res.data?.message || 'No candidate was added. Check the candidate details and try again.'
+                  const duplicateError = new Error(message)
+                  duplicateError.existingApplication = existing || null
+                  throw duplicateError
+                }
+                setActiveCandidateKpi('all')
+                setCandidateDateFilter('all')
                 setShowManualCandidateModal(false);
-                ensureCandidatesLoaded({ force: true });
+                try {
+                  await ensureCandidatesLoaded({ force: true, position: selectedPositionForCandidates })
+                } catch (refreshError) {
+                  console.warn('Candidate was added, but the pipeline refresh failed:', refreshError)
+                  setAnalysisError('Candidate was added to the position, but the list could not refresh. Use Retry to reload the pipeline.')
+                }
               } else {
                 throw new Error(res.data?.message || 'Failed to add candidate');
               }
             } catch (err) {
-              const msg = err.response?.data?.message || 'Failed to add candidate';
-              throw new Error(msg);
+              const msg = err.response?.data?.message || err.message || 'Failed to add candidate';
+              // Preserve the existing application metadata so the modal can
+              // offer a direct way to open it instead of showing a dead-end
+              // duplicate error.
+              const wrappedError = new Error(msg)
+              wrappedError.existingApplication = err.existingApplication || err.response?.data?.data?.alreadyPresent?.[0] || null
+              throw wrappedError
             }
           }}
         />
@@ -3339,6 +3512,10 @@ export default function RecruitmentDashboardPage() {
           onClose={() => setShowCandidateSpreadsheetEditor(false)}
           onSave={async (rows) => {
             await handleDirectExcelImport(rows)
+            setShowCandidateSpreadsheetEditor(false)
+          }}
+          onAnalyze={async (rows) => {
+            await handleSpreadsheetAnalyze(rows)
             setShowCandidateSpreadsheetEditor(false)
           }}
         />
@@ -3408,12 +3585,6 @@ export default function RecruitmentDashboardPage() {
         }}
       />
 
-      <PublishJobModal 
-        position={publishingPosition}
-        onClose={() => setPublishingPosition(null)}
-        onPublish={() => fetchPositions({ force: true })}
-      />
-
       {/* Schedule Interview Modal */}
       {schedulingCandidate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
@@ -3430,11 +3601,12 @@ export default function RecruitmentDashboardPage() {
                 </div>
                 
                 <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
-                  {scheduleSuccess.emailWarning ? 'Interview Scheduled' : 'Email Sent!'}
+                  Interview Scheduled
                 </h3>
                 <p className="text-slate-500 dark:text-slate-400 mb-6 max-w-[280px] mx-auto">
-                  <strong className="text-slate-700 dark:text-slate-300">{scheduleSuccess.name}</strong> {scheduleSuccess.emailWarning ? 'has an interview scheduled, but the email invite was not delivered.' : 'has been notified about their upcoming'} <strong className="text-slate-700 dark:text-slate-300">{scheduleSuccess.type}</strong>.
+                  <strong className="text-slate-700 dark:text-slate-300">{scheduleSuccess.name}</strong> has a <strong className="text-slate-700 dark:text-slate-300">{scheduleSuccess.type}</strong> interview scheduled.
                 </p>
+                {scheduleSuccess.notificationWarning && <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-left text-sm font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">{scheduleSuccess.notificationWarning}</div>}
 
                 <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl p-5 text-left border border-indigo-100 dark:border-indigo-800 mb-6 relative overflow-hidden">
                   <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500 rounded-l-2xl"></div>
@@ -3604,6 +3776,7 @@ export default function RecruitmentDashboardPage() {
                           time: schedulingFormData.time,
                           type: schedulingFormData.type,
                           emailWarning: scheduleResult?.emailWarning || null,
+                          notificationWarning: scheduleResult?.notificationWarning || null,
                           body: scheduleResult?.emailWarning
                             ? `${emailDraft}\n\nNote: ${scheduleResult.emailWarning}`
                             : emailDraft
@@ -3841,6 +4014,31 @@ NexaHR Talent Acquisition Team`;
                       </div>
                       <a href={`tel:${selectedCandidateInfo.phone}`} className="hover:text-indigo-600 transition-colors">{selectedCandidateInfo.phone}</a>
                     </div>
+                  )}
+                  {(selectedCandidateResume?.fileUrl || selectedCandidateInfo.resumeUrl || selectedCandidateInfo.fileUrl || selectedCandidateInfo.resumeFileUrl) ? (
+                    <div className="flex flex-nowrap items-center gap-2 pt-1">
+                      <a
+                        href={selectedCandidateResume?.fileUrl || selectedCandidateInfo.resumeUrl || selectedCandidateInfo.fileUrl || selectedCandidateInfo.resumeFileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-indigo-700"
+                      >
+                        <FileText className="h-3.5 w-3.5" /> View Resume
+                      </a>
+                      <a
+                        href={selectedCandidateResume?.fileUrl || selectedCandidateInfo.resumeUrl || selectedCandidateInfo.fileUrl || selectedCandidateInfo.resumeFileUrl}
+                        download
+                        className="inline-flex shrink-0 items-center justify-center rounded-lg border border-slate-200 p-2 text-xs font-bold text-slate-700 transition-colors hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                        title="Download resume"
+                        aria-label="Download resume"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                      </a>
+                    </div>
+                  ) : selectedCandidateResumeLoading ? (
+                    <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-400">Loading resume…</p>
+                  ) : (
+                    <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">No resume uploaded for this candidate.</p>
                   )}
                 </div>
               </div>

@@ -10,6 +10,7 @@ import Designation from '@/models/Designation'
 import Department from '@/models/Department'
 import Employee from '@/models/Employee'
 import Branch from '@/models/Branch'
+import Preboarding from '@/models/Preboarding'
 
 const INACTIVE = [OFFER_STATUS.WITHDRAWN, OFFER_STATUS.EXPIRED, OFFER_STATUS.DECLINED]
 
@@ -36,6 +37,9 @@ export const GET = withApi(async (req, { params }) => {
       version.managerId ? Employee.findById(version.managerId).select('firstName lastName').lean() : null,
       version.locationId ? Branch.findById(version.locationId).select('name').lean() : null,
     ])
+    const preboarding = offer.status === OFFER_STATUS.ACCEPTED
+      ? await Preboarding.findOne({ tenantId: claims.tenant._id, offerId: offer._id, deleted: false }).select('_id').lean()
+      : null
 
     return ok({
       offerCode: offer.offerCode,
@@ -74,6 +78,7 @@ export const GET = withApi(async (req, { params }) => {
       declinedAt: offer.declinedAt,
       withdrawalReason: offer.status === OFFER_STATUS.WITHDRAWN ? offer.withdrawalReason : null,
       discussionRequestedAt: offer.discussionRequestedAt,
+      hasEmployeeDetailsForm: !!preboarding,
     })
   })
 })

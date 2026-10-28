@@ -126,6 +126,7 @@ export function SecuritySettingsSection({ onSignOut }) {
             <input
               required
               type="password"
+              autoComplete="current-password"
               className="input-field h-11 border border-slate-200/70 bg-white/80 shadow-sm focus:border-red-300 focus:ring-4 focus:ring-red-100 font-normal text-sm"
               placeholder="Enter current password"
               value={form.currentPassword}
@@ -137,6 +138,7 @@ export function SecuritySettingsSection({ onSignOut }) {
             <input
               required
               type="password"
+              autoComplete="new-password"
               className="input-field h-11 border border-slate-200/70 bg-white/80 shadow-sm focus:border-blue-300 focus:ring-4 focus:ring-blue-100 font-normal text-sm"
               placeholder="Create strong password"
               value={form.newPassword}
@@ -148,6 +150,7 @@ export function SecuritySettingsSection({ onSignOut }) {
             <input
               required
               type="password"
+              autoComplete="new-password"
               className="input-field h-11 border border-slate-200/70 bg-white/80 shadow-sm focus:border-blue-300 focus:ring-4 focus:ring-blue-100 font-normal text-sm"
               placeholder="Re-enter new password"
               value={form.confirmPassword}

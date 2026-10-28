@@ -48,6 +48,8 @@ const OfferVersionSchema = new mongoose.Schema(
     // never re-rendered even if the template is edited afterward.
     renderedContent: { type: String, default: null },
     pdfUrl: { type: String, default: null },
+    // Existing PDFs without this marker are regenerated with the current layout.
+    pdfFormatVersion: { type: Number, default: 0 },
     attachments: [{
       fileName: { type: String, required: true },
       originalFileName: { type: String, required: true },
