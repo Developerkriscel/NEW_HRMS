@@ -19,6 +19,7 @@ import JobPipelineStage from '@/models/JobPipelineStage'
 import Offer from '@/models/Offer'
 import SelectionDecision from '@/models/SelectionDecision'
 import Interview from '@/models/Interview'
+import InterviewPanelMember from '@/models/InterviewPanelMember'
 import '@/models/CandidateTag'
 import Job from '@/models/Job'
 
@@ -219,6 +220,24 @@ export const GET = withApi(async (req) => {
       { $project: { candidateId: 1, fileUrl: 1, originalFileName: 1, fileName: 1, isPrimary: 1, version: 1 } },
     ]),
   ])
+  const panelMembers = interviews.length
+    ? await InterviewPanelMember.find({
+      tenantId,
+      interviewId: { $in: interviews.map((interview) => interview._id) },
+    }).select('interviewId employeeId employeeName role assignmentStatus respondedAt').lean()
+    : []
+  const panelByInterview = new Map()
+  for (const member of panelMembers) {
+    const key = String(member.interviewId)
+    if (!panelByInterview.has(key)) panelByInterview.set(key, [])
+    panelByInterview.get(key).push({
+      employeeId: member.employeeId,
+      name: member.employeeName,
+      role: member.role,
+      assignmentStatus: member.assignmentStatus,
+      respondedAt: member.respondedAt,
+    })
+  }
   const stageHistory = stageHistoryGroups.flatMap((group) => (
     group.rows || []).map((row) => ({ applicationId: group.applicationId, ...row }))
   )
@@ -322,6 +341,7 @@ export const GET = withApi(async (req) => {
           status: interview.status,
           meetingUrl: interview.meetingUrl,
           location: interview.location,
+          panel: panelByInterview.get(String(interview._id)) || [],
         } : null,
         assignedRecruiterId: a.assignedRecruiterId,
         aiMatchScore: match?.aiMatchScore ?? match?.overallScore ?? null,

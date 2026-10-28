@@ -895,6 +895,27 @@ export default function RecruitmentDashboardPage() {
                   <Calendar className="w-3 h-3" /> {formatInterviewSchedule(cand)}
                 </div>
               )}
+              {Array.isArray(cand.latestInterview?.panel) && cand.latestInterview.panel.length > 0 && (
+                <div className="mt-2 border-t border-slate-200 pt-2 dark:border-slate-700">
+                  <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">Interviewers</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {cand.latestInterview.panel.map((member) => (
+                      <span
+                        key={`${member.employeeId}-${member.assignmentStatus}`}
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ${member.assignmentStatus === 'ACCEPTED'
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+                          : member.assignmentStatus === 'REJECTED'
+                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
+                            : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
+                        }`}
+                        title={`${member.name || 'Interviewer'}: ${member.assignmentStatus || 'PENDING'}`}
+                      >
+                        {member.name || 'Interviewer'} · {member.assignmentStatus === 'ACCEPTED' ? 'Available' : member.assignmentStatus === 'REJECTED' ? 'Unavailable' : 'Awaiting response'}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
