@@ -23,7 +23,7 @@ export default function InterviewReviewPage() {
       const response = await interviewApi.list({ tab: 'all', page: 0, size: 100 })
       setRows(response.data?.data?.content || [])
     } catch (err) {
-      setError(err.response?.data?.message || 'Unable to load interview reviews.')
+      setError(err.response?.data?.message || 'Unable to load interviews.')
     } finally {
       setLoading(false)
     }
@@ -40,7 +40,7 @@ export default function InterviewReviewPage() {
         if (!proposedJoiningDate) return
         await api.post(`/recruitment/applications/${row.applicationId}/select`, {
           proposedJoiningDate,
-          comments: 'Final decision recorded from Interview Reviews',
+          comments: 'Final decision recorded from Interview module',
         })
       } else {
         const reason = window.prompt('Rejection reason:', 'Not a fit after interview')
@@ -63,8 +63,8 @@ export default function InterviewReviewPage() {
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-indigo-600">Recruitment</p>
-            <h1 className="mt-1 text-3xl font-black text-slate-900 dark:text-white">Interview Reviews</h1>
-            <p className="mt-1 text-sm text-slate-500">Review interviewer recommendations and record the final HR/Admin decision.</p>
+            <h1 className="mt-1 text-3xl font-black text-slate-900 dark:text-white">Interview</h1>
+            <p className="mt-1 text-sm text-slate-500">Manage interview requests, interviewer recommendations, and final HR/Admin decisions.</p>
           </div>
           <button type="button" onClick={load} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-white px-4 py-2.5 text-sm font-bold text-indigo-700 shadow-sm hover:bg-indigo-50 disabled:opacity-50 dark:border-indigo-500/30 dark:bg-slate-900 dark:text-indigo-300">
             <RefreshCw className={loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} /> Refresh
@@ -78,7 +78,7 @@ export default function InterviewReviewPage() {
         </div>
 
         {error && <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{error}</div>}
-        {loading ? <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">Loading interview reviews...</div> : rows.length === 0 ? <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">No interviews have been scheduled yet.</div> : (
+        {loading ? <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">Loading interviews...</div> : rows.length === 0 ? <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">No interviews have been scheduled yet.</div> : (
           <div className="space-y-4">
             {rows.map((row) => {
               const recommendations = (row.panel || []).filter((member) => member.interviewDecision && member.interviewDecision !== 'PENDING')
