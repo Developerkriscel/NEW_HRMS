@@ -186,7 +186,11 @@ const DARK_COLORS = [
 
 function NavItem({ item, index = 0 }) {
   const pathname = usePathname()
-  const isActive = pathname === item.path || pathname.startsWith(item.path + '/')
+  // Recruitment has dedicated child modules (for example Interview). Keep
+  // the parent inactive on those routes so two sidebar items are never shown
+  // as selected at the same time.
+  const isRecruitmentChild = item.path === '/hr/recruitment' && pathname.startsWith('/hr/recruitment/')
+  const isActive = !isRecruitmentChild && (pathname === item.path || pathname.startsWith(item.path + '/'))
   const IconComp = ICONS[item.icon] || Circle
   const iconColorClass = isActive ? 'text-white' : DARK_COLORS[index % DARK_COLORS.length]
 
