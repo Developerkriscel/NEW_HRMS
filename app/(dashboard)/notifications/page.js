@@ -163,6 +163,14 @@ export default function NotificationsPage() {
       setServerNotifications((previous) => previous.map((item) => item.id === notification.id ? { ...item, read: true, metadata: { ...item.metadata, decision } } : item))
     } catch (error) {
       console.error('Failed to respond to interview assignment:', error)
+      const message = error.response?.data?.message || ''
+      if (/already\s+(accepted|rejected)/i.test(message)) {
+        const decisionFromMessage = /rejected/i.test(message) ? 'REJECTED' : 'ACCEPTED'
+        setServerNotifications((previous) => previous.map((item) => item.id === notification.id
+          ? { ...item, read: true, metadata: { ...item.metadata, decision: decisionFromMessage } }
+          : item))
+        return
+      }
     } finally {
       setAssignmentActionLoading(null)
     }

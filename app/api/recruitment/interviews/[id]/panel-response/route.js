@@ -20,7 +20,23 @@ export const POST = withApi(async (req, { params }) => {
   if (!interview) return fail('Interview not found', 404, 'NOT_FOUND')
   const member = await InterviewPanelMember.findOne({ interviewId: interview._id, employeeId: session.userId, tenantId })
   if (!member) return fail('You are not assigned to this interview.', 403, 'FORBIDDEN')
-  if (member.assignmentStatus !== 'PENDING') return fail(`This assignment is already ${member.assignmentStatus.toLowerCase()}.`, 400, 'INVALID_STATE')
+  // Make repeated clicks idempotent. The member update may have succeeded
+  // while the notification request was retried, so accepting an already
+  // accepted assignment should refresh the notification instead of showing a
+  // misleading error.
+  if (member.assignmentStatus !== 'PENDING' && member.assignmentStatus !== decision) {
+    return fail(`This assignment is already ${member.assignmentStatus.toLowerCase()}.`, 400, 'INVALID_STATE')
+  }
+
+  if (member.assignmentStatus === decision) {
+    if (body.notificationId && mongoose.isValidObjectId(body.notificationId)) {
+      await Notification.updateOne(
+        { _id: body.notificationId, tenant: tenantId, userId: String(session.userId) },
+        { $set: { read: true, readAt: new Date(), 'metadata.decision': decision, 'metadata.respondedAt': new Date() } }
+      )
+    }
+    return ok({ member }, `Interview assignment already ${decision === 'ACCEPTED' ? 'approved' : 'rejected'}`)
+  }
 
   member.assignmentStatus = decision
   member.respondedAt = new Date()
@@ -40,7 +56,10 @@ export const POST = withApi(async (req, { params }) => {
   })
 
   if (body.notificationId && mongoose.isValidObjectId(body.notificationId)) {
-    await Notification.updateOne({ _id: body.notificationId, tenant: tenantId, userId: String(session.userId) }, { $set: { read: true, readAt: new Date() } })
+    await Notification.updateOne(
+      { _id: body.notificationId, tenant: tenantId, userId: String(session.userId) },
+      { $set: { read: true, readAt: new Date(), 'metadata.decision': decision, 'metadata.respondedAt': new Date() } }
+    )
   }
   return ok({ member }, `Interview assignment ${decision === 'ACCEPTED' ? 'approved' : 'rejected'}`)
 })

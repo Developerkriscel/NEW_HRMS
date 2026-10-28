@@ -204,10 +204,18 @@ export function Navbar({ onMobileMenuToggle }) {
       await fetchNotifications()
     } catch (error) {
       console.error('Failed to respond to interview assignment:', error)
-      setNotificationActionError({
-        id: notification.id,
-        message: error.response?.data?.message || 'Could not save your response. Please try again.',
-      })
+      const message = error.response?.data?.message || ''
+      if (/already\s+(accepted|rejected)/i.test(message)) {
+        const decisionFromMessage = /rejected/i.test(message) ? 'REJECTED' : 'ACCEPTED'
+        setPanelNotifications((previous) => previous.map((item) => item.id === notification.id
+          ? { ...item, read: true, metadata: { ...item.metadata, decision: decisionFromMessage } }
+          : item))
+      } else {
+        setNotificationActionError({
+          id: notification.id,
+          message: message || 'Could not save your response. Please try again.',
+        })
+      }
     } finally {
       setNotificationActionLoading(null)
     }
